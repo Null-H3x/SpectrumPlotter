@@ -76,19 +76,90 @@ func (gh *GeometryHandler) CreateRectangle(c *gin.Context) {
 	})
 }
 
+func (gh *GeometryHandler) UpdateCircle(c *gin.Context) {
+	id := c.Param("id")
+	var req models.CreateCircleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	geometry, err := gh.geometryService.UpdateCircle(id, req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":  true,
+		"message":  "Circle updated successfully",
+		"geometry": geometry,
+	})
+}
+
+func (gh *GeometryHandler) UpdatePolygon(c *gin.Context) {
+	id := c.Param("id")
+	var req models.CreatePolygonRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	geometry, err := gh.geometryService.UpdatePolygon(id, req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":  true,
+		"message":  "Polygon updated successfully",
+		"geometry": geometry,
+	})
+}
+
+func (gh *GeometryHandler) UpdateRectangle(c *gin.Context) {
+	id := c.Param("id")
+	var req models.CreateRectangleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	geometry, err := gh.geometryService.UpdateRectangle(id, req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":  true,
+		"message":  "Rectangle updated successfully",
+		"geometry": geometry,
+	})
+}
+
 func (gh *GeometryHandler) GetAllGeometries(c *gin.Context) {
-	// Implementation depends on storage.GetAllGeometries method
+	geometries, err := gh.geometryService.GetAllGeometries()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success":    true,
-		"geometries": []interface{}{}, // Placeholder
+		"geometries": geometries,
 	})
 }
 
 func (gh *GeometryHandler) DeleteGeometry(c *gin.Context) {
 	id := c.Param("id")
 
-	// Implementation depends on storage.DeleteGeometry method
-	_ = id // Placeholder
+	err := gh.geometryService.DeleteGeometry(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

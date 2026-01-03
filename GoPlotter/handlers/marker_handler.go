@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"sfaf-plotter/models"
 	"sfaf-plotter/services"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -36,6 +37,60 @@ func (mh *MarkerHandler) CreateMarker(c *gin.Context) {
 
 func (mh *MarkerHandler) GetAllMarkers(c *gin.Context) {
 	markers, err := mh.markerService.GetAllMarkers()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, markers)
+}
+
+func (mh *MarkerHandler) GetMarkersByBounds(c *gin.Context) {
+	// Parse query parameters for map bounds
+	var minLat, maxLat, minLng, maxLng float64
+	var err error
+
+	if minLatStr := c.Query("minLat"); minLatStr != "" {
+		if minLat, err = strconv.ParseFloat(minLatStr, 64); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid minLat parameter"})
+			return
+		}
+	} else {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing minLat parameter"})
+		return
+	}
+
+	if maxLatStr := c.Query("maxLat"); maxLatStr != "" {
+		if maxLat, err = strconv.ParseFloat(maxLatStr, 64); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid maxLat parameter"})
+			return
+		}
+	} else {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing maxLat parameter"})
+		return
+	}
+
+	if minLngStr := c.Query("minLng"); minLngStr != "" {
+		if minLng, err = strconv.ParseFloat(minLngStr, 64); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid minLng parameter"})
+			return
+		}
+	} else {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing minLng parameter"})
+		return
+	}
+
+	if maxLngStr := c.Query("maxLng"); maxLngStr != "" {
+		if maxLng, err = strconv.ParseFloat(maxLngStr, 64); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid maxLng parameter"})
+			return
+		}
+	} else {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing maxLng parameter"})
+		return
+	}
+
+	markers, err := mh.markerService.GetMarkersByBounds(minLat, maxLat, minLng, maxLng)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

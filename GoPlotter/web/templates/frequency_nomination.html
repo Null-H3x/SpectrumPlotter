@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frequency Nomination Tool</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/css/frequency_nomination.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-left">
+                <h1><i class="fas fa-wave-square"></i> SFAF Plotter</h1>
+            </div>
+            <nav class="header-nav">
+                <a href="/" class="nav-link">
+                    <i class="fas fa-map-marked-alt"></i>
+                    <span>Map Viewer</span>
+                </a>
+                <a href="/database" class="nav-link">
+                    <i class="fas fa-database"></i>
+                    <span>Database</span>
+                </a>
+                <a href="/frequency/assignments" class="nav-link">
+                    <i class="fas fa-broadcast-tower"></i>
+                    <span>Frequencies</span>
+                </a>
+                <a href="/frequency-nomination" class="nav-link active">
+                    <i class="fas fa-wave-square"></i>
+                    <span>Frequency Tool</span>
+                </a>
+                <a href="/view-manager" class="nav-link">
+                    <i class="fas fa-cog"></i>
+                    <span>Table Manager</span>
+                </a>
+            </nav>
+            <div class="header-actions">
+                <a href="/profile" class="btn btn-icon" title="User Account">
+                    <i class="fas fa-user-circle"></i>
+                </a>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Input Panel -->
+            <section class="input-panel">
+                <h2><i class="fas fa-sliders-h"></i> Analysis Parameters</h2>
+
+                <div class="form-group">
+                    <label for="startFreq">Start Frequency (MHz)</label>
+                    <input type="number" id="startFreq" class="form-input" step="0.001" placeholder="e.g., 225.0">
+                </div>
+
+                <div class="form-group">
+                    <label for="endFreq">End Frequency (MHz)</label>
+                    <input type="number" id="endFreq" class="form-input" step="0.001" placeholder="e.g., 400.0">
+                </div>
+
+                <div class="form-group">
+                    <label for="bandwidth">Bandwidth (MHz)</label>
+                    <input type="number" id="bandwidth" class="form-input" step="0.001" placeholder="e.g., 0.025">
+                </div>
+
+                <div class="form-group">
+                    <label for="stepSize">Step Size (kHz)</label>
+                    <input type="number" id="stepSize" class="form-input" step="0.1" value="25" placeholder="e.g., 25">
+                </div>
+
+                <div class="form-group">
+                    <label for="guardBand">Guard Band (MHz)</label>
+                    <input type="number" id="guardBand" class="form-input" step="0.001" value="0" placeholder="e.g., 0.05">
+                </div>
+
+                <div class="form-group">
+                    <label for="maxResults">Maximum Results</label>
+                    <input type="number" id="maxResults" class="form-input" value="100" min="1" max="1000">
+                </div>
+
+                <div class="form-actions">
+                    <button class="btn btn-primary btn-block" onclick="runAnalysis()">
+                        <i class="fas fa-play"></i> Generate Frequency List
+                    </button>
+                    <button class="btn btn-secondary btn-block" onclick="testBandwidthCalculation()">
+                        <i class="fas fa-flask"></i> Test Bandwidth Calculator
+                    </button>
+                </div>
+
+                <div class="info-box">
+                    <h4><i class="fas fa-info-circle"></i> How It Works</h4>
+                    <ul>
+                        <li>Enter frequency range and bandwidth</li>
+                        <li>Tool scans for available frequencies</li>
+                        <li>Avoids interference with existing records</li>
+                        <li>Applies guard bands for safety margin</li>
+                        <li>Generates nomination list</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- Results Panel -->
+            <section class="results-panel">
+                <div class="results-header">
+                    <h2><i class="fas fa-list"></i> Nomination Results</h2>
+                    <div class="results-actions">
+                        <button class="btn btn-sm" onclick="exportResults()">
+                            <i class="fas fa-download"></i> Export CSV
+                        </button>
+                        <button class="btn btn-sm" onclick="clearResults()">
+                            <i class="fas fa-times"></i> Clear
+                        </button>
+                    </div>
+                </div>
+
+                <div id="resultsStats" class="results-stats" style="display: none;">
+                    <div class="stat-card">
+                        <i class="fas fa-check-circle"></i>
+                        <div class="stat-value" id="availableCount">0</div>
+                        <div class="stat-label">Available</div>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <div class="stat-value" id="conflictCount">0</div>
+                        <div class="stat-label">Conflicts</div>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-wave-square"></i>
+                        <div class="stat-value" id="totalScanned">0</div>
+                        <div class="stat-label">Scanned</div>
+                    </div>
+                </div>
+
+                <div id="resultsTable" class="results-table-container">
+                    <div class="empty-state">
+                        <i class="fas fa-wave-square"></i>
+                        <h3>No Results Yet</h3>
+                        <p>Configure parameters and click "Generate Frequency List" to begin</p>
+                    </div>
+                </div>
+
+                <!-- Conflicts Panel -->
+                <div id="conflictsPanel" class="conflicts-panel" style="display: none;">
+                    <h3><i class="fas fa-exclamation-triangle"></i> Detected Conflicts</h3>
+                    <div id="conflictsList"></div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Bandwidth Calculator Modal -->
+        <div id="bandwidthModal" class="modal" style="display: none;">
+            <div class="modal-dialog">
+                <div class="modal-header">
+                    <h3><i class="fas fa-calculator"></i> Bandwidth Calculator</h3>
+                    <button class="modal-close" onclick="closeBandwidthModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="emsInput">Emission Designator</label>
+                        <input type="text" id="emsInput" class="form-input" placeholder="e.g., 6K00A3E">
+                    </div>
+                    <div class="form-group">
+                        <label for="unitSelect">Output Unit</label>
+                        <select id="unitSelect" class="form-input">
+                            <option value="H">Hz</option>
+                            <option value="K">kHz</option>
+                            <option value="M" selected>MHz</option>
+                            <option value="G">GHz</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" onclick="calculateSingleBandwidth()">
+                        <i class="fas fa-calculator"></i> Calculate
+                    </button>
+                    <div id="bandwidthResult" class="result-display" style="display: none;"></div>
+
+                    <hr>
+
+                    <div id="testResults" class="test-results"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/frequency_nomination.js"></script>
+    <script>
+        // UI Helper Functions
+
+        function runAnalysis() {
+            const params = {
+                startFreqMHz: parseFloat(document.getElementById('startFreq').value),
+                endFreqMHz: parseFloat(document.getElementById('endFreq').value),
+                bandwidthMHz: parseFloat(document.getElementById('bandwidth').value),
+                stepKHz: parseFloat(document.getElementById('stepSize').value),
+                guardBandMHz: parseFloat(document.getElementById('guardBand').value),
+                maxResults: parseInt(document.getElementById('maxResults').value)
+            };
+
+            // Validate input
+            const validation = frequencyNomination.validateInput(params);
+            if (!validation.isValid) {
+                alert('Validation errors:\n' + validation.errors.join('\n'));
+                return;
+            }
+
+            // For now, generate without existing records
+            // TODO: Fetch existing records from database
+            const existingRecords = [];
+
+            const nominations = frequencyNomination.generateNominationList({
+                ...params,
+                existingRecords: existingRecords
+            });
+
+            displayResults(nominations, params);
+        }
+
+        function displayResults(nominations, params) {
+            const container = document.getElementById('resultsTable');
+            const stats = document.getElementById('resultsStats');
+
+            if (nominations.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-times-circle"></i>
+                        <h3>No Available Frequencies Found</h3>
+                        <p>Try adjusting your parameters or reducing the guard band</p>
+                    </div>
+                `;
+                stats.style.display = 'none';
+                return;
+            }
+
+            stats.style.display = 'flex';
+            document.getElementById('availableCount').textContent = nominations.length;
+            document.getElementById('conflictCount').textContent = 0;
+            document.getElementById('totalScanned').textContent =
+                Math.ceil((params.endFreqMHz - params.startFreqMHz) / (params.stepKHz / 1000));
+
+            const tableHTML = `
+                <table class="results-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Frequency</th>
+                            <th>MHz</th>
+                            <th>Bandwidth (MHz)</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${nominations.map((nom, idx) => `
+                            <tr>
+                                <td>${idx + 1}</td>
+                                <td class="freq-cell">${nom.frequencyFormatted}</td>
+                                <td>${nom.frequencyMHz.toFixed(6)}</td>
+                                <td>${nom.bandwidthMHz.toFixed(6)}</td>
+                                <td><span class="status-badge status-available">${nom.status}</span></td>
+                                <td>
+                                    <button class="btn btn-sm" onclick="selectFrequency(${nom.frequencyMHz})">
+                                        <i class="fas fa-check"></i> Select
+                                    </button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+
+            container.innerHTML = tableHTML;
+        }
+
+        function selectFrequency(freqMHz) {
+            alert(`Frequency ${freqMHz.toFixed(6)} MHz selected!\n\nThis will be integrated with the database to create a new SFAF record.`);
+        }
+
+        function exportResults() {
+            alert('CSV export functionality coming soon!');
+        }
+
+        function clearResults() {
+            document.getElementById('resultsTable').innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-wave-square"></i>
+                    <h3>No Results Yet</h3>
+                    <p>Configure parameters and click "Generate Frequency List" to begin</p>
+                </div>
+            `;
+            document.getElementById('resultsStats').style.display = 'none';
+        }
+
+        function testBandwidthCalculation() {
+            const results = frequencyNomination.testBandwidths();
+            document.getElementById('testResults').innerHTML = `
+                <h4>Test Results:</h4>
+                <table class="test-table">
+                    <thead>
+                        <tr>
+                            <th>Emission Designator</th>
+                            <th>MHz</th>
+                            <th>kHz</th>
+                            <th>Hz</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${results.map(r => `
+                            <tr>
+                                <td><code>${r.emissionDesignator}</code></td>
+                                <td>${r.bandwidthMHz.toFixed(9)}</td>
+                                <td>${r.bandwidthKHz.toFixed(6)}</td>
+                                <td>${r.bandwidthHz.toFixed(3)}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            document.getElementById('bandwidthModal').style.display = 'flex';
+        }
+
+        function calculateSingleBandwidth() {
+            const ems = document.getElementById('emsInput').value;
+            const unit = document.getElementById('unitSelect').value;
+            const result = frequencyNomination.getBandwidthEMS(ems, unit);
+
+            const resultDiv = document.getElementById('bandwidthResult');
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = `
+                <strong>Result:</strong> ${result} ${unit === 'H' ? 'Hz' : unit === 'K' ? 'kHz' : unit === 'M' ? 'MHz' : 'GHz'}
+            `;
+        }
+
+        function closeBandwidthModal() {
+            document.getElementById('bandwidthModal').style.display = 'none';
+        }
+    </script>
+</body>
+</html>

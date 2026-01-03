@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SFAF Table Manager</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/css/view_manager.css?v=2">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-left">
+                <h1><i class="fas fa-table"></i> SFAF Plotter</h1>
+            </div>
+            <nav class="header-nav">
+                <a href="/" class="nav-link">
+                    <i class="fas fa-map-marked-alt"></i>
+                    <span>Map Viewer</span>
+                </a>
+                <a href="/database" class="nav-link">
+                    <i class="fas fa-database"></i>
+                    <span>Database</span>
+                </a>
+                <a href="/frequency/assignments" class="nav-link">
+                    <i class="fas fa-broadcast-tower"></i>
+                    <span>Frequencies</span>
+                </a>
+                <a href="/frequency-nomination" class="nav-link">
+                    <i class="fas fa-wave-square"></i>
+                    <span>Frequency Tool</span>
+                </a>
+                <a href="/view-manager" class="nav-link active">
+                    <i class="fas fa-cog"></i>
+                    <span>Table Manager</span>
+                </a>
+            </nav>
+            <div class="header-actions">
+                <a href="/profile" class="btn btn-icon" title="User Account">
+                    <i class="fas fa-user-circle"></i>
+                </a>
+            </div>
+        </header>
+
+        <!-- Tab Navigation -->
+        <div class="tabs">
+            <button class="tab active" data-tab="units"><i class="fas fa-users"></i> Units</button>
+            <button class="tab" data-tab="irac-notes"><i class="fas fa-sticky-note"></i> IRAC Notes</button>
+            <button class="tab" data-tab="system-config"><i class="fas fa-cog"></i> System Config</button>
+        </div>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Units Tab -->
+            <div id="units-tab" class="tab-panel active">
+                <div class="table-manager">
+                    <div class="toolbar">
+                        <div class="toolbar-left">
+                            <h2><i class="fas fa-users"></i> Units Management</h2>
+                        </div>
+                        <div class="toolbar-right">
+                            <button class="btn btn-primary" onclick="referenceData.showAddUnit()">
+                                <i class="fas fa-plus"></i> Add Unit
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="data-table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Unit Designator</th>
+                                    <th>Type</th>
+                                    <th>Organization</th>
+                                    <th>Location</th>
+                                    <th>Active</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="unitsTableBody">
+                                <tr class="loading-row">
+                                    <td colspan="6" style="text-align: center;">
+                                        <i class="fas fa-spinner fa-spin"></i> Loading units...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- IRAC Notes Tab -->
+            <div id="irac-notes-tab" class="tab-panel">
+                <div class="table-manager">
+                    <div class="toolbar">
+                        <div class="toolbar-left">
+                            <h2><i class="fas fa-sticky-note"></i> IRAC Notes Management</h2>
+                        </div>
+                        <div class="toolbar-right">
+                            <button class="btn btn-primary" onclick="referenceData.showAddIRACNote()">
+                                <i class="fas fa-plus"></i> Add IRAC Note
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="data-table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Note Number</th>
+                                    <th>Category</th>
+                                    <th>Text</th>
+                                    <th>Active</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="iracNotesTableBody">
+                                <tr class="loading-row">
+                                    <td colspan="5" style="text-align: center;">
+                                        <i class="fas fa-spinner fa-spin"></i> Loading IRAC notes...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Config Tab -->
+            <div id="system-config-tab" class="tab-panel">
+                <div class="table-manager">
+                    <div class="toolbar">
+                        <div class="toolbar-left">
+                            <h2><i class="fas fa-cog"></i> System Configuration</h2>
+                        </div>
+                        <div class="toolbar-right">
+                            <button class="btn btn-primary" onclick="referenceData.showAddConfig()">
+                                <i class="fas fa-plus"></i> Add Config
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="data-table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Key</th>
+                                    <th>Value</th>
+                                    <th>Description</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="systemConfigTableBody">
+                                <tr class="loading-row">
+                                    <td colspan="4" style="text-align: center;">
+                                        <i class="fas fa-spinner fa-spin"></i> Loading configuration...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Unit Edit Modal -->
+        <div id="unitModal" class="modal" style="display: none;">
+            <div class="modal-dialog">
+                <div class="modal-header">
+                    <h3 id="unitModalTitle"><i class="fas fa-users"></i> Add Unit</h3>
+                    <button class="modal-close" onclick="referenceData.closeUnitModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="unitForm">
+                        <input type="hidden" id="unitId">
+
+                        <div class="form-group">
+                            <label for="unitCode">Unit Designator <span class="required">*</span></label>
+                            <input type="text" id="unitCode" class="form-input" required placeholder="e.g., 23STS, 1SOCS, 552ACW">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="unitType">Unit Type</label>
+                            <select id="unitType" class="form-input">
+                                <option value="">Select Type...</option>
+                                <option value="brigade">Brigade</option>
+                                <option value="battalion">Battalion</option>
+                                <option value="company">Company</option>
+                                <option value="platoon">Platoon</option>
+                                <option value="squadron">Squadron</option>
+                                <option value="group">Group</option>
+                                <option value="detachment">Detachment</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="unitOrganization">Organization</label>
+                            <select id="unitOrganization" class="form-input">
+                                <option value="">Select Organization...</option>
+                                <option value="Army">Army</option>
+                                <option value="Navy">Navy</option>
+                                <option value="Air Force">Air Force</option>
+                                <option value="Marines">Marines</option>
+                                <option value="Space Force">Space Force</option>
+                                <option value="Coast Guard">Coast Guard</option>
+                                <option value="Joint">Joint</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="unitLocation">Location</label>
+                            <input type="text" id="unitLocation" class="form-input" placeholder="e.g., Fort Bragg, NC">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="commanderName">Commander Name</label>
+                            <input type="text" id="commanderName" class="form-input" placeholder="e.g., COL John Smith">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="commanderEmail">Commander Email</label>
+                            <input type="email" id="commanderEmail" class="form-input" placeholder="commander@mil.army">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="commPocName">Communications POC Name</label>
+                            <input type="text" id="commPocName" class="form-input" placeholder="Communications Officer">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="commPocEmail">Communications POC Email</label>
+                            <input type="email" id="commPocEmail" class="form-input">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="commPocPhone">Communications POC Phone</label>
+                            <input type="tel" id="commPocPhone" class="form-input" placeholder="(555) 123-4567">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="unitIsActive" checked>
+                                Active
+                            </label>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="referenceData.closeUnitModal()">Cancel</button>
+                    <button class="btn btn-primary" onclick="referenceData.saveUnit()">
+                        <i class="fas fa-save"></i> Save Unit
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- IRAC Note Edit Modal -->
+        <div id="iracNoteModal" class="modal" style="display: none;">
+            <div class="modal-dialog">
+                <div class="modal-header">
+                    <h3 id="iracNoteModalTitle"><i class="fas fa-sticky-note"></i> Add IRAC Note</h3>
+                    <button class="modal-close" onclick="referenceData.closeIRACNoteModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="iracNoteForm">
+                        <input type="hidden" id="iracNoteId">
+
+                        <div class="form-group">
+                            <label for="iracNoteNumber">Note Number <span class="required">*</span></label>
+                            <input type="text" id="iracNoteNumber" class="form-input" required placeholder="e.g., IRAC-001">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="iracCategory">Category</label>
+                            <select id="iracCategory" class="form-input">
+                                <option value="">Select Category...</option>
+                                <option value="frequency">Frequency</option>
+                                <option value="coordination">Coordination</option>
+                                <option value="technical">Technical</option>
+                                <option value="administrative">Administrative</option>
+                                <option value="operational">Operational</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="iracNoteText">Note Text <span class="required">*</span></label>
+                            <textarea id="iracNoteText" class="form-input" rows="4" required placeholder="Enter IRAC note text..."></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="iracNoteIsActive" checked>
+                                Active
+                            </label>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="referenceData.closeIRACNoteModal()">Cancel</button>
+                    <button class="btn btn-primary" onclick="referenceData.saveIRACNote()">
+                        <i class="fas fa-save"></i> Save IRAC Note
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Unit Frequencies Modal -->
+        <div id="unitFrequenciesModal" class="modal" style="display: none;">
+            <div class="modal-dialog modal-xl">
+                <div class="modal-header">
+                    <h3 id="unitFrequenciesTitle"><i class="fas fa-broadcast-tower"></i> Unit Frequencies</h3>
+                    <button class="modal-close" onclick="referenceData.closeFrequenciesModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Serial</th>
+                                <th>Frequency</th>
+                                <th>Emission</th>
+                                <th>Power</th>
+                                <th>Start Date</th>
+                                <th>End Date</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="unitFrequenciesTableBody">
+                            <!-- Frequencies will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" onclick="referenceData.viewUnitInDatabase()">
+                        <i class="fas fa-database"></i> View in Database
+                    </button>
+                    <button class="btn btn-secondary" onclick="referenceData.closeFrequenciesModal()">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/reference_data.js"></script>
+</body>
+</html>

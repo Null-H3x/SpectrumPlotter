@@ -17,13 +17,14 @@ const (
 
 type Geometry struct {
 	ID        uuid.UUID    `json:"id" db:"id"`
+	MarkerID  uuid.UUID    `json:"marker_id" db:"marker_id"` // MISSING FIELD - ADD THIS
 	Type      GeometryType `json:"type" db:"type"`
 	Serial    string       `json:"serial" db:"serial"`
 	Color     string       `json:"color" db:"color"`
 	CreatedAt time.Time    `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time    `json:"updated_at" db:"updated_at"`
 
-	// Center marker (all geometries have one)
+	// Center marker coordinates
 	Latitude  float64 `json:"lat" db:"latitude"`
 	Longitude float64 `json:"lng" db:"longitude"`
 
@@ -54,10 +55,11 @@ type RectangleGeometry struct {
 
 // Create requests
 type CreateCircleRequest struct {
+	MarkerID  string  `json:"marker_id,omitempty"` // Optional: link to existing marker
 	Lat       float64 `json:"lat" binding:"required"`
 	Lng       float64 `json:"lng" binding:"required"`
 	Radius    float64 `json:"radius" binding:"required"`
-	Unit      string  `json:"unit"` // "km" or "nm", defaults to "km"
+	Unit      string  `json:"unit"`
 	Color     string  `json:"color"`
 	Frequency string  `json:"frequency"`
 	Notes     string  `json:"notes"`

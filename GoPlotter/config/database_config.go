@@ -1,4 +1,4 @@
-// config/database.go
+// config/database_config.go
 package config
 
 import (
@@ -19,13 +19,15 @@ type DatabaseConfig struct {
 	SSLMode  string
 }
 
+// NewDatabaseConfig creates a new database configuration from environment variables
+// No default credentials are provided for security - they must be set in .env file
 func NewDatabaseConfig() *DatabaseConfig {
 	return &DatabaseConfig{
-		Host:     getEnv("DB_HOST", "jelly"),
+		Host:     getEnvRequired("DB_HOST"),
 		Port:     getEnv("DB_PORT", "5432"),
-		User:     getEnv("DB_USER", "freqman"),
-		Password: getEnv("DB_PASSWORD", "3h0MX!21dZjQ1T"),
-		DBName:   getEnv("DB_NAME", "freqnom_DB"),
+		User:     getEnvRequired("DB_USER"),
+		Password: getEnvRequired("DB_PASSWORD"),
+		DBName:   getEnvRequired("DB_NAME"),
 		SSLMode:  getEnv("DB_SSLMODE", "disable"),
 	}
 }
@@ -37,6 +39,9 @@ func (config *DatabaseConfig) GetConnectionString() string {
 
 func ConnectDatabase() (*sql.DB, error) {
 	config := NewDatabaseConfig()
+
+	log.Printf("🔌 Connecting to PostgreSQL database at %s:%s/%s", config.Host, config.Port, config.DBName)
+
 	db, err := sql.Open("postgres", config.GetConnectionString())
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
@@ -50,9 +55,19 @@ func ConnectDatabase() (*sql.DB, error) {
 	return db, nil
 }
 
+// getEnv retrieves an environment variable with a fallback default value
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
 	}
 	return defaultValue
+}
+
+// getEnvRequired retrieves a required environment variable and panics if not found
+func getEnvRequired(key string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		log.Fatalf("❌ Required environment variable %s is not set. Please check your .env file.", key)
+	}
+	return value
 }

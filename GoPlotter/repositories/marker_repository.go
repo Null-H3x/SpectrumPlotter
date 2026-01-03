@@ -1,4 +1,4 @@
-// repositories/marker_repository.go
+// marker_repository.go
 package repositories
 
 import (
@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
-	"github.com/lib/pq"
 )
 
 type MarkerRepository struct {
@@ -35,49 +34,15 @@ func (r *MarkerRepository) Create(marker *models.Marker) error {
 
 func (r *MarkerRepository) GetAll() ([]models.Marker, error) {
 	query := `
-        SELECT id, serial, latitude, longitude, frequency, notes, 
+        SELECT id, serial, latitude, longitude, frequency, notes,
                marker_type, is_draggable, created_at, updated_at
         FROM markers
-        ORDER BY created_at DESC`
+        ORDER BY created_at DESC
+        LIMIT 500`
 
 	var markers []models.Marker
 	err := r.db.Select(&markers, query)
 	return markers, err
-}
-
-// Repository method building dynamic UPDATE queries
-func (r *MarkerRepository) buildUpdateClause(req models.UpdateMarkerRequest) []string {
-	var setParts []string
-
-	// Static timestamp (no formatting needed)
-	setParts = append(setParts, "updated_at = CURRENT_TIMESTAMP")
-
-	// Dynamic fields (fmt.Sprintf appropriate when needed)
-	if req.Latitude != nil {
-		setParts = append(setParts, fmt.Sprintf("latitude = %f", *req.Latitude))
-	}
-
-	if req.Longitude != nil { // ✅ Added missing field
-		setParts = append(setParts, fmt.Sprintf("longitude = %f", *req.Longitude))
-	}
-
-	if req.Frequency != nil { // ✅ Added missing field
-		setParts = append(setParts, fmt.Sprintf("frequency = %s", pq.QuoteLiteral(*req.Frequency)))
-	}
-
-	if req.Notes != nil { // ✅ Added missing field
-		setParts = append(setParts, fmt.Sprintf("notes = %s", pq.QuoteLiteral(*req.Notes)))
-	}
-
-	if req.MarkerType != nil {
-		setParts = append(setParts, fmt.Sprintf("marker_type = %s", pq.QuoteLiteral(*req.MarkerType)))
-	}
-
-	if req.IsDraggable != nil { // ✅ Added missing field
-		setParts = append(setParts, fmt.Sprintf("is_draggable = %t", *req.IsDraggable))
-	}
-
-	return setParts
 }
 
 func (r *MarkerRepository) GetByID(id uuid.UUID) (*models.Marker, error) {
@@ -209,9 +174,36 @@ func (r *MarkerRepository) AddIRACNote(markerID uuid.UUID, noteCode string, fiel
 
 func (r *MarkerRepository) RemoveIRACNote(markerID uuid.UUID, noteCode string, fieldNumber, occurrenceNumber int) error {
 	query := `
-        DELETE FROM marker_irac_notes 
+        DELETE FROM marker_irac_notes
         WHERE marker_id = $1 AND irac_note_code = $2 AND field_number = $3 AND occurrence_number = $4`
 
 	_, err := r.db.Exec(query, markerID, noteCode, fieldNumber, occurrenceNumber)
 	return err
+}
+
+// UpdateImportedMarkersDraggable updates all imported markers to be non-draggable
+func (r *MarkerRepository) UpdateImportedMarkersDraggable() error {
+	query := `
+        UPDATE markers
+        SET is_draggable = false, updated_at = CURRENT_TIMESTAMP
+        WHERE marker_type = 'imported' AND is_draggable = true`
+
+	_, err := r.db.Exec(query)
+	return err
+}
+
+// GetByBounds retrieves markers within geographic bounds for viewport-based loading
+func (r *MarkerRepository) GetByBounds(minLat, maxLat, minLng, maxLng float64) ([]models.Marker, error) {
+	query := `
+        SELECT id, serial, latitude, longitude, frequency, notes,
+               marker_type, is_draggable, created_at, updated_at
+        FROM markers
+        WHERE latitude BETWEEN $1 AND $2
+          AND longitude BETWEEN $3 AND $4
+        ORDER BY created_at DESC
+        LIMIT 2000`
+
+	var markers []models.Marker
+	err := r.db.Select(&markers, query, minLat, maxLat, minLng, maxLng)
+	return markers, err
 }

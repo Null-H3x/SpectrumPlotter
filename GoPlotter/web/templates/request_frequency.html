@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Request Frequency - SFAF Plotter</title>
+    <link rel="stylesheet" href="/css/db_viewer.css">
+    <link rel="stylesheet" href="/css/frequency.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+
+<div class="app">
+    <!-- Top Bar -->
+    <div class="topbar">
+        <div class="topbar-left">
+            <h1><i class="fas fa-file-signature"></i> Request Frequency</h1>
+        </div>
+        <nav class="topbar-nav">
+            <a href="/map-viewer" class="nav-link">
+                <i class="fas fa-map-marked-alt"></i>
+                <span>Map Viewer</span>
+            </a>
+            <a href="/database" class="nav-link">
+                <i class="fas fa-database"></i>
+                <span>Database</span>
+            </a>
+            <a href="/frequency/assignments" class="nav-link">
+                <i class="fas fa-broadcast-tower"></i>
+                <span>Frequencies</span>
+            </a>
+            <a href="/frequency/request" class="nav-link active">
+                <i class="fas fa-file-signature"></i>
+                <span>Request</span>
+            </a>
+            <a href="/view-manager" class="nav-link">
+                <i class="fas fa-cog"></i>
+                <span>Table Manager</span>
+            </a>
+        </nav>
+        <div class="topbar-right">
+            <a href="/frequency/requests" class="btn btn-sm">
+                <i class="fas fa-list"></i> My Requests
+            </a>
+            <a href="/profile" class="btn btn-icon" title="User Account">
+                <i class="fas fa-user-circle"></i>
+            </a>
+            <span id="sessionInfo" class="session-badge"></span>
+        </div>
+    </div>
+
+    <!-- Progress Indicator -->
+    <div class="wizard-progress">
+        <div class="wizard-step active" data-step="1">
+            <div class="step-number">1</div>
+            <div class="step-label">Request Type</div>
+        </div>
+        <div class="wizard-step" data-step="2">
+            <div class="step-number">2</div>
+            <div class="step-label">Frequency</div>
+        </div>
+        <div class="wizard-step" data-step="3">
+            <div class="step-number">3</div>
+            <div class="step-label">Technical</div>
+        </div>
+        <div class="wizard-step" data-step="4">
+            <div class="step-number">4</div>
+            <div class="step-label">Security</div>
+        </div>
+        <div class="wizard-step" data-step="5">
+            <div class="step-number">5</div>
+            <div class="step-label">Justification</div>
+        </div>
+        <div class="wizard-step" data-step="6">
+            <div class="step-number">6</div>
+            <div class="step-label">Review</div>
+        </div>
+    </div>
+
+    <!-- Form Container -->
+    <div class="form-container">
+        <form id="frequencyRequestForm">
+
+            <!-- Step 1: Request Type & Priority -->
+            <div class="form-step active" data-step="1">
+                <h2><i class="fas fa-clipboard-list"></i> Request Type & Priority</h2>
+
+                <div class="form-group">
+                    <label for="unitId">Unit <span class="required">*</span></label>
+                    <select id="unitId" name="unit_id" required class="form-control">
+                        <option value="">Select Unit...</option>
+                    </select>
+                    <small class="form-hint">Select the unit for this frequency request</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="requestType">Request Type <span class="required">*</span></label>
+                    <select id="requestType" name="request_type" required class="form-control">
+                        <option value="">Select Type...</option>
+                        <option value="new_assignment">New Assignment</option>
+                        <option value="modification">Modification</option>
+                        <option value="renewal">Renewal</option>
+                        <option value="cancellation">Cancellation</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="priority">Priority <span class="required">*</span></label>
+                    <select id="priority" name="priority" required class="form-control">
+                        <option value="routine">Routine</option>
+                        <option value="priority">Priority</option>
+                        <option value="urgent">Urgent</option>
+                        <option value="emergency">Emergency</option>
+                    </select>
+                    <small class="form-hint">Select priority based on operational need</small>
+                </div>
+            </div>
+
+            <!-- Step 2: Frequency Requirements -->
+            <div class="form-step" data-step="2">
+                <h2><i class="fas fa-wave-square"></i> Frequency Requirements</h2>
+
+                <div class="form-group">
+                    <label for="requestedFrequency">Requested Frequency (MHz)</label>
+                    <input type="text" id="requestedFrequency" name="requested_frequency" class="form-control" placeholder="123.450">
+                    <small class="form-hint">Specific frequency if known, otherwise leave blank</small>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="frequencyRangeMin">Min Frequency (MHz)</label>
+                        <input type="number" step="0.001" id="frequencyRangeMin" name="frequency_range_min" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="frequencyRangeMax">Max Frequency (MHz)</label>
+                        <input type="number" step="0.001" id="frequencyRangeMax" name="frequency_range_max" class="form-control">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="assignmentType">Assignment Type <span class="required">*</span></label>
+                    <select id="assignmentType" name="assignment_type" required class="form-control">
+                        <option value="">Select Type...</option>
+                        <option value="primary">Primary</option>
+                        <option value="alternate">Alternate</option>
+                        <option value="emergency">Emergency</option>
+                        <option value="tactical">Tactical</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="purpose">Purpose <span class="required">*</span></label>
+                    <input type="text" id="purpose" name="purpose" required class="form-control" placeholder="Command Net, Admin/Log, etc.">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="netName">Net Name</label>
+                        <input type="text" id="netName" name="net_name" class="form-control" placeholder="Command Net">
+                    </div>
+                    <div class="form-group">
+                        <label for="callsign">Callsign</label>
+                        <input type="text" id="callsign" name="callsign" class="form-control" placeholder="DRAGON 6">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 3: Technical Specifications -->
+            <div class="form-step" data-step="3">
+                <h2><i class="fas fa-cogs"></i> Technical Specifications</h2>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="emissionDesignator">Emission Designator</label>
+                        <input type="text" id="emissionDesignator" name="emission_designator" class="form-control" placeholder="16K0F3E">
+                        <small class="form-hint">e.g., 16K0F3E for FM voice</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="bandwidth">Bandwidth</label>
+                        <input type="text" id="bandwidth" name="bandwidth" class="form-control" placeholder="25 kHz">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="powerWatts">Power (Watts)</label>
+                        <input type="number" id="powerWatts" name="power_watts" class="form-control" placeholder="50">
+                    </div>
+                    <div class="form-group">
+                        <label for="authorizedRadiusKm">Authorized Radius (km)</label>
+                        <input type="number" step="0.1" id="authorizedRadiusKm" name="authorized_radius_km" class="form-control" placeholder="50">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="coverageArea">Coverage Area</label>
+                    <input type="text" id="coverageArea" name="coverage_area" class="form-control" placeholder="Fort Bragg training areas">
+                    <small class="form-hint">Geographic description of required coverage</small>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="numTransmitters">Number of Transmitters</label>
+                        <input type="number" id="numTransmitters" name="num_transmitters" value="1" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="numReceivers">Number of Receivers</label>
+                        <input type="number" id="numReceivers" name="num_receivers" value="1" class="form-control">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="hoursOfOperation">Hours of Operation</label>
+                    <input type="text" id="hoursOfOperation" name="hours_of_operation" class="form-control" placeholder="24/7 or 0600-1800 local">
+                </div>
+            </div>
+
+            <!-- Step 4: Security & Coordination -->
+            <div class="form-step" data-step="4">
+                <h2><i class="fas fa-shield-alt"></i> Security & Coordination</h2>
+
+                <div class="form-group">
+                    <label for="classification">Classification <span class="required">*</span></label>
+                    <select id="classification" name="classification" required class="form-control">
+                        <option value="UNCLASS">UNCLASS</option>
+                        <option value="FOUO">FOUO</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="isEncrypted" name="is_encrypted">
+                        Encrypted Communications
+                    </label>
+                </div>
+
+                <div class="form-group" id="encryptionTypeGroup" style="display: none;">
+                    <label for="encryptionType">Encryption Type</label>
+                    <input type="text" id="encryptionType" name="encryption_type" class="form-control" placeholder="AES256, TYPE1, etc.">
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="requiresCoordination" name="requires_coordination">
+                        Requires Frequency Coordination
+                    </label>
+                </div>
+
+                <div class="form-group" id="coordinationNotesGroup" style="display: none;">
+                    <label for="coordinationNotes">Coordination Notes</label>
+                    <textarea id="coordinationNotes" name="coordination_notes" class="form-control" rows="3" placeholder="Specify coordination requirements..."></textarea>
+                </div>
+            </div>
+
+            <!-- Step 5: Justification -->
+            <div class="form-step" data-step="5">
+                <h2><i class="fas fa-clipboard-check"></i> Justification</h2>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="startDate">Start Date <span class="required">*</span></label>
+                        <input type="date" id="startDate" name="start_date" required class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="endDate">End Date</label>
+                        <input type="date" id="endDate" name="end_date" class="form-control">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="justification">Justification <span class="required">*</span></label>
+                    <textarea id="justification" name="justification" required class="form-control" rows="5" placeholder="Provide detailed justification for this frequency request..."></textarea>
+                    <small class="form-hint">Explain why this frequency is needed and how it supports mission requirements</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="missionImpact">Mission Impact if Denied</label>
+                    <textarea id="missionImpact" name="mission_impact" class="form-control" rows="3" placeholder="Describe the impact on mission if this request is denied..."></textarea>
+                </div>
+            </div>
+
+            <!-- Step 6: Review & Submit -->
+            <div class="form-step" data-step="6">
+                <h2><i class="fas fa-check-circle"></i> Review & Submit</h2>
+                <div id="reviewSummary" class="review-summary">
+                    <!-- Summary will be generated here -->
+                </div>
+            </div>
+
+        </form>
+
+        <!-- Navigation Buttons -->
+        <div class="form-navigation">
+            <button type="button" id="prevBtn" class="btn" onclick="changeStep(-1)" style="display: none;">
+                <i class="fas fa-arrow-left"></i> Previous
+            </button>
+            <button type="button" id="saveDraftBtn" class="btn">
+                <i class="fas fa-save"></i> Save Draft
+            </button>
+            <button type="button" id="nextBtn" class="btn btn-primary" onclick="changeStep(1)">
+                Next <i class="fas fa-arrow-right"></i>
+            </button>
+            <button type="button" id="submitBtn" class="btn btn-success" onclick="submitRequest()" style="display: none;">
+                <i class="fas fa-paper-plane"></i> Submit Request
+            </button>
+        </div>
+    </div>
+
+</div>
+
+<!-- Conflict Warning Modal -->
+<div id="conflictModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2><i class="fas fa-exclamation-triangle"></i> Potential Conflicts Detected</h2>
+            <button class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body" id="conflictDetails">
+            <!-- Conflict details will be loaded here -->
+        </div>
+        <div class="modal-footer">
+            <button class="btn" onclick="closeConflictModal()">Review</button>
+            <button class="btn btn-primary" onclick="submitAnyway()">Submit Anyway</button>
+        </div>
+    </div>
+</div>
+
+<script src="/js/request_frequency.js"></script>
+</body>
+</html>

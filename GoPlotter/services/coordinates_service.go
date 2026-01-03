@@ -82,3 +82,52 @@ func (cs *CoordinateService) GetAllFormats(lat, lng float64) models.CoordinateRe
 		Compact: cs.ConvertLatLngToCompactDMS(lat, lng),
 	}
 }
+
+// ParseCompactDMS parses compact DMS format (e.g., "302521N0864150W") to decimal coordinates
+// Format: DDMMSS[N|S]DDDMMSS[E|W]
+func (cs *CoordinateService) ParseCompactDMS(compactDMS string) (lat, lng float64, err error) {
+	// Remove any whitespace
+	compactDMS = fmt.Sprintf("%s", compactDMS) // Trim spaces
+
+	// Find the N/S delimiter for latitude
+	var latStr, lngStr string
+	var latDir, lngDir string
+
+	// Find latitude direction (N or S)
+	if len(compactDMS) < 13 {
+		return 0, 0, fmt.Errorf("invalid compact DMS format: too short (expected at least 13 characters)")
+	}
+
+	// Format: DDMMSSN DDDMMSSW (6 digits + direction + 7 digits + direction = 15 chars)
+	// Example: 302521N0864150W
+	latStr = compactDMS[0:6]    // 302521
+	latDir = string(compactDMS[6]) // N
+	lngStr = compactDMS[7:14]   // 0864150
+	lngDir = string(compactDMS[14]) // W
+
+	// Parse latitude
+	var latDeg, latMin, latSec int
+	_, err = fmt.Sscanf(latStr, "%2d%2d%2d", &latDeg, &latMin, &latSec)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to parse latitude: %v", err)
+	}
+
+	lat = float64(latDeg) + float64(latMin)/60.0 + float64(latSec)/3600.0
+	if latDir == "S" {
+		lat = -lat
+	}
+
+	// Parse longitude
+	var lngDeg, lngMin, lngSec int
+	_, err = fmt.Sscanf(lngStr, "%3d%2d%2d", &lngDeg, &lngMin, &lngSec)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to parse longitude: %v", err)
+	}
+
+	lng = float64(lngDeg) + float64(lngMin)/60.0 + float64(lngSec)/3600.0
+	if lngDir == "W" {
+		lng = -lng
+	}
+
+	return lat, lng, nil
+}

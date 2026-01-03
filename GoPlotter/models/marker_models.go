@@ -56,11 +56,13 @@ type SFAFField struct {
 
 // Request/Response models for API
 type CreateMarkerRequest struct {
-	Latitude   float64 `json:"lat" binding:"required"`
-	Longitude  float64 `json:"lng" binding:"required"`
-	Frequency  string  `json:"frequency"`
-	Notes      string  `json:"notes"`
-	MarkerType string  `json:"type"`
+	Serial      string  `json:"serial"`
+	Latitude    float64 `json:"lat" binding:"omitempty"`
+	Longitude   float64 `json:"lng" binding:"omitempty"`
+	Frequency   string  `json:"frequency"`
+	Notes       string  `json:"notes"`
+	MarkerType  string  `json:"type"`
+	IsDraggable bool    `json:"is_draggable"`
 }
 
 type UpdateMarkerRequest struct {

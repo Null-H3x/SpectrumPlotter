@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SFAF Plotter - Military Frequency Coordination Platform</title>
+    <link rel="stylesheet" href="/css/landing.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <i class="fas fa-tower-broadcast"></i>
+                <span class="logo-text">SFAF Plotter</span>
+                <span class="logo-subtitle">MCEB Publication 7</span>
+            </div>
+            <div class="nav-actions">
+                <button id="loginBtn" class="btn-nav">
+                    <i class="fas fa-sign-in-alt"></i> Login
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-content">
+            <h1 class="hero-title">
+                <span class="gradient-text">Military Frequency Coordination</span>
+                <br>Made Simple
+            </h1>
+            <p class="hero-subtitle">
+                Comprehensive spectrum management platform for SFAF record creation,
+                <br>frequency deconfliction, and geographic visualization
+            </p>
+            <div class="hero-stats">
+                <div class="stat-card">
+                    <i class="fas fa-satellite-dish"></i>
+                    <div class="stat-value">MCEB Pub 7</div>
+                    <div class="stat-label">Compliant</div>
+                </div>
+                <div class="stat-card">
+                    <i class="fas fa-globe-americas"></i>
+                    <div class="stat-value">Global</div>
+                    <div class="stat-label">Coverage</div>
+                </div>
+                <div class="stat-card">
+                    <i class="fas fa-shield-alt"></i>
+                    <div class="stat-value">Secure</div>
+                    <div class="stat-label">Platform</div>
+                </div>
+            </div>
+        </div>
+        <div class="hero-graphic">
+            <div class="map-preview">
+                <div class="pulse-marker pulse-1"></div>
+                <div class="pulse-marker pulse-2"></div>
+                <div class="pulse-marker pulse-3"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Modules Section -->
+    <section class="modules" id="modulesSection">
+        <div class="container">
+            <h2 class="section-title">
+                <i class="fas fa-th-large"></i> Platform Modules
+            </h2>
+            <p class="section-subtitle">Select a module to begin working</p>
+
+            <div class="modules-grid">
+                <!-- Map Viewer Module -->
+                <div class="module-card" data-module="map-viewer">
+                    <div class="module-icon">
+                        <i class="fas fa-map-marked-alt"></i>
+                    </div>
+                    <h3 class="module-title">Map Viewer</h3>
+                    <p class="module-description">
+                        Interactive mapping interface for SFAF record visualization,
+                        marker placement, and geographic coordination
+                    </p>
+                    <ul class="module-features">
+                        <li><i class="fas fa-check"></i> Interactive Map Interface</li>
+                        <li><i class="fas fa-check"></i> Marker Management</li>
+                        <li><i class="fas fa-check"></i> Geometry Tools</li>
+                        <li><i class="fas fa-check"></i> Multiple Base Layers</li>
+                    </ul>
+                    <button class="module-btn" onclick="navigateToModule('/map-viewer')">
+                        <i class="fas fa-arrow-right"></i> Launch Module
+                    </button>
+                </div>
+
+                <!-- Database Viewer Module -->
+                <div class="module-card" data-module="database">
+                    <div class="module-icon">
+                        <i class="fas fa-database"></i>
+                    </div>
+                    <h3 class="module-title">Database Viewer</h3>
+                    <p class="module-description">
+                        Comprehensive database browser for SFAF records with advanced
+                        filtering, sorting, and bulk operations
+                    </p>
+                    <ul class="module-features">
+                        <li><i class="fas fa-check"></i> Record Management</li>
+                        <li><i class="fas fa-check"></i> Advanced Filtering</li>
+                        <li><i class="fas fa-check"></i> Bulk Operations</li>
+                        <li><i class="fas fa-check"></i> Export/Import</li>
+                    </ul>
+                    <button class="module-btn" onclick="navigateToModule('/database')">
+                        <i class="fas fa-arrow-right"></i> Launch Module
+                    </button>
+                </div>
+
+                <!-- View Manager Module -->
+                <div class="module-card" data-module="view-manager">
+                    <div class="module-icon">
+                        <i class="fas fa-layer-group"></i>
+                    </div>
+                    <h3 class="module-title">View Manager</h3>
+                    <p class="module-description">
+                        Organize and manage custom views, saved filters, and
+                        workspace configurations for efficient workflow
+                    </p>
+                    <ul class="module-features">
+                        <li><i class="fas fa-check"></i> Custom Views</li>
+                        <li><i class="fas fa-check"></i> Saved Filters</li>
+                        <li><i class="fas fa-check"></i> Workspace Presets</li>
+                        <li><i class="fas fa-check"></i> Quick Access</li>
+                    </ul>
+                    <button class="module-btn" onclick="navigateToModule('/view-manager')">
+                        <i class="fas fa-arrow-right"></i> Launch Module
+                    </button>
+                </div>
+
+                <!-- Frequency Nomination Module -->
+                <div class="module-card" data-module="frequency-nomination">
+                    <div class="module-icon">
+                        <i class="fas fa-broadcast-tower"></i>
+                    </div>
+                    <h3 class="module-title">Frequency Nomination</h3>
+                    <p class="module-description">
+                        Advanced frequency deconfliction and nomination tool with
+                        spectrum analysis and interference prediction
+                    </p>
+                    <ul class="module-features">
+                        <li><i class="fas fa-check"></i> Frequency Analysis</li>
+                        <li><i class="fas fa-check"></i> Deconfliction Tools</li>
+                        <li><i class="fas fa-check"></i> Spectrum Visualization</li>
+                        <li><i class="fas fa-check"></i> Automated Nomination</li>
+                    </ul>
+                    <button class="module-btn" onclick="navigateToModule('/frequency-nomination')">
+                        <i class="fas fa-arrow-right"></i> Launch Module
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features">
+        <div class="container">
+            <h2 class="section-title">
+                <i class="fas fa-star"></i> Platform Capabilities
+            </h2>
+
+            <div class="features-grid">
+                <div class="feature-item">
+                    <div class="feature-icon">
+                        <i class="fas fa-file-import"></i>
+                    </div>
+                    <h3>Import & Export</h3>
+                    <p>Seamless SFAF record import/export with SXXI format support</p>
+                </div>
+
+                <div class="feature-item">
+                    <div class="feature-icon">
+                        <i class="fas fa-map-pin"></i>
+                    </div>
+                    <h3>Geocoding</h3>
+                    <p>Advanced coordinate conversion and location search capabilities</p>
+                </div>
+
+                <div class="feature-item">
+                    <div class="feature-icon">
+                        <i class="fas fa-ruler-combined"></i>
+                    </div>
+                    <h3>Measurement Tools</h3>
+                    <p>Distance, area, and radius calculations for coverage planning</p>
+                </div>
+
+                <div class="feature-item">
+                    <div class="feature-icon">
+                        <i class="fas fa-wave-square"></i>
+                    </div>
+                    <h3>Spectrum Analysis</h3>
+                    <p>Frequency band analysis and emission designator validation</p>
+                </div>
+
+                <div class="feature-item">
+                    <div class="feature-icon">
+                        <i class="fas fa-clipboard-check"></i>
+                    </div>
+                    <h3>IRAC Notes</h3>
+                    <p>Comprehensive IRAC footnote management and validation</p>
+                </div>
+
+                <div class="feature-item">
+                    <div class="feature-icon">
+                        <i class="fas fa-cogs"></i>
+                    </div>
+                    <h3>Customizable</h3>
+                    <p>Regional presets, themes, and workflow configurations</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Login Modal -->
+    <div id="loginModal" class="modal">
+        <div class="modal-dialog modal-dialog-large">
+            <div class="modal-header">
+                <h2>
+                    <i class="fas fa-lock"></i> Secure Login
+                </h2>
+                <button class="modal-close" onclick="closeLoginModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Login Method Tabs -->
+                <div class="login-tabs">
+                    <button class="login-tab active" data-tab="pki" onclick="switchLoginTab('pki')">
+                        <i class="fas fa-certificate"></i> PKI Certificate
+                    </button>
+                    <button class="login-tab" data-tab="password" onclick="switchLoginTab('password')">
+                        <i class="fas fa-key"></i> Username/Password
+                    </button>
+                </div>
+
+                <!-- PKI Login Tab -->
+                <div id="pkiLoginTab" class="login-tab-content active">
+                    <div class="pki-info-box">
+                        <i class="fas fa-shield-alt"></i>
+                        <div>
+                            <h4>PKI Authentication</h4>
+                            <p>Upload your DoD-issued client certificate for secure authentication</p>
+                        </div>
+                    </div>
+
+                    <form id="pkiLoginForm" onsubmit="handlePKILogin(event)">
+                        <div class="form-group">
+                            <label>
+                                <i class="fas fa-certificate"></i> Client Certificate (PEM/CRT)
+                            </label>
+                            <input type="file" id="certFile" class="form-input-file" accept=".pem,.crt,.cer" onchange="handleCertificateUpload(event)">
+                            <div class="file-upload-area" onclick="document.getElementById('certFile').click()">
+                                <i class="fas fa-upload"></i>
+                                <p>Click to upload or drag and drop certificate</p>
+                                <small>Supported formats: PEM, CRT, CER</small>
+                            </div>
+                        </div>
+
+                        <div id="certInfo" class="cert-info" style="display: none;">
+                            <h4><i class="fas fa-info-circle"></i> Certificate Information</h4>
+                            <div class="cert-detail">
+                                <span class="cert-label">Common Name:</span>
+                                <span id="certCN" class="cert-value"></span>
+                            </div>
+                            <div class="cert-detail">
+                                <span class="cert-label">Organization:</span>
+                                <span id="certOrg" class="cert-value"></span>
+                            </div>
+                            <div class="cert-detail">
+                                <span class="cert-label">Email:</span>
+                                <span id="certEmail" class="cert-value"></span>
+                            </div>
+                            <div class="cert-detail">
+                                <span class="cert-label">Valid Until:</span>
+                                <span id="certExpiry" class="cert-value"></span>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn-primary" id="pkiLoginBtn" disabled>
+                            <i class="fas fa-certificate"></i> Authenticate with Certificate
+                        </button>
+                    </form>
+
+                    <div class="login-info">
+                        <i class="fas fa-info-circle"></i>
+                        <p>PKI authentication requires a valid DoD CAC or client certificate. Contact your system administrator for certificate enrollment.</p>
+                    </div>
+                </div>
+
+                <!-- Password Login Tab -->
+                <div id="passwordLoginTab" class="login-tab-content">
+                    <form id="passwordLoginForm" onsubmit="handlePasswordLogin(event)">
+                        <div class="form-group">
+                            <label>
+                                <i class="fas fa-user"></i> Username
+                            </label>
+                            <input type="text" id="username" class="form-input" placeholder="Enter username" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <i class="fas fa-key"></i> Password
+                            </label>
+                            <input type="password" id="password" class="form-input" placeholder="Enter password" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="rememberMe">
+                                <span>Remember me</span>
+                            </label>
+                        </div>
+
+                        <button type="submit" class="btn-primary">
+                            <i class="fas fa-sign-in-alt"></i> Login
+                        </button>
+                    </form>
+
+                    <div class="login-info">
+                        <i class="fas fa-info-circle"></i>
+                        <p>For demo purposes, use any username/password combination</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4>SFAF Plotter</h4>
+                    <p>Military frequency coordination and spectrum management platform</p>
+                </div>
+                <div class="footer-section">
+                    <h4>Compliance</h4>
+                    <p>MCEB Publication 7<br>SXXI Format Compatible</p>
+                </div>
+                <div class="footer-section">
+                    <h4>Support</h4>
+                    <p>Documentation<br>Technical Support</p>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2025 SFAF Plotter. Military Spectrum Management Platform.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="/js/landing.js"></script>
+</body>
+</html>

@@ -1,0 +1,72 @@
+# Environment variables (contains sensitive credentials)
+.env
+
+# Build artifacts
+sfaf-plotter
+sfaf-plotter.exe
+sfaf-plotter-*.exe
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Go workspace file
+go.work
+
+# IDE specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Database files (if using local SQLite for testing)
+*.db
+*.sqlite
+*.sqlite3
+
+# Backup files
+*.bak
+*.backup
+.backup/
+Backup/
+
+# AWS deployment files (not ready for commit yet)
+Dockerfile
+docker-compose.yml
+deploy-to-ec2.sh
+AWS_DEPLOYMENT_GUIDE.md
+
+# Documentation .txt files (replaced with .md files)
+*.txt
+!go.sum
+
+# Personal/sensitive files
+*.pem
+*.xlsm
+*.pdf
+*.docx
+
+# Claude workspace
+.claude/
+
+# Parent directory files (shouldn't be in GoPlotter repo)
+../

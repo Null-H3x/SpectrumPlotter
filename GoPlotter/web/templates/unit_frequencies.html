@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unit Frequencies - SFAF Plotter</title>
+    <link rel="stylesheet" href="/css/db_viewer.css">
+    <link rel="stylesheet" href="/css/frequency.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+
+<div class="app">
+    <!-- Top Bar -->
+    <div class="topbar">
+        <div class="topbar-left">
+            <h1><i class="fas fa-broadcast-tower"></i> Unit Frequencies</h1>
+        </div>
+        <nav class="topbar-nav">
+            <a href="/map-viewer" class="nav-link">
+                <i class="fas fa-map-marked-alt"></i>
+                <span>Map Viewer</span>
+            </a>
+            <a href="/database" class="nav-link">
+                <i class="fas fa-database"></i>
+                <span>Database</span>
+            </a>
+            <a href="/frequency/assignments" class="nav-link active">
+                <i class="fas fa-broadcast-tower"></i>
+                <span>Frequencies</span>
+            </a>
+            <a href="/frequency-nomination" class="nav-link">
+                <i class="fas fa-wave-square"></i>
+                <span>Frequency Tool</span>
+            </a>
+            <a href="/view-manager" class="nav-link">
+                <i class="fas fa-cog"></i>
+                <span>Table Manager</span>
+            </a>
+        </nav>
+        <div class="topbar-right">
+            <button id="refreshBtn" class="btn btn-icon" title="Refresh"><i class="fas fa-sync"></i></button>
+            <button id="exportBtn" class="btn btn-icon" title="Export"><i class="fas fa-download"></i></button>
+            <a href="/profile" class="btn btn-icon" title="User Account">
+                <i class="fas fa-user-circle"></i>
+            </a>
+            <span id="sessionInfo" class="session-badge"></span>
+        </div>
+    </div>
+
+    <!-- Stats Bar -->
+    <div class="stats-bar">
+        <div class="stat">
+            <span class="stat-value" id="totalUnits">0</span>
+            <span class="stat-label">Units</span>
+        </div>
+        <div class="stat">
+            <span class="stat-value" id="totalAssignments">0</span>
+            <span class="stat-label">Total Assignments</span>
+        </div>
+        <div class="stat">
+            <span class="stat-value" id="expiringCount">0</span>
+            <span class="stat-label">Expiring Soon</span>
+        </div>
+        <div class="stat">
+            <span class="stat-value" id="pendingRequests">0</span>
+            <span class="stat-label">Pending Requests</span>
+        </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+        <div class="toolbar-left">
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" id="frequencySearch" placeholder="Search frequencies...">
+            </div>
+            <select id="unitFilter" class="select">
+                <option value="">All Units</option>
+            </select>
+            <select id="typeFilter" class="select">
+                <option value="">All Types</option>
+                <option value="primary">Primary</option>
+                <option value="alternate">Alternate</option>
+                <option value="emergency">Emergency</option>
+                <option value="tactical">Tactical</option>
+            </select>
+            <select id="expiryFilter" class="select">
+                <option value="">All Status</option>
+                <option value="expiring">Expiring (30 days)</option>
+                <option value="valid">Valid</option>
+                <option value="expired">Expired</option>
+            </select>
+        </div>
+        <div class="toolbar-right">
+            <a href="/frequency/request" class="btn btn-primary">
+                <i class="fas fa-plus"></i> Request Frequency
+            </a>
+            <a href="/frequency/requests" class="btn">
+                <i class="fas fa-list"></i> My Requests
+            </a>
+        </div>
+    </div>
+
+    <!-- Units Accordion -->
+    <div id="unitsContainer" class="units-container">
+        <!-- Units will be dynamically loaded here -->
+        <div class="loading-state">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>Loading unit frequencies...</p>
+        </div>
+    </div>
+
+</div>
+
+<!-- Assignment Details Modal -->
+<div id="assignmentModal" class="modal" style="display: none;">
+    <div class="modal-content modal-large">
+        <div class="modal-header">
+            <h2><i class="fas fa-broadcast-tower"></i> Frequency Assignment Details</h2>
+            <button class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body" id="assignmentDetails">
+            <!-- Assignment details will be loaded here -->
+        </div>
+        <div class="modal-footer">
+            <button class="btn" onclick="closeAssignmentModal()">Close</button>
+        </div>
+    </div>
+</div>
+
+<script src="/js/unit_frequencies.js"></script>
+</body>
+</html>

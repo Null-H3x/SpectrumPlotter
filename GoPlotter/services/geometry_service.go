@@ -7,21 +7,26 @@ import (
 	"time"
 
 	"sfaf-plotter/models"
-	"sfaf-plotter/storage"
+	"sfaf-plotter/repositories"
 
 	"github.com/google/uuid"
 )
 
 type GeometryService struct {
-	storage       storage.Storage
+	geometryRepo  *repositories.GeometryRepository
 	markerService *MarkerService
 	serialService *SerialService
 	coordService  *CoordinateService
 }
 
-func NewGeometryService(storage storage.Storage, markerService *MarkerService, serialService *SerialService, coordService *CoordinateService) *GeometryService {
+func NewGeometryService(
+	geometryRepo *repositories.GeometryRepository,
+	markerService *MarkerService,
+	serialService *SerialService,
+	coordService *CoordinateService,
+) *GeometryService {
 	return &GeometryService{
-		storage:       storage,
+		geometryRepo:  geometryRepo,
 		markerService: markerService,
 		serialService: serialService,
 		coordService:  coordService,
@@ -30,27 +35,7 @@ func NewGeometryService(storage storage.Storage, markerService *MarkerService, s
 
 // CreateCircle matches your handleCircleCreation function
 func (gs *GeometryService) CreateCircle(req models.CreateCircleRequest) (*models.Geometry, error) {
-	// Default unit to km if not specified
-	if req.Unit == "" {
-		req.Unit = "km"
-	}
-
-	// Default color if not specified
-	if req.Color == "" {
-		req.Color = gs.getRandomColor()
-	}
-
-	// Convert radius to meters
-	radiusMeters := req.Radius * 1000 // km to meters
-	if req.Unit == "nm" {
-		radiusMeters = req.Radius * 1852 // nautical miles to meters
-	}
-
-	// Calculate area in square miles
-	areaM2 := math.Pi * math.Pow(radiusMeters, 2)
-	areaSqMi := areaM2 / 2.59e6
-
-	// Create center marker
+	// Create center marker first
 	centerMarkerReq := models.CreateMarkerRequest{
 		Latitude:   req.Lat,
 		Longitude:  req.Lng,
@@ -59,31 +44,55 @@ func (gs *GeometryService) CreateCircle(req models.CreateCircleRequest) (*models
 		MarkerType: "circle-center",
 	}
 
-	_, err := gs.markerService.CreateMarker(centerMarkerReq)
+	markerResponse, err := gs.markerService.CreateMarker(centerMarkerReq)
 	if err != nil {
 		return nil, err
 	}
 
-	// Create geometry
+	// Normalize radius to kilometers based on input unit
+	var radiusKm float64
+	if req.Unit == "nm" || req.Unit == "NM" {
+		// Convert nautical miles to kilometers
+		radiusKm = req.Radius * 1.852
+	} else {
+		// Default to kilometers
+		radiusKm = req.Radius
+	}
+
+	// Convert to all units for storage
+	radiusMeters := radiusKm * 1000       // Convert km to meters
+	radiusNm := radiusKm * 0.539957       // Convert km to nautical miles
+
+	// Calculate area (π * r²) in square kilometers, then convert to square miles
+	areaKm2 := math.Pi * radiusKm * radiusKm
+	areaMiles := areaKm2 * 0.386102 // Convert km² to mi²
+
+	// Default color if not specified
+	if req.Color == "" {
+		req.Color = gs.getRandomColor()
+	}
+
+	// FIXED: Set MarkerID when creating geometry
 	geometry := &models.Geometry{
-		ID:        uuid.New(),
-		Type:      models.GeometryTypeCircle,
-		Serial:    gs.serialService.GenerateSerial(),
-		Color:     req.Color,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-		Latitude:  req.Lat,
-		Longitude: req.Lng,
+		ID:          uuid.New(),
+		MarkerID:    markerResponse.Marker.ID, // SET THE MARKER ID
+		Type:        models.GeometryTypeCircle,
+		Serial:      gs.serialService.GenerateSerial(),
+		Color:       req.Color,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+		Latitude:    req.Lat,
+		Longitude:   req.Lng,
 		CircleProps: &models.CircleGeometry{
 			Radius:   radiusMeters,
-			RadiusKm: radiusMeters / 1000,
-			RadiusNm: radiusMeters / 1852,
-			Area:     areaSqMi,
+			RadiusKm: radiusKm,
+			RadiusNm: radiusNm,
+			Area:     areaMiles,
 			Unit:     req.Unit,
 		},
 	}
 
-	err = gs.storage.SaveGeometry(geometry)
+	err = gs.geometryRepo.Create(geometry) // Use Create instead of SaveGeometry
 	if err != nil {
 		return nil, fmt.Errorf("failed to save geometry: %w", err)
 	}
@@ -114,7 +123,7 @@ func (gs *GeometryService) CreatePolygon(req models.CreatePolygonRequest) (*mode
 		MarkerType: "polygon-center",
 	}
 
-	_, err := gs.markerService.CreateMarker(centerMarkerReq)
+	markerResponse, err := gs.markerService.CreateMarker(centerMarkerReq)
 	if err != nil {
 		return nil, err
 	}
@@ -122,9 +131,10 @@ func (gs *GeometryService) CreatePolygon(req models.CreatePolygonRequest) (*mode
 	// Calculate area (simplified - you might want a more accurate method)
 	area := gs.calculatePolygonArea(req.Points)
 
-	// Create geometry
+	// Create geometry with MarkerID
 	geometry := &models.Geometry{
 		ID:        uuid.New(),
+		MarkerID:  markerResponse.Marker.ID, // FIXED: Set the MarkerID
 		Type:      models.GeometryTypePolygon,
 		Serial:    gs.serialService.GenerateSerial(),
 		Color:     req.Color,
@@ -137,6 +147,12 @@ func (gs *GeometryService) CreatePolygon(req models.CreatePolygonRequest) (*mode
 			Vertices: len(req.Points),
 			Area:     area,
 		},
+	}
+
+	// FIXED: Actually save to database
+	err = gs.geometryRepo.Create(geometry)
+	if err != nil {
+		return nil, fmt.Errorf("failed to save geometry: %w", err)
 	}
 
 	return geometry, nil
@@ -162,19 +178,20 @@ func (gs *GeometryService) CreateRectangle(req models.CreateRectangleRequest) (*
 		MarkerType: "rectangle-center",
 	}
 
-	_, err := gs.markerService.CreateMarker(centerMarkerReq)
+	markerResponse, err := gs.markerService.CreateMarker(centerMarkerReq)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create center marker: %w", err)
 	}
 
-	// Calculate area (simplified)
+	// Calculate area
 	latDiff := math.Abs(req.NorthEast.Lat - req.SouthWest.Lat)
 	lngDiff := math.Abs(req.NorthEast.Lng - req.SouthWest.Lng)
 	area := latDiff * lngDiff * 3959 // Rough conversion to square miles
 
-	// Create geometry
+	// Create geometry with proper MarkerID
 	geometry := &models.Geometry{
 		ID:        uuid.New(),
+		MarkerID:  markerResponse.Marker.ID, // IMPORTANT: Set the MarkerID
 		Type:      models.GeometryTypeRectangle,
 		Serial:    gs.serialService.GenerateSerial(),
 		Color:     req.Color,
@@ -186,6 +203,138 @@ func (gs *GeometryService) CreateRectangle(req models.CreateRectangleRequest) (*
 			Bounds: []models.Coordinate{req.SouthWest, req.NorthEast},
 			Area:   area,
 		},
+	}
+
+	// CRITICAL: Actually save to database
+	err = gs.geometryRepo.Create(geometry)
+	if err != nil {
+		return nil, fmt.Errorf("failed to save geometry: %w", err)
+	}
+
+	return geometry, nil
+}
+
+// UpdateCircle updates an existing circle geometry
+func (gs *GeometryService) UpdateCircle(id string, req models.CreateCircleRequest) (*models.Geometry, error) {
+	// Get existing geometry
+	geometry, err := gs.geometryRepo.GetByID(id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get geometry: %w", err)
+	}
+
+	if geometry == nil {
+		return nil, fmt.Errorf("geometry not found")
+	}
+
+	// Normalize radius to kilometers based on input unit
+	var radiusKm float64
+	if req.Unit == "nm" || req.Unit == "NM" {
+		radiusKm = req.Radius * 1.852
+	} else {
+		radiusKm = req.Radius
+	}
+
+	// Convert to all units for storage
+	radiusMeters := radiusKm * 1000
+	radiusNm := radiusKm * 0.539957
+
+	// Calculate area
+	areaKm2 := math.Pi * radiusKm * radiusKm
+	areaMiles := areaKm2 * 0.386102
+
+	// Update geometry
+	geometry.Latitude = req.Lat
+	geometry.Longitude = req.Lng
+	geometry.CircleProps = &models.CircleGeometry{
+		Radius:   radiusMeters,
+		RadiusKm: radiusKm,
+		RadiusNm: radiusNm,
+		Area:     areaMiles,
+		Unit:     req.Unit,
+	}
+	geometry.UpdatedAt = time.Now()
+
+	err = gs.geometryRepo.Update(geometry)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update geometry: %w", err)
+	}
+
+	return geometry, nil
+}
+
+// UpdatePolygon updates an existing polygon geometry
+func (gs *GeometryService) UpdatePolygon(id string, req models.CreatePolygonRequest) (*models.Geometry, error) {
+	if len(req.Points) < 3 {
+		return nil, fmt.Errorf("polygon must have at least 3 points")
+	}
+
+	// Get existing geometry
+	geometry, err := gs.geometryRepo.GetByID(id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get geometry: %w", err)
+	}
+
+	if geometry == nil {
+		return nil, fmt.Errorf("geometry not found")
+	}
+
+	// Calculate centroid
+	center := gs.calculateCentroid(req.Points)
+
+	// Calculate area
+	area := gs.calculatePolygonArea(req.Points)
+
+	// Update geometry
+	geometry.Latitude = center.Lat
+	geometry.Longitude = center.Lng
+	geometry.PolygonProps = &models.PolygonGeometry{
+		Points:   req.Points,
+		Vertices: len(req.Points),
+		Area:     area,
+	}
+	geometry.UpdatedAt = time.Now()
+
+	err = gs.geometryRepo.Update(geometry)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update geometry: %w", err)
+	}
+
+	return geometry, nil
+}
+
+// UpdateRectangle updates an existing rectangle geometry
+func (gs *GeometryService) UpdateRectangle(id string, req models.CreateRectangleRequest) (*models.Geometry, error) {
+	// Get existing geometry
+	geometry, err := gs.geometryRepo.GetByID(id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get geometry: %w", err)
+	}
+
+	if geometry == nil {
+		return nil, fmt.Errorf("geometry not found")
+	}
+
+	// Calculate center point
+	centerLat := (req.SouthWest.Lat + req.NorthEast.Lat) / 2
+	centerLng := (req.SouthWest.Lng + req.NorthEast.Lng) / 2
+
+	// Calculate area
+	latDiff := math.Abs(req.NorthEast.Lat - req.SouthWest.Lat)
+	lngDiff := math.Abs(req.NorthEast.Lng - req.SouthWest.Lng)
+	area := latDiff * lngDiff * 3959
+
+	// Update geometry
+	geometry.Latitude = centerLat
+	geometry.Longitude = centerLng
+	geometry.RectangleProps = &models.RectangleGeometry{
+		Bounds: []models.Coordinate{req.SouthWest, req.NorthEast},
+		Area:   area,
+	}
+	geometry.UpdatedAt = time.Now()
+
+	err = gs.geometryRepo.Update(geometry)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update geometry: %w", err)
 	}
 
 	return geometry, nil
@@ -227,4 +376,14 @@ func (gs *GeometryService) calculatePolygonArea(points []models.Coordinate) floa
 
 	area = math.Abs(area) / 2.0
 	return area * 3959 // Rough conversion to square miles
+}
+
+// GetAllGeometries returns all geometries from the database
+func (gs *GeometryService) GetAllGeometries() ([]*models.Geometry, error) {
+	return gs.geometryRepo.GetAll()
+}
+
+// DeleteGeometry deletes a geometry by ID
+func (gs *GeometryService) DeleteGeometry(id string) error {
+	return gs.geometryRepo.Delete(id)
 }

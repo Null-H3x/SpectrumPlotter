@@ -31,19 +31,30 @@ func NewMarkerService(
 }
 
 func (ms *MarkerService) CreateMarker(req models.CreateMarkerRequest) (*models.MarkerResponse, error) {
+	// Use provided serial if available, otherwise generate one
+	serial := req.Serial
+	if serial == "" {
+		serial = ms.serialService.GenerateSerial()
+	}
+
 	marker := &models.Marker{
 		ID:          uuid.New(),
-		Serial:      ms.serialService.GenerateSerial(),
+		Serial:      serial,
 		Latitude:    req.Latitude,
 		Longitude:   req.Longitude,
 		Frequency:   req.Frequency,
 		Notes:       req.Notes,
 		MarkerType:  req.MarkerType,
-		IsDraggable: true,
+		IsDraggable: req.IsDraggable,
 	}
 
 	if marker.MarkerType == "" {
 		marker.MarkerType = "manual"
+	}
+
+	// Default IsDraggable to true for manually created markers if not specified
+	if marker.MarkerType == "manual" && !req.IsDraggable {
+		marker.IsDraggable = true
 	}
 
 	err := ms.markerRepo.Create(marker)
@@ -187,4 +198,17 @@ func (ms *MarkerService) RemoveIRACNoteFromMarker(markerID, noteCode string, fie
 	}
 
 	return ms.markerRepo.RemoveIRACNote(id, noteCode, fieldNumber, occurrenceNumber)
+}
+
+func (ms *MarkerService) GetMarkersByBounds(minLat, maxLat, minLng, maxLng float64) (*models.MarkersResponse, error) {
+	markers, err := ms.markerRepo.GetByBounds(minLat, maxLat, minLng, maxLng)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get markers by bounds: %w", err)
+	}
+
+	return &models.MarkersResponse{
+		Success: true,
+		Message: "Markers retrieved successfully",
+		Markers: markers,
+	}, nil
 }

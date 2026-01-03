@@ -3,12 +3,12 @@
 // ===== UTILITY FUNCTIONS =====
 
 function showNotification(message, type = 'info') {
-    // Check if external notification system exists
-    if (window.showNotification && typeof window.showNotification === 'function') {
-        window.showNotification(message, type);
+    // Check if external notification system exists (but exclude self-reference)
+    if (window.showSFAFStatusMessage && typeof window.showSFAFStatusMessage === 'function') {
+        window.showSFAFStatusMessage(message, type);
         return;
     }
-
+    
     // Fallback notification system
     const notification = document.createElement('div');
     notification.className = `notification notification-${type}`;
@@ -44,7 +44,9 @@ function showNotification(message, type = 'info') {
     document.body.appendChild(notification);
 
     setTimeout(() => {
-        notification.remove();
+        if (notification.parentNode) {
+            notification.remove();
+        }
     }, 4000);
 }
 
@@ -652,6 +654,36 @@ window.iracNotesManager = {
 
 // Add this to buttonFunctions.txt after the existing IRAC Notes section
 document.addEventListener('DOMContentLoaded', () => {
+    // Apply Filters Button
+    const applyFiltersBtn = document.getElementById('applyFilters');
+    if (applyFiltersBtn) {
+        applyFiltersBtn.addEventListener('click', () => {
+            console.log('🔍 Applying SFAF filters...');
+            applyFilters();
+        });
+    }
+
+    // Clear Filters Button  
+    const clearFiltersBtn = document.getElementById('clearFilters');
+    if (clearFiltersBtn) {
+        clearFiltersBtn.addEventListener('click', () => {
+            console.log('🗑️ Clearing all filters...');
+            clearAllFilters();
+        });
+    }
+
+    // Frequency Preset Buttons
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const range = e.target.dataset.range;
+            console.log(`📡 Setting frequency filter to: ${range}`);
+            setFrequencyFilter(range);
+        });
+    });
+});
+
+// Clear All button
+document.addEventListener('DOMContentLoaded', () => {
     // ✅ Connect Clear All Markers Button (Overview tab)
     const clearAllBtn = document.getElementById('clearAllMarkers');
     if (clearAllBtn) {
@@ -673,6 +705,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+// Delete Object button
 document.addEventListener('DOMContentLoaded', () => {
     // Connect Object tab delete button
     const objectDeleteBtn = document.getElementById('deleteObjectBtn');
@@ -689,6 +722,47 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('✅ Object delete button connected');
     } else {
         console.error('❌ Object delete button not found');
+    }
+});
+
+// Export All Data
+document.addEventListener('DOMContentLoaded', () => {
+    const exportAllBtn = document.getElementById('exportAllData');
+    if (exportAllBtn) {
+        exportAllBtn.addEventListener('click', async () => {
+            console.log('📤 Exporting all data...');
+            await exportAllMapData();
+        });
+    }
+
+    // Import CSV Data
+    const importDataBtn = document.getElementById('importData');
+    if (importDataBtn) {
+        importDataBtn.addEventListener('click', () => {
+            console.log('📂 Opening CSV import dialog...');
+            document.getElementById('csvFileInput').click();
+        });
+    }
+});
+
+// Settings Tab Handlers
+document.addEventListener('DOMContentLoaded', () => {
+    // Tooltip display setting
+    const showTooltipsCheckbox = document.getElementById('showTooltips');
+    if (showTooltipsCheckbox) {
+        showTooltipsCheckbox.addEventListener('change', (e) => {
+            console.log(`🏷️ Tooltips ${e.target.checked ? 'enabled' : 'disabled'}`);
+            toggleTooltipDisplay(e.target.checked);
+        });
+    }
+
+    // Coordinate format setting
+    const coordFormatSelect = document.getElementById('coordFormat');
+    if (coordFormatSelect) {
+        coordFormatSelect.addEventListener('change', (e) => {
+            console.log(`🗺️ Coordinate format changed to: ${e.target.value}`);
+            updateCoordinateFormat(e.target.value);
+        });
     }
 });
 
@@ -935,3 +1009,518 @@ function addCommentsEntryManual() {
     console.log(`✅ Added emission characteristics entry #${entryCount} (MCEB Pub 7 compliant)`);
     showNotification(`Emission characteristics #${entryCount} added`, 'success')
 };
+
+// SFAF Export functions
+// Generate SFAF format content with blank lines between records
+async function generateSFAFContent() {
+    const sfafRecords = [];
+    
+    // Iterate through all markers (Source: markers.txt marker iteration)
+    for (const [markerId, marker] of window.MarkerSystem.markers) {
+        const markerData = marker.markerData;
+        
+        try {
+            // Get SFAF data from backend (Source: map.txt SFAF integration)
+            const response = await fetch(`/api/sfaf/object-data/${markerId}`);
+            
+            if (response.ok) {
+                const sfafData = await response.json();
+                
+                if (sfafData.success && sfafData.sfaf_fields) {
+                    const sfafRecord = formatSFAFRecord(sfafData.sfaf_fields, markerData);
+                    sfafRecords.push(sfafRecord);
+                }
+            }
+        } catch (error) {
+            console.warn(`Could not load SFAF data for marker ${markerId}:`, error);
+        }
+    }
+    
+    // ⭐ JOIN WITH BLANK LINES between each 005. entry
+    return sfafRecords.join('\n\n');  // Double newline creates blank line
+}
+
+// Format individual SFAF record (Source: sfaf_example.txt structure)
+function formatSFAFRecord(sfafFields, markerData) {
+    const lines = [];
+    
+    // Standard MCEB Publication 7 field order (Source: map.txt field mapping)
+    const fieldOrder = [
+        '005', '010', '102', '103', '107', '110', '113', '114', '115', '116',
+        '130', '142', '143', '144', '200', '201', '202', '204', '205', '206',
+        '207', '209', '300', '301', '303', '306', '340', '343', '357', '362',
+        '363', '373', '400', '401', '403', '440', '443', '457', '462', '463',
+        '473', '500', '501', '502', '503', '511', '512', '520', '701', '702',
+        '716', '801', '803'
+    ];
+    
+    // Process fields in order with proper formatting
+    fieldOrder.forEach(fieldNum => {
+        // Handle base fields
+        const baseField = `field${fieldNum}`;
+        if (sfafFields[baseField]) {
+            lines.push(`${fieldNum}.     ${sfafFields[baseField]}`);
+        }
+        
+        // Handle numbered variants (e.g., field110_1, field110_2)
+        for (let i = 1; i <= 10; i++) {
+            const variantField = `field${fieldNum}_${i}`;
+            if (sfafFields[variantField]) {
+                const suffix = i === 1 ? '' : `/0${i}`;
+                lines.push(`${fieldNum}${suffix}.     ${sfafFields[variantField]}`);
+            }
+        }
+        
+        // Handle slash variants (e.g., field500/02, field500/03)
+        for (let i = 2; i <= 10; i++) {
+            const slashField = `field${fieldNum}/${i.toString().padStart(2, '0')}`;
+            if (sfafFields[slashField]) {
+                lines.push(`${fieldNum}/${i.toString().padStart(2, '0')}.     ${sfafFields[slashField]}`);
+            }
+        }
+    });
+    
+    // Add coordinates if not in SFAF fields (Source: map.txt coordinate sync)
+    if (!sfafFields.field303 && markerData.lat && markerData.lng) {
+        const militaryCoords = window.MarkerSystem.formatMilitaryCoordinates(markerData.lat, markerData.lng);
+        lines.push(`303.     ${militaryCoords}`);
+        lines.push(`403.     ${militaryCoords}`);
+    }
+    
+    return lines.join('\n');
+}
+
+async function exportAllMapData() {
+    try {
+        if (!window.MarkerSystem) {
+            throw new Error('Marker system not initialized');
+        }
+        
+        const stats = window.MarkerSystem.getMarkerStats();
+        if (stats.total === 0) {
+            showNotification('❌ No data to export', 'error');
+            return;
+        }
+        
+        // Use existing MarkerSystem export method
+        window.MarkerSystem.exportMarkersToCSV();
+        showNotification('✅ Export completed', 'success');
+        
+    } catch (error) {
+        console.error('❌ Export failed:', error);
+        showNotification(`❌ Export failed: ${error.message}`, 'error');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🔄 Initializing button connections...');
+    
+    // 1. SFAF Management Buttons
+    connectSFAFButtons();
+    
+    // 2. Marker Management Buttons  
+    connectMarkerButtons();
+    
+    // 3. Geometry Buttons
+    connectGeometryButtons();
+    
+    // 4. Import/Export Buttons
+    connectImportExportButtons();
+    
+    // 5. Tab Navigation Buttons
+    connectTabButtons();
+    
+    // 6. Settings and Filter Buttons
+    connectUtilityButtons();
+    
+    console.log('✅ All button connections initialized');
+});
+
+function connectSFAFButtons() {
+    // NOTE: SFAF buttons are now wired up by SFAFIntegration.wireUpActionButtons()
+    // in map.js initialization. This function is kept for backward compatibility.
+    console.log('ℹ️ SFAF buttons handled by SFAFIntegration module');
+
+    // Only handle objectDelete button if it's not already handled
+    const deleteBtn = document.getElementById('deleteObjectBtn');
+    if (deleteBtn && typeof handleObjectDelete === 'function') {
+        deleteBtn.addEventListener('click', handleObjectDelete);
+        console.log('✅ Connected: deleteObjectBtn');
+    }
+}
+
+function connectMarkerButtons() {
+    const clearAllBtn = document.getElementById('clearAllMarkers');
+    if (clearAllBtn) {
+        clearAllBtn.addEventListener('click', () => {
+            if (window.MarkerSystem && window.MarkerSystem.clearAllMarkers) {
+                window.MarkerSystem.clearAllMarkers();
+            }
+        });
+    }
+}
+
+function connectGeometryButtons() {
+    const addEmissionBtn = document.getElementById('addEmissionGroup');
+    if (addEmissionBtn) {
+        addEmissionBtn.addEventListener('click', addEmissionCharacteristicsEntry);
+    }
+}
+
+function showSFAFStatusMessage(message, type) {
+    const statusDiv = document.createElement('div');
+    statusDiv.className = 'sfaf-status-message';
+
+    const colors = {
+        'success': '#4CAF50',
+        'error': '#f44336',
+        'info': '#2196F3'
+    };
+
+    statusDiv.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 470px;
+        background: ${colors[type] || '#666'};
+        color: white;
+        padding: 12px 20px;
+        border-radius: 6px;
+        z-index: 2000;
+    `;
+
+    statusDiv.textContent = message;
+    document.body.appendChild(statusDiv);
+
+    setTimeout(() => statusDiv.remove(), 4000);
+}
+
+// ===== MARKER FILTERING FUNCTIONS =====
+
+/**
+ * Apply filters to markers based on SFAF field values
+ */
+async function applyFilters() {
+    try {
+        console.log('🔍 Applying filters...');
+
+        // Get filter input values
+        const filters = {
+            location: document.getElementById('filterLocation')?.value.trim().toLowerCase() || '',
+            frequency: document.getElementById('filterFrequency')?.value.trim() || '',
+            power: document.getElementById('filterPower')?.value.trim() || '',
+            equipment: document.getElementById('filterEquipment')?.value.trim().toLowerCase() || '',
+            emission: document.getElementById('filterEmission')?.value.trim().toUpperCase() || ''
+        };
+
+        console.log('📋 Active filters:', filters);
+
+        // Check if any filters are active
+        const hasActiveFilters = Object.values(filters).some(val => val !== '');
+
+        if (!hasActiveFilters) {
+            showNotification('ℹ️ No filters specified', 'info');
+            return;
+        }
+
+        // Get all markers
+        let allMarkers = [];
+        if (window.MarkerManager && typeof window.MarkerManager.getAllMarkers === 'function') {
+            allMarkers = window.MarkerManager.getAllMarkers();
+        } else if (window.MarkerSystem && window.MarkerSystem.markers) {
+            allMarkers = Array.from(window.MarkerSystem.markers.values());
+        } else {
+            console.error('❌ Marker system not found');
+            showNotification('❌ Unable to access markers', 'error');
+            return;
+        }
+
+        console.log(`📍 Total markers to filter: ${allMarkers.length}`);
+
+        if (allMarkers.length === 0) {
+            showNotification('ℹ️ No markers on map', 'info');
+            return;
+        }
+
+        // Apply filters to each marker
+        let visibleCount = 0;
+        let hiddenCount = 0;
+
+        for (const marker of allMarkers) {
+            const shouldShow = await checkMarkerAgainstFilters(marker, filters);
+
+            if (shouldShow) {
+                // Show marker
+                if (!window.map.hasLayer(marker)) {
+                    window.map.addLayer(marker);
+                }
+                marker.setOpacity(1);
+                visibleCount++;
+            } else {
+                // Hide marker by reducing opacity or removing from map
+                marker.setOpacity(0.2);
+                hiddenCount++;
+            }
+        }
+
+        // Update counts in sidebar
+        updateFilterCounts(visibleCount, hiddenCount);
+
+        // Show notification
+        showNotification(`✅ Filter applied: ${visibleCount} visible, ${hiddenCount} hidden`, 'success');
+        console.log(`✅ Filter complete: ${visibleCount} visible, ${hiddenCount} hidden`);
+
+    } catch (error) {
+        console.error('❌ Filter error:', error);
+        showNotification(`❌ Filter failed: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * Check if a marker matches the current filters
+ */
+async function checkMarkerAgainstFilters(marker, filters) {
+    try {
+        // Get SFAF data for this marker
+        let sfafData = null;
+
+        // Try to get SFAF data from marker object
+        if (marker.markerData && marker.markerData.sfaf_id) {
+            // Fetch SFAF data from API
+            const response = await fetch(`/api/sfaf/${marker.markerData.sfaf_id}`);
+            if (response.ok) {
+                const result = await response.json();
+                sfafData = result.sfaf;
+            }
+        }
+
+        // If no SFAF data, marker is visible only if no filters are active
+        if (!sfafData) {
+            console.log(`⚠️ No SFAF data for marker ${marker.markerId || 'unknown'}`);
+            return false; // Hide markers without SFAF data when filtering
+        }
+
+        // Check each filter
+
+        // Location filter (field300, field301, field303)
+        if (filters.location) {
+            const field300 = (sfafData.field300 || '').toLowerCase();
+            const field301 = (sfafData.field301 || '').toLowerCase();
+            const field303 = (sfafData.field303 || '').toLowerCase();
+
+            const locationMatch =
+                field300.includes(filters.location) ||
+                field301.includes(filters.location) ||
+                field303.includes(filters.location);
+
+            if (!locationMatch) {
+                return false;
+            }
+        }
+
+        // Frequency filter (field110_1)
+        if (filters.frequency) {
+            const field110 = parseFloat(sfafData.field110_1);
+
+            // Check if it's a range query (e.g., "30-300" or "3-30")
+            if (filters.frequency.includes('-')) {
+                const [minStr, maxStr] = filters.frequency.split('-').map(s => s.trim());
+                const minFreq = parseFloat(minStr);
+                const maxFreq = parseFloat(maxStr);
+
+                if (!isNaN(minFreq) && !isNaN(maxFreq) && !isNaN(field110)) {
+                    if (field110 < minFreq || field110 > maxFreq) {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            } else {
+                // Single value or pattern match
+                const freqValue = parseFloat(filters.frequency);
+                if (!isNaN(freqValue)) {
+                    if (isNaN(field110) || Math.abs(field110 - freqValue) > 0.001) {
+                        return false;
+                    }
+                } else {
+                    // String match for frequency pattern
+                    const field110Str = (sfafData.field110_1 || '').toLowerCase();
+                    if (!field110Str.includes(filters.frequency.toLowerCase())) {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        // Power filter (field115_1)
+        if (filters.power) {
+            const powerValue = parseFloat(filters.power);
+            if (!isNaN(powerValue)) {
+                const field115 = parseFloat(sfafData.field115_1);
+                if (isNaN(field115) || field115 < powerValue) {
+                    return false;
+                }
+            }
+        }
+
+        // Equipment filter (field340_1)
+        if (filters.equipment) {
+            const field340 = (sfafData.field340_1 || '').toLowerCase();
+            if (!field340.includes(filters.equipment)) {
+                return false;
+            }
+        }
+
+        // Emission filter (field114_1)
+        if (filters.emission) {
+            const field114 = (sfafData.field114_1 || '').toUpperCase();
+            if (!field114.includes(filters.emission)) {
+                return false;
+            }
+        }
+
+        // All filters passed
+        return true;
+
+    } catch (error) {
+        console.error('❌ Error checking marker filters:', error);
+        return false; // Hide markers with errors
+    }
+}
+
+/**
+ * Clear all filters and show all markers
+ */
+function clearAllFilters() {
+    try {
+        console.log('🗑️ Clearing all filters...');
+
+        // Clear filter input fields
+        const filterInputs = [
+            'filterLocation',
+            'filterFrequency',
+            'filterPower',
+            'filterEquipment',
+            'filterEmission'
+        ];
+
+        filterInputs.forEach(id => {
+            const input = document.getElementById(id);
+            if (input) {
+                input.value = '';
+            }
+        });
+
+        // Remove active state from preset buttons
+        document.querySelectorAll('.preset-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+
+        // Show all markers
+        let allMarkers = [];
+        if (window.MarkerManager && typeof window.MarkerManager.getAllMarkers === 'function') {
+            allMarkers = window.MarkerManager.getAllMarkers();
+        } else if (window.MarkerSystem && window.MarkerSystem.markers) {
+            allMarkers = Array.from(window.MarkerSystem.markers.values());
+        }
+
+        allMarkers.forEach(marker => {
+            if (!window.map.hasLayer(marker)) {
+                window.map.addLayer(marker);
+            }
+            marker.setOpacity(1);
+        });
+
+        // Update counts
+        updateFilterCounts(allMarkers.length, 0);
+
+        showNotification('✅ All filters cleared', 'success');
+        console.log('✅ Filters cleared, all markers visible');
+
+    } catch (error) {
+        console.error('❌ Clear filters error:', error);
+        showNotification(`❌ Clear failed: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * Set frequency filter based on preset range (HF, VHF, UHF)
+ */
+function setFrequencyFilter(range) {
+    try {
+        console.log(`📡 Setting frequency filter to: ${range}`);
+
+        const freqInput = document.getElementById('filterFrequency');
+        if (!freqInput) {
+            console.error('❌ Frequency input not found');
+            return;
+        }
+
+        // Define frequency ranges
+        const ranges = {
+            'HF': '3-30',      // HF: 3-30 MHz
+            'VHF': '30-300',   // VHF: 30-300 MHz
+            'UHF': '300-3000'  // UHF: 300-3000 MHz
+        };
+
+        const rangeValue = ranges[range];
+        if (rangeValue) {
+            freqInput.value = rangeValue;
+
+            // Update preset button active states
+            document.querySelectorAll('.preset-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            showNotification(`📡 Frequency range set to ${range} (${rangeValue} MHz)`, 'info');
+        } else {
+            console.error(`❌ Unknown frequency range: ${range}`);
+        }
+
+    } catch (error) {
+        console.error('❌ Set frequency filter error:', error);
+        showNotification(`❌ Failed to set frequency: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * Update filter count displays in sidebar
+ */
+function updateFilterCounts(visible, hidden) {
+    const visibleCountEl = document.getElementById('visibleCount');
+    const hiddenCountEl = document.getElementById('hiddenCount');
+    const totalCountEl = document.getElementById('totalCount');
+
+    if (visibleCountEl) {
+        visibleCountEl.textContent = visible;
+    }
+
+    if (hiddenCountEl) {
+        hiddenCountEl.textContent = hidden;
+    }
+
+    if (totalCountEl) {
+        totalCountEl.textContent = visible + hidden;
+    }
+
+    console.log(`📊 Updated counts: ${visible} visible, ${hidden} hidden, ${visible + hidden} total`);
+}
+
+/**
+ * Initialize filter counts on page load
+ */
+function initializeFilterCounts() {
+    // Get all markers
+    let allMarkers = [];
+    if (window.MarkerManager && typeof window.MarkerManager.getAllMarkers === 'function') {
+        allMarkers = window.MarkerManager.getAllMarkers();
+    } else if (window.MarkerSystem && window.MarkerSystem.markers) {
+        allMarkers = Array.from(window.MarkerSystem.markers.values());
+    }
+
+    // Set initial counts (all visible, none hidden)
+    updateFilterCounts(allMarkers.length, 0);
+}
+
+// Expose initializeFilterCounts globally so it can be called when markers are loaded
+window.initializeFilterCounts = initializeFilterCounts;

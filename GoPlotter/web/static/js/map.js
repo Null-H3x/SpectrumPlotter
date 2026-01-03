@@ -1,3 +1,12 @@
+/**
+ * SFAF Plotter - Main Map Application
+ *
+ * Coordinates between modules to provide interactive map functionality
+ * with SFAF form integration and MCEB Publication 7 compliance
+ */
+
+// ==================== Base Map Configuration ====================
+
 const baseMaps = {
     'CARTO Light': L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
@@ -19,25 +28,45 @@ const baseMaps = {
     })
 };
 
-// Initialize map (same center as your original)
+// ==================== Load User Settings ====================
+
+// Get saved settings (SettingsManager is loaded before this script)
+const userSettings = SettingsManager.getSettings();
+
+// Determine initial map configuration from settings
+const initialBaseLayer = baseMaps[userSettings.map.baseLayer] || baseMaps['Esri Satellite'];
+const initialCenter = [userSettings.map.defaultCenter.lat, userSettings.map.defaultCenter.lng];
+const initialZoom = userSettings.map.defaultZoom;
+
+console.log('🗺️ Loading map with settings:', {
+    baseLayer: userSettings.map.baseLayer,
+    region: userSettings.map.region,
+    center: initialCenter,
+    zoom: initialZoom
+});
+
+// ==================== Map Initialization ====================
+
 const map = L.map('map', {
-    center: [30.43, -86.695],
-    zoom: 13,
-    layers: [baseMaps['Esri Satellite']]
+    center: initialCenter,
+    zoom: initialZoom,
+    layers: [initialBaseLayer]
 });
 
 // Add layer control
 L.control.layers(baseMaps).addTo(map);
 
-// Create layer group for drawn features (same as your original)
+// Create layer group for drawn features
 const drawnItems = new L.FeatureGroup();
 map.addLayer(drawnItems);
 
-// Storage for markers
-const markers = new Map();
-let currentSelectedMarker = null;
+// Make globally available for modules
+window.map = map;
+window.drawnItems = drawnItems;
+window.baseMaps = baseMaps;
 
-// Marker icons (same as your original)
+// ==================== Marker Icons ====================
+
 const manualIcon = L.icon({
     iconUrl: '/images/marker-green.png',
     iconSize: [25, 41],
@@ -54,7 +83,11 @@ const importedIcon = L.icon({
     tooltipAnchor: [16, -28],
 });
 
-// Coordinate tooltip using Go API (matches your original structure)
+// Set marker icons in MarkerManager
+MarkerManager.setMarkerIcons(manualIcon, importedIcon);
+
+// ==================== Cursor Coordinate Tooltip ====================
+
 const cursorTooltip = L.tooltip({
     permanent: false,
     direction: 'right',
@@ -62,26 +95,14 @@ const cursorTooltip = L.tooltip({
     className: 'cursorTooltip'
 });
 
-// Add to map initialization
-map.on('click', function (e) {
-    // If clicking on empty map (not on a marker)
-    if (!e.originalEvent.target.closest('.leaflet-marker-icon')) {
-        manageObjectTabVisibility(false);
-        window.currentSFAFMarker = null;
-        currentSelectedMarker = null;
-    }
-});
-
-// Show tooltip on map mousemove (same as your original logic)
+// Show tooltip on map mousemove
 map.on('mousemove', async (e) => {
     if (e.originalEvent.target.classList.contains('leaflet-container')) {
         try {
             const lat = e.latlng.lat.toFixed(4);
             const lng = e.latlng.lng.toFixed(4);
 
-            // Use Go API for coordinate conversion
-            const response = await fetch(`/api/convert-coords?lat=${lat}&lng=${lng}`);
-            const coords = await response.json();
+            const coords = await APIClient.convertCoordinates(lat, lng);
 
             cursorTooltip
                 .setLatLng(e.latlng)
@@ -102,186 +123,26 @@ map.on('mousemove', async (e) => {
     }
 });
 
-// Hide tooltip when mouse leaves map (same as your original)
+// Hide tooltip when mouse leaves map
 map.getContainer().addEventListener('mouseleave', () => {
     if (cursorTooltip._map) {
         map.removeLayer(cursorTooltip);
     }
 });
 
-// Load existing markers from Go backend
-async function loadExistingMarkers() {
-    try {
-        const response = await fetch('/api/markers');
-        const data = await response.json();
+// ==================== Map Click Handler ====================
 
-        if (data.markers) {
-            data.markers.forEach(markerData => {
-                createMarkerOnMap(markerData);
-            });
-        }
-    } catch (error) {
-        console.error('Failed to load existing markers:', error);
+// Clear selection when clicking empty map
+map.on('click', function (e) {
+    if (!e.originalEvent.target.closest('.leaflet-marker-icon')) {
+        UIHelpers.manageObjectTabVisibility(false);
+        window.currentSFAFMarker = null;
+        MarkerManager.setCurrentSelectedMarker(null);
     }
-}
+});
 
-// Create marker on map (matches your original createManualMarker function)
-function createMarkerOnMap(markerData) {
-    const icon = markerData.type === 'imported' ? importedIcon : manualIcon;
-    const marker = L.marker([markerData.lat, markerData.lng], {
-        icon: icon,
-        draggable: markerData.is_draggable !== false
-    });
+// ==================== Drawing Controls ====================
 
-    // Store marker data and ID
-    marker.markerId = markerData.id;
-    marker.markerData = {
-        ...markerData,
-        lat: parseFloat(markerData.lat).toFixed(4),
-        lng: parseFloat(markerData.lng).toFixed(4)
-    };
-
-    // Add to map and storage
-    map.addLayer(marker);
-    drawnItems.addLayer(marker);
-    markers.set(markerData.id, marker);
-
-    // CRITICAL: Update tooltip with DMS coordinates
-    updateMarkerTooltip(marker);
-
-    // Click handler
-    marker.on('click', async () => {
-        currentSelectedMarker = marker;
-        manageObjectTabVisibility(true);
-        await openSidebar(marker.markerId);
-    });
-
-    // Drag handler with tooltip update
-    let dragTimeout = null;
-    marker.on('drag', async (e) => {
-        const pos = e.target.getLatLng();
-        marker.markerData.lat = pos.lat.toFixed(4);
-        marker.markerData.lng = pos.lng.toFixed(4);
-
-        // Update tooltip immediately with new coordinates
-        updateMarkerTooltip(marker);
-
-        // Debounce server update
-        if (dragTimeout) {
-            clearTimeout(dragTimeout);
-        }
-        dragTimeout = setTimeout(async () => {
-            try {
-                const response = await fetch(`/api/markers/${markerData.id}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        lat: parseFloat(pos.lat.toFixed(4)),
-                        lng: parseFloat(pos.lng.toFixed(4))
-                    })
-                });
-                if (response.ok) {
-                    console.log('✅ Marker position saved to server');
-                }
-            } catch (error) {
-                console.error('❌ Failed to update marker coordinates:', error);
-            }
-        }, 500);
-    });
-
-    return marker;
-}
-
-// More efficient version with coordinate caching
-const coordinateCache = new Map();
-
-// Clear cache when it gets too large (optional optimization)
-function manageCacheSize() {
-    if (coordinateCache.size > 1000) {
-        // Clear oldest entries
-        const entries = Array.from(coordinateCache.entries());
-        const toKeep = entries.slice(-500); // Keep last 500 entries
-        coordinateCache.clear();
-        toKeep.forEach(([key, value]) => coordinateCache.set(key, value));
-    }
-}
-
-async function updateMarkerTooltip(marker) {
-    const data = marker.markerData;
-    const coordKey = `${data.lat},${data.lng}`;
-
-    // Check cache first
-    if (coordinateCache.has(coordKey)) {
-        const cachedDMS = coordinateCache.get(coordKey);
-        const tooltip = `
-            <b>Manual Marker</b><br>
-            DecDeg: ${data.lat}, ${data.lng}<br>
-            DMS: ${cachedDMS}<br>
-            Serial: ${data.serial}<br>
-            Freq: ${data.frequency || 'N/A'}<br>
-            Notes: ${data.notes || '(none)'}
-        `;
-        marker.bindTooltip(tooltip, {
-            permanent: true,
-            direction: 'top',
-            offset: L.point(0, -15)
-        }).openTooltip();
-        return;
-    }
-
-    try {
-        // CRITICAL: Make API call to get DMS coordinates
-        const response = await fetch(`/api/convert-coords?lat=${data.lat}&lng=${data.lng}`);
-
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        const coords = await response.json();
-
-        // Cache the DMS result for future use
-        coordinateCache.set(coordKey, coords.dms);
-
-        // Create tooltip with DMS coordinates
-        const tooltip = `
-            <b>Manual Marker</b><br>
-            DecDeg: ${coords.decimal}<br>
-            DMS: ${coords.dms}<br>
-            Serial: ${data.serial}<br>
-            Freq: ${data.frequency || 'N/A'}<br>
-            Notes: ${data.notes || '(none)'}
-        `;
-
-        marker.bindTooltip(tooltip, {
-            permanent: true,
-            direction: 'top',
-            offset: L.point(0, -15)
-        }).openTooltip();
-
-        console.log('✅ Tooltip updated with DMS coordinates:', coords.dms);
-
-    } catch (error) {
-        console.error('❌ Failed to get DMS coordinates for tooltip:', error);
-
-        // Fallback tooltip without DMS
-        const fallbackTooltip = `
-            <b>Manual Marker</b><br>
-            DecDeg: ${data.lat}, ${data.lng}<br>
-            DMS: (conversion failed)<br>
-            Serial: ${data.serial}<br>
-            Freq: ${data.frequency || 'N/A'}<br>
-            Notes: ${data.notes || '(none)'}
-        `;
-
-        marker.bindTooltip(fallbackTooltip, {
-            permanent: true,
-            direction: 'top',
-            offset: L.point(0, -15)
-        }).openTooltip();
-    }
-}
-
-// Drawing controls (same as your original)
 const drawControl = new L.Control.Draw({
     edit: {
         featureGroup: drawnItems,
@@ -298,7 +159,9 @@ const drawControl = new L.Control.Draw({
 });
 map.addControl(drawControl);
 
-// Drawing event handlers that use Go APIs
+// ==================== Drawing Event Handlers ====================
+
+// Handle creation of new features
 map.on(L.Draw.Event.CREATED, async function (event) {
     const { layerType, layer } = event;
 
@@ -308,44 +171,83 @@ map.on(L.Draw.Event.CREATED, async function (event) {
         switch (layerType) {
             case 'marker':
                 const latLng = layer.getLatLng();
-                response = await fetch('/api/markers', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        lat: parseFloat(latLng.lat.toFixed(4)),
-                        lng: parseFloat(latLng.lng.toFixed(4)),
-                        type: 'manual'
-                    })
+                response = await APIClient.createMarker({
+                    lat: parseFloat(latLng.lat.toFixed(4)),
+                    lng: parseFloat(latLng.lng.toFixed(4)),
+                    type: 'manual'
                 });
-                if (response.ok) {
-                    const markerResp = await response.json();
-                    // Don't add the drawn layer to drawnItems since we're replacing it
+
+                if (response.marker) {
                     map.removeLayer(layer);
-                    createMarkerOnMap(markerResp.marker); // This will now add to drawnItems
+                    MarkerManager.createMarkerOnMap(response.marker);
                 }
                 break;
 
             case 'circle':
                 const center = layer.getLatLng();
-                const radius = layer.getRadius();
-                response = await fetch('/api/geometry/circle', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        lat: center.lat,
-                        lng: center.lng,
-                        radius: radius / 1000, // Convert to km
-                        unit: 'km'
-                    })
+
+                // Get coordinate formats for display
+                const coords = await APIClient.convertCoordinates(center.lat, center.lng);
+
+                // Prompt user for radius and unit
+                const userInput = await CircleManager.promptCircleRadius(coords);
+
+                if (!userInput) {
+                    map.removeLayer(layer);
+                    break;
+                }
+
+                response = await APIClient.createCircle({
+                    lat: center.lat,
+                    lng: center.lng,
+                    radius: userInput.radius,
+                    unit: userInput.unit
                 });
 
-                if (response.ok) {
-                    const geometryResp = await response.json();
-                    drawnItems.addLayer(layer);
+                if (response.geometry) {
+                    map.removeLayer(layer);
 
-                    // Add center marker if geometry service returns one
-                    if (geometryResp.geometry && geometryResp.geometry.center_marker) {
-                        createMarkerOnMap(geometryResp.geometry.center_marker);
+                    console.log('🔵 Circle geometry created:', response.geometry);
+
+                    const actualCircle = await CircleManager.createCircle(
+                        { lat: center.lat, lng: center.lng },
+                        userInput.radius,
+                        userInput.unit,
+                        {
+                            id: response.geometry.id,
+                            marker_id: response.geometry.marker_id,
+                            serial: response.geometry.serial || 'N/A',
+                            color: response.geometry.color || '#4ECDC4'
+                        }
+                    );
+
+                    // Add tooltip to circle
+                    TooltipManager.updateCircleTooltip(actualCircle, coords);
+
+                    // Create center marker FIRST (backend creates it automatically)
+                    if (response.geometry.marker_id) {
+                        const markerData = {
+                            id: response.geometry.marker_id,
+                            lat: center.lat,
+                            lng: center.lng,
+                            type: 'circle-center',
+                            serial: response.geometry.serial,
+                            is_draggable: true
+                        };
+                        const centerMarker = MarkerManager.createMarkerOnMap(markerData);
+
+                        // Link circle and marker
+                        CircleManager.linkCircleToMarker(actualCircle, centerMarker);
+
+                        // THEN set up click handler (after centerMarker is available)
+                        actualCircle.on('click', async () => {
+                            console.log('🔵 Circle clicked, opening SFAF for marker:', actualCircle.geometryData.marker_id);
+                            MarkerManager.setCurrentSelectedMarker(centerMarker);
+                            UIHelpers.manageObjectTabVisibility(true);
+                            await SFAFIntegration.openSidebar(actualCircle.geometryData.marker_id);
+                        });
+                    } else {
+                        console.error('❌ No marker_id in geometry response:', response.geometry);
                     }
                 }
                 break;
@@ -356,927 +258,375 @@ map.on(L.Draw.Event.CREATED, async function (event) {
                     lng: point.lng
                 }));
 
-                response = await fetch('/api/geometry/polygon', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ points: points })
-                });
+                response = await APIClient.createPolygon({ points: points });
 
-                if (response.ok) {
-                    const geometryResp = await response.json();
+                if (response.geometry) {
+                    // Store geometry metadata on polygon layer
+                    layer.geometryId = response.geometry.id;
+                    layer.geometryData = {
+                        id: response.geometry.id,
+                        marker_id: response.geometry.marker_id,
+                        type: 'polygon',
+                        points: points,
+                        serial: response.geometry.serial || 'N/A'
+                    };
+
                     drawnItems.addLayer(layer);
 
-                    if (geometryResp.geometry && geometryResp.geometry.center_marker) {
-                        createMarkerOnMap(geometryResp.geometry.center_marker);
+                    // Create center marker and link to polygon
+                    if (response.geometry.marker_id) {
+                        const centerLat = points.reduce((sum, p) => sum + p.lat, 0) / points.length;
+                        const centerLng = points.reduce((sum, p) => sum + p.lng, 0) / points.length;
+
+                        const markerData = {
+                            id: response.geometry.marker_id,
+                            lat: centerLat,
+                            lng: centerLng,
+                            type: 'polygon-center',
+                            serial: response.geometry.serial,
+                            is_draggable: true
+                        };
+                        const centerMarker = MarkerManager.createMarkerOnMap(markerData);
+
+                        // Link polygon and marker
+                        layer.centerMarker = centerMarker;
+                        centerMarker.linkedPolygon = layer;
+
+                        // Add tooltip to polygon
+                        const centerCoords = await APIClient.convertCoordinates(centerLat, centerLng);
+                        TooltipManager.updatePolygonTooltip(layer, centerCoords);
+
+                        // Make polygon clickable to open SFAF
+                        layer.on('click', async () => {
+                            console.log('🔷 Polygon clicked, opening SFAF for marker:', layer.geometryData.marker_id);
+                            MarkerManager.setCurrentSelectedMarker(centerMarker);
+                            UIHelpers.manageObjectTabVisibility(true);
+                            await SFAFIntegration.openSidebar(layer.geometryData.marker_id);
+                        });
                     }
                 }
                 break;
 
             case 'rectangle':
                 const bounds = layer.getBounds();
-                response = await fetch('/api/geometry/rectangle', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        south_west: {
-                            lat: bounds.getSouth(),
-                            lng: bounds.getWest()
-                        },
-                        north_east: {
-                            lat: bounds.getNorth(),
-                            lng: bounds.getEast()
-                        }
-                    })
+                const centerLat = (bounds.getNorth() + bounds.getSouth()) / 2;
+                const centerLng = (bounds.getEast() + bounds.getWest()) / 2;
+
+                response = await APIClient.createRectangle({
+                    south_west: {
+                        lat: bounds.getSouth(),
+                        lng: bounds.getWest()
+                    },
+                    north_east: {
+                        lat: bounds.getNorth(),
+                        lng: bounds.getEast()
+                    }
                 });
 
-                if (response.ok) {
-                    const geometryResp = await response.json();
+                if (response.geometry) {
+                    // Store geometry metadata on rectangle layer
+                    layer.geometryId = response.geometry.id;
+                    layer.geometryData = {
+                        id: response.geometry.id,
+                        marker_id: response.geometry.marker_id,
+                        type: 'rectangle',
+                        bounds: {
+                            south: bounds.getSouth(),
+                            north: bounds.getNorth(),
+                            west: bounds.getWest(),
+                            east: bounds.getEast()
+                        },
+                        serial: response.geometry.serial || 'N/A'
+                    };
+
                     drawnItems.addLayer(layer);
 
-                    if (geometryResp.geometry && geometryResp.geometry.center_marker) {
-                        createMarkerOnMap(geometryResp.geometry.center_marker);
+                    // Create center marker and link to rectangle
+                    if (response.geometry.marker_id) {
+                        const markerData = {
+                            id: response.geometry.marker_id,
+                            lat: centerLat,
+                            lng: centerLng,
+                            type: 'rectangle-center',
+                            serial: response.geometry.serial,
+                            is_draggable: true
+                        };
+                        const centerMarker = MarkerManager.createMarkerOnMap(markerData);
+
+                        // Link rectangle and marker
+                        layer.centerMarker = centerMarker;
+                        centerMarker.linkedRectangle = layer;
+
+                        // Add tooltip to rectangle
+                        const centerCoords = await APIClient.convertCoordinates(centerLat, centerLng);
+                        TooltipManager.updateRectangleTooltip(layer, centerCoords);
+
+                        // Make rectangle clickable to open SFAF
+                        layer.on('click', async () => {
+                            console.log('🟦 Rectangle clicked, opening SFAF for marker:', layer.geometryData.marker_id);
+                            MarkerManager.setCurrentSelectedMarker(centerMarker);
+                            UIHelpers.manageObjectTabVisibility(true);
+                            await SFAFIntegration.openSidebar(layer.geometryData.marker_id);
+                        });
                     }
                 }
                 break;
         }
     } catch (error) {
         console.error(`Failed to create ${layerType}:`, error);
-        // Still add to map locally if API fails
         drawnItems.addLayer(layer);
     }
 });
 
-// Helper functions for sidebar integration
-function openPersistentSidebar() {
-    const sidebar = document.getElementById('persistentSidebar');
-    if (sidebar) {
-        sidebar.classList.add('open');
-    } else {
-        console.error('❌ persistentSidebar element not found');
-    }
-}
+// Handle editing of existing features
+map.on(L.Draw.Event.EDITED, async function (event) {
+    const layers = event.layers;
 
-function closePersistentSidebar() {
-    const sidebar = document.getElementById('persistentSidebar');
-    if (sidebar) {
-        sidebar.classList.remove('open');
+    layers.eachLayer(async function (layer) {
+        // Handle circle edits
+        if (layer instanceof L.Circle && layer.geometryData) {
+            const newCenter = layer.getLatLng();
+            const newRadius = layer.getRadius();
 
-        // Hide Object tab when sidebar is closed
-        manageObjectTabVisibility(false);
+            // Calculate radius in the original unit
+            const radiusKm = newRadius / 1000;
+            const radiusNm = radiusKm * 0.539957;
+            const originalRadius = layer.geometryData.unit === 'nm' ? radiusNm : radiusKm;
 
-        // Clear current marker reference
-        window.currentSFAFMarker = null;
-    }
-}
+            // Update geometry data
+            layer.geometryData.center = { lat: newCenter.lat, lng: newCenter.lng };
+            layer.geometryData.radius = originalRadius;
 
-function switchTab(tabId) {
-    // Update tab buttons
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    const targetBtn = document.querySelector(`[data-tab="${tabId}"]`);
-    if (targetBtn) {
-        targetBtn.classList.add('active');
-    }
+            // Update center marker if it exists
+            if (layer.centerMarker) {
+                layer.centerMarker.setLatLng(newCenter);
 
-    // Update tab panels
-    document.querySelectorAll('.tab-panel').forEach(panel => {
-        panel.classList.remove('active');
-    });
-    const targetPanel = document.getElementById(`tab-${tabId}`);
-    if (targetPanel) {
-        targetPanel.classList.add('active');
-    }
-}
-
-async function openSidebar(markerId) {
-    try {
-        console.log('🔍 Opening sidebar for marker:', markerId);
-
-        // FIX: Use correct API endpoint
-        const response = await fetch(`/api/sfaf/object-data/${markerId}`);
-
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        console.log('📡 API Response:', data);
-
-        if (data.success) {
-            // CRITICAL: Open the sidebar FIRST
-            openPersistentSidebar();
-
-            // THEN show object tab
-            manageObjectTabVisibility(true);
-
-            // THEN switch to object tab
-            switchTab('object');
-
-            // FINALLY populate the form
-            populateExistingSFAFForm(data);
-        } else {
-            console.error('API Error:', data.error);
-            manageObjectTabVisibility(false);
-        }
-    } catch (error) {
-        console.error('Failed to load SFAF data:', error);
-        manageObjectTabVisibility(false);
-    }
-}
-
-function populateExistingSFAFForm(data) {
-    window.currentSFAFMarker = data.marker;
-    // Complete official MCEB Pub 7 field mapping based on your HTML form structure
-    const sfafFieldMapping = {
-        // Administrative Data (Direct mappings)
-        'field005': 'field005',    // Security Classification
-        'field010': 'field010',    // Type of Action
-        'field013': 'field013',    // Declassification Instruction Comment
-        'field019': 'field019',    // Declassification Date
-        'field102': 'field102',    // Agency Serial Number ✅ (works)
-        'field701': 'field701',    // Frequency Action Officer
-        'field702': 'field702',    // Control/Request Number (required for CENTCOM)
-
-        // Emission Characteristics (Dynamic entries - map to _1 variants)
-        'field110': 'field110_1',  // Frequency(ies) ✅ per MCEB Pub 7
-        'field113': 'field113_1',  // Station Class ✅ per MCEB Pub 7
-        'field114': 'field114_1',  // Emission Designator ✅ per MCEB Pub 7
-        'field115': 'field115_1',  // Transmitter Power ✅ per MCEB Pub 7
-        'field116': 'field116_1',  // Power Type (C/M/P) per MCEB Pub 7
-        'field117': 'field117_1',  // Effective Radiated Power
-        'field118': 'field118_1',  // Power/ERP Augmentation
-
-        // Time/Date Information
-        'field130': 'field130',    // Time ✅ (works) per MCEB Pub 7
-        'field131': 'field131',    // Percent Time (required for EUCOM Germany)
-        'field140': 'field140',    // Required Date (YYYYMMDD)
-        'field141': 'field141',    // Expiration Date (required for CENTCOM)
-        'field142': 'field142',    // Review Date
-        'field143': 'field143',    // Revision Date
-        'field144': 'field144',    // Approval Authority
-
-        // Organizational Information
-        'field200': 'field200',    // Agency (USAF, USA, USN, USMC, USCG)
-        'field201': 'field201',    // Unified Command
-        'field202': 'field202',    // Unified Command Service
-        'field204': 'field204',    // Command
-        'field205': 'field205',    // Subcommand
-        'field206': 'field206',    // Installation Frequency Manager
-        'field207': 'field207',    // Operating Unit
-        'field209': 'field209',    // Area AFC/DoD AFC
-
-        // Transmitter Location (Geographic codes A-Z per MCEB Pub 7 Annex E)
-        'field300': 'field300',    // State/Country (A-Z geographic codes)
-        'field301': 'field301',    // Antenna Location
-        'field303': 'field303',    // Antenna Coordinates ✅ (auto-filled)
-        'field306': 'field306',    // Authorized Radius
-
-        // Transmitter Equipment (Dynamic entries per MCEB Pub 7 Annex D)
-        'field340': 'field340_1',  // Equipment Nomenclature ✅
-        'field343': 'field343_1',  // Equipment Certification ID ✅
-
-        // Transmitter Antenna
-        'field357': 'field357',    // Antenna Gain
-        'field362': 'field362',    // Antenna Orientation
-        'field363': 'field363',    // Antenna Polarization (V/H/C)
-        'field373': 'field373',    // JSC Area Code (A-Z)
-
-        // Receiver Location
-        'field400': 'field400',    // State/Country (A-Z geographic codes)
-        'field401': 'field401',    // Antenna Location
-        'field403': 'field403',    // Antenna Coordinates ✅ (auto-filled)
-
-        // Receiver Equipment (Dynamic entries)
-        'field440': 'field440_1',  // Equipment Nomenclature ✅
-        'field443': 'field443_1',  // Equipment Certification ID ✅
-
-        // Receiver Antenna
-        'field457': 'field457',    // Antenna Gain
-        'field462': 'field462',    // Antenna Orientation
-        'field463': 'field463',    // Antenna Polarization (V/H/C)
-        'field473': 'field473',    // JSC Area Code (A/B/C/D)
-
-        // Supplementary Details (Dynamic entries per MCEB Pub 7 Annex F & I)
-        'field500': 'field500_1',  // IRAC Notes ✅ (C/E/L/P/S codes)
-        'field501': 'field501_1',  // Notes/Comments ✅
-        'field502': 'field502',    // Description of Requirement (required for CENTCOM)
-        'field503': 'field503',    // Agency Free-text Comments
-        'field511': 'field511',    // Major Function Identifier (Annex I)
-        'field512': 'field512',    // Intermediate Function Identifier (Annex I)
-        'field513': 'field513',    // Minor Function Identifier (new in 2005)
-        'field520': 'field520',    // Supplementary Details
-
-        // Other Assignment Identifiers
-        'field716': 'field716',    // Usage Code
-        'field801': 'field801',    // Coordination Data/Remarks
-        'field803': 'field803',    // Requestor Data POC
-        'field804': 'field804',    // Additional Assignment Data
-
-        // Deprecated fields (no longer used by DoD per MCEB Pub 7)
-        'field208': null,  // No longer required by Air Force
-        'field407': null,  // No longer used by DoD
-        'field470': null,  // No longer used by DoD
-        'field471': null,  // No longer used by DoD
-        'field472': null,  // No longer used by DoD
-        'field903': null,  // No longer used by DoD
-
-        // Fields that don't exist in SFAF standard
-        'field101': null,  // Not in MCEB Pub 7 standard
-        'field103': null,  // Additional serial numbers - not in form
-        'field107': null,  // Date field - not in form
-    };
-
-    function setFieldValue(formFieldId, value) {
-        if (!formFieldId || !value) return false;
-
-        const field = document.getElementById(formFieldId);
-        if (field) {
-            field.value = value;
-            field.dispatchEvent(new Event('change'));
-
-            // // Trigger MCEB Pub 7 validation if field manager is available
-            // if (window.sfafFieldManager) {
-            //     window.sfafFieldManager.validateField(field);
-            // }
-
-            return true;
-        }
-        return false;
-    }
-
-    // Auto-populate coordinate fields from marker (field 303/403 per MCEB Pub 7)
-    if (data.coordinates) {
-        setFieldValue('field303', data.coordinates.compact);
-        setFieldValue('field403', data.coordinates.compact);
-    }
-
-    // Populate SFAF fields using official MCEB Pub 7 mapping
-    if (data.sfaf_fields) {
-        let successCount = 0;
-        let skippedCount = 0;
-        let deprecatedCount = 0;
-        let unknownCount = 0;
-
-        Object.entries(data.sfaf_fields).forEach(([importedFieldId, value]) => {
-
-            // Handle field500 variants (500/02, 500/03, etc.) per MCEB Pub 7 Annex F
-            if (importedFieldId.startsWith('field500/')) {
-                const parts = importedFieldId.split('/');
-                if (parts.length === 2) {
-                    const number = parseInt(parts[1]);
-                    const targetFieldId = `field500_${number}`;
-
-                    if (setFieldValue(targetFieldId, value)) {
-                        successCount++;
+                // Update marker in backend
+                if (layer.geometryData.marker_id) {
+                    try {
+                        await APIClient.updateMarker(layer.geometryData.marker_id, {
+                            lat: parseFloat(newCenter.lat.toFixed(4)),
+                            lng: parseFloat(newCenter.lng.toFixed(4))
+                        });
+                        console.log('✅ Circle center marker updated');
+                    } catch (error) {
+                        console.error('❌ Failed to update center marker:', error);
                     }
                 }
-                return;
+
+                // Update tooltip
+                TooltipManager.updateMarkerTooltip(layer.centerMarker);
             }
 
-            // Handle field103 variants (additional serial numbers per MCEB Pub 7)
-            if (importedFieldId.startsWith('field103/')) {
-                skippedCount++;
-                return;
-            }
+            // Update tooltip with new coordinates
+            TooltipManager.updateCircleTooltip(layer);
 
-            // Use official MCEB Pub 7 mapping
-            const actualFieldId = sfafFieldMapping[importedFieldId];
-
-            if (actualFieldId === null) {
-                // Check if it's a deprecated field
-                const deprecatedFields = ['field208', 'field407', 'field470', 'field471', 'field472', 'field903'];
-                if (deprecatedFields.includes(importedFieldId)) {
-                    deprecatedCount++;
-                } else {
-                    skippedCount++;
-                }
-            } else if (actualFieldId) {
-                if (setFieldValue(actualFieldId, value)) {
-                    successCount++;
-                }
-            } else {
-                // Try the original field ID as fallback
-                if (setFieldValue(importedFieldId, value)) {
-                    successCount++;
-                } else {
-                    unknownCount++;
-                }
-            }
-        });
-
-        // Generate MCEB Pub 7 compliance summary
-        console.log(`📊 MCEB Publication 7 Import Results:`);
-        console.log(`  ✅ Successfully populated: ${successCount} fields`);
-        console.log(`  ⚠️ Skipped (not in form): ${skippedCount} fields`);
-        console.log(`  🔄 Deprecated (MCEB Pub 7): ${deprecatedCount} fields`);
-        console.log(`  ❓ Unknown fields: ${unknownCount} fields`);
-        console.log(`  📖 Reference: MCEB Publication 7, June 30, 2005`);
-
-        // Show compliance notification
-        if (successCount > 0) {
-            showComplianceNotification(successCount, skippedCount + deprecatedCount + unknownCount);
-        }
-    }
-}
-
-// Show MCEB Pub 7 compliance notification
-function showComplianceNotification(successCount, totalSkipped) {
-    const notification = document.createElement('div');
-    notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: linear-gradient(135deg, #2196F3, #1976D2);
-        color: white;
-        padding: 15px 25px;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
-        z-index: 10000;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        max-width: 500px;
-        text-align: center;
-    `;
-
-    notification.innerHTML = `
-        <div style="font-weight: 600; margin-bottom: 8px;">
-            📖 MCEB Publication 7 Compliance
-        </div>
-        <div style="font-size: 0.9em; opacity: 0.95;">
-            ${successCount} fields populated successfully<br>
-            ${totalSkipped} fields skipped (deprecated/not applicable)<br>
-            <strong>Standard: MCEB Pub 7, June 30, 2005</strong>
-        </div>
-    `;
-
-    document.body.appendChild(notification);
-
-    // Auto-remove after 5 seconds
-    setTimeout(() => {
-        if (notification.parentNode) {
-            notification.style.opacity = '0';
-            notification.style.transform = 'translateX(-50%) translateY(-20px)';
-            setTimeout(() => notification.remove(), 300);
-        }
-    }, 5000);
-}
-
-
-
-function setupAuthorizationRadius() {
-    const field306 = document.getElementById('field306');
-    if (!field306) return;
-
-    // Remove existing event listeners to prevent duplicates
-    const newField306 = field306.cloneNode(true);
-    field306.parentNode.replaceChild(newField306, field306);
-
-    // Add change listener to field 306
-    newField306.addEventListener('input', async () => {
-        const radiusValue = newField306.value.trim();
-
-        if (radiusValue && window.currentSFAFMarker) {
+            // Update geometry in backend
             try {
-                await createAuthorizationCircle(radiusValue);
+                await APIClient.updateCircle(layer.geometryId, {
+                    lat: newCenter.lat,
+                    lng: newCenter.lng,
+                    radius: originalRadius,
+                    unit: layer.geometryData.unit
+                });
+                console.log(`✅ Circle updated - Radius: ${originalRadius.toFixed(2)} ${layer.geometryData.unit}`);
             } catch (error) {
-                console.error('Failed to create authorization circle:', error);
+                console.error('❌ Failed to update circle:', error);
             }
-        } else {
-            removeAuthorizationCircle();
         }
-    });
-}
 
-// if (!window.log) {
-//     window.log = function (...args) {
-//         console.log(...args);
-//     };
-// }
+        // Handle polygon edits
+        if (layer instanceof L.Polygon && !(layer instanceof L.Rectangle) && layer.geometryData) {
+            const newPoints = layer.getLatLngs()[0].map(point => ({
+                lat: point.lat,
+                lng: point.lng
+            }));
 
-async function openPersistentSidebar() {
-    const sidebar = document.getElementById('persistentSidebar');
-    if (sidebar) {
-        sidebar.classList.add('open');
-        console.log('✅ Sidebar opened');
-    } else {
-        console.error('❌ persistentSidebar element not found');
-    }
-}
+            layer.geometryData.points = newPoints;
 
-// Authorization circle management
-let authorizationCircle = null;
-
-async function createAuthorizationCircle(radiusValue) {
-    if (!window.currentSFAFMarker) return;
-
-    // Remove existing circle
-    removeAuthorizationCircle();
-
-    try {
-        // Parse radius (remove B/T suffixes)
-        const numericRadius = parseFloat(radiusValue.replace(/[BT]/gi, ''));
-        if (isNaN(numericRadius) || numericRadius <= 0) return;
-
-        // Create circle
-        authorizationCircle = L.circle(
-            [window.currentSFAFMarker.lat, window.currentSFAFMarker.lng],
-            {
-                radius: numericRadius * 1000, // Convert km to meters
-                color: '#ff6b6b',
-                fillColor: '#ff6b6b',
-                fillOpacity: 0.1,
-                opacity: 0.6,
-                weight: 2,
-                dashArray: '5, 5'
+            try {
+                await APIClient.updatePolygon(layer.geometryId, { points: newPoints });
+                console.log('✅ Polygon updated');
+            } catch (error) {
+                console.error('❌ Failed to update polygon:', error);
             }
-        ).addTo(map);
-
-        authorizationCircle.bindTooltip(
-            `<b>Authorization Radius</b><br>
-             Radius: ${numericRadius} km<br>
-             Field 306: ${radiusValue}`,
-            { permanent: false }
-        );
-
-    } catch (error) {
-        console.error('Failed to create authorization circle:', error);
-    }
-}
-
-function removeAuthorizationCircle() {
-    if (authorizationCircle) {
-        map.removeLayer(authorizationCircle);
-        authorizationCircle = null;
-    }
-}
-
-function setupCoordinateSync() {
-    // This will be called when markers are dragged to update fields 303 and 403
-    window.updateSidebarCoordinates = function (coordinates) {
-        const field303 = document.getElementById('field303');
-        const field403 = document.getElementById('field403');
-
-        if (field303 && coordinates.compact) {
-            field303.value = coordinates.compact;
         }
-        if (field403 && coordinates.compact) {
-            field403.value = coordinates.compact;
-        }
-    };
-}
 
-function wireUpActionButtons() {
-    // Override your existing button handlers to use Go APIs
-    const validateBtn = document.getElementById('validateSFAFBtn');
-    const saveBtn = document.getElementById('saveSFAFBtn');
-    const exportBtn = document.getElementById('exportSFAFBtn');
-    const deleteBtn = document.getElementById('deleteSFAFBtn');
+        // Handle rectangle edits
+        if (layer instanceof L.Rectangle && layer.geometryData) {
+            const bounds = layer.getBounds();
 
-    if (validateBtn) {
-        validateBtn.onclick = validateSFAFWithGo;
-    }
-
-    if (saveBtn) {
-        saveBtn.onclick = saveSFAFWithGo;
-    }
-
-    if (exportBtn) {
-        exportBtn.onclick = exportSFAFWithGo;
-    }
-
-    if (deleteBtn) {
-        deleteBtn.onclick = deleteSFAFWithGo;
-    }
-}
-
-// SFAF action functions that work with your existing form
-async function validateSFAFWithGo() {
-    const formData = collectSFAFFormData();
-
-    try {
-        const response = await fetch('/api/sfaf/validate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fields: formData })
-        });
-
-        const result = await response.json();
-
-        if (result.success) {
-            applySFAFValidationResults(result.validation);
-            showSFAFStatusMessage(
-                result.validation.is_valid ? '✅ Form validation passed!' : '❌ Form has validation errors',
-                result.validation.is_valid ? 'success' : 'error'
-            );
-        }
-    } catch (error) {
-        console.error('Validation failed:', error);
-        showSFAFStatusMessage('❌ Validation failed. Please try again.', 'error');
-    }
-}
-
-async function saveSFAFWithGo() {
-    if (!window.currentSFAFMarker) {
-        showSFAFStatusMessage('❌ No marker selected', 'error');
-        return;
-    }
-
-    const formData = collectSFAFFormData();
-
-    try {
-        const response = await fetch('/api/sfaf', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                marker_id: window.currentSFAFMarker.id,
-                fields: formData
-            })
-        });
-
-        const result = await response.json();
-
-        if (result.success) {
-            showSFAFStatusMessage('✅ SFAF data saved successfully!', 'success');
-        } else {
-            showSFAFStatusMessage('❌ Failed to save: ' + (result.error || 'Unknown error'), 'error');
-        }
-    } catch (error) {
-        console.error('Save failed:', error);
-        showSFAFStatusMessage('❌ Save failed. Please try again.', 'error');
-    }
-}
-
-async function exportSFAFWithGo() {
-    if (!window.currentSFAFMarker) {
-        showSFAFStatusMessage('❌ No marker selected', 'error');
-        return;
-    }
-
-    const formData = collectSFAFFormData();
-
-    const exportData = {
-        marker: window.currentSFAFMarker,
-        sfaf_fields: formData,
-        exported_at: new Date().toISOString(),
-        format: 'SFAF_JSON_v1.0'
-    };
-
-    const dataStr = JSON.stringify(exportData, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `SFAF_${window.currentSFAFMarker.serial}_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    URL.revokeObjectURL(url);
-    showSFAFStatusMessage('📤 SFAF data exported successfully!', 'success');
-}
-
-async function deleteSFAFWithGo() {
-    if (!window.currentSFAFMarker) {
-        showSFAFStatusMessage('❌ No marker selected', 'error');
-        return;
-    }
-
-    if (confirm(`Delete marker ${window.currentSFAFMarker.serial} and all associated SFAF data?\n\nThis action cannot be undone.`)) {
-        try {
-            const response = await fetch(`/api/markers/${window.currentSFAFMarker.id}`, {
-                method: 'DELETE'
-            });
-
-            if (response.ok) {
-                // Remove marker from map
-                const marker = markers.get(window.currentSFAFMarker.id);
-                if (marker) {
-                    map.removeLayer(marker);
-                    markers.delete(window.currentSFAFMarker.id);
-                }
-
-                // Remove authorization circle
-                removeAuthorizationCircle();
-
-                // Close sidebar
-                closePersistentSidebar();
-
-                showSFAFStatusMessage('✅ Object deleted successfully!', 'success');
-
-                // Clear current marker reference
-                window.currentSFAFMarker = null;
-            } else {
-                showSFAFStatusMessage('❌ Failed to delete object', 'error');
-            }
-        } catch (error) {
-            console.error('Delete failed:', error);
-            showSFAFStatusMessage('❌ Delete failed. Please try again.', 'error');
-        }
-    }
-}
-
-function collectSFAFFormData() {
-    const formData = {};
-
-    // Get the object tab container
-    const objectTab = document.getElementById('tab-object');
-    if (!objectTab) {
-        console.warn('Object tab not found, collecting from entire document');
-        // Fallback to collecting from entire document
-        const allFields = document.querySelectorAll('input[id^="field"], select[id^="field"], textarea[id^="field"]');
-        allFields.forEach(field => {
-            if (field.value && field.value.trim() !== '') {
-                formData[field.id] = field.value.trim();
-            }
-        });
-        return formData;
-    }
-
-    // Collect from various field patterns in the object tab
-    const patterns = [
-        'input[id^="field"]',
-        'select[id^="field"]',
-        'textarea[id^="field"]',
-        '[data-field]',
-        'input[name^="field"]',
-        'select[name^="field"]',
-        'textarea[name^="field"]'
-    ];
-
-    patterns.forEach(pattern => {
-        const fields = objectTab.querySelectorAll(pattern);
-        fields.forEach(field => {
-            let fieldId = field.id;
-
-            // Handle data-field attributes
-            if (field.dataset.field && !fieldId.startsWith('field')) {
-                fieldId = 'field' + field.dataset.field;
-            }
-
-            // Handle name attributes
-            if (!fieldId && field.name) {
-                fieldId = field.name;
-            }
-
-            if (fieldId && field.value && field.value.trim() !== '') {
-                formData[fieldId] = field.value.trim();
-            }
-        });
-    });
-
-    return formData;
-}
-
-function applySFAFValidationResults(validation) {
-    // Clear previous validation styles
-    const objectTab = document.getElementById('tab-object');
-    const fieldsToCheck = objectTab ?
-        objectTab.querySelectorAll('input, select, textarea') :
-        document.querySelectorAll('input[id^="field"], select[id^="field"], textarea[id^="field"]');
-
-    fieldsToCheck.forEach(field => {
-        field.style.borderColor = '';
-        field.classList.remove('validation-error', 'validation-success');
-
-        // Remove any existing validation messages
-        const existingMsg = field.parentNode?.querySelector('.validation-message');
-        if (existingMsg) {
-            existingMsg.remove();
-        }
-    });
-
-    // Apply validation results
-    if (validation.fields) {
-        Object.entries(validation.fields).forEach(([fieldId, fieldData]) => {
-            const field = findFieldByAnyMeans(fieldId);
-
-            if (field) {
-                const hasError = validation.errors && validation.errors[fieldId];
-                const hasValue = fieldData.value && fieldData.value.trim() !== '';
-
-                if (hasError) {
-                    field.style.borderColor = '#f44336';
-                    field.classList.add('validation-error');
-
-                    // Add error message
-                    const errorMsg = document.createElement('div');
-                    errorMsg.className = 'validation-message';
-                    errorMsg.style.cssText = 'color: #f44336; font-size: 12px; margin-top: 2px;';
-                    errorMsg.textContent = validation.errors[fieldId];
-                    if (field.parentNode) {
-                        field.parentNode.appendChild(errorMsg);
+            try {
+                await APIClient.updateRectangle(layer.geometryId, {
+                    south_west: {
+                        lat: bounds.getSouth(),
+                        lng: bounds.getWest()
+                    },
+                    north_east: {
+                        lat: bounds.getNorth(),
+                        lng: bounds.getEast()
                     }
-
-                } else if (hasValue) {
-                    field.style.borderColor = '#4CAF50';
-                    field.classList.add('validation-success');
-                }
+                });
+                console.log('✅ Rectangle updated');
+            } catch (error) {
+                console.error('❌ Failed to update rectangle:', error);
             }
-        });
-    }
-}
-
-function manageObjectTabVisibility(hasSelectedMarker = false) {
-    const objectTab = document.getElementById('objectTab');
-    const objectTabBtn = document.querySelector('[data-tab="object"]');
-
-    console.log('🔍 Object tab element:', objectTab);
-    console.log('🔍 Object tab button:', objectTabBtn);
-
-    if (objectTab && objectTabBtn) {
-        if (hasSelectedMarker) {
-            objectTab.style.display = 'block';
-            objectTabBtn.style.display = 'block';
-            console.log('✅ Object tab shown');
-        } else {
-            objectTab.style.display = 'none';
-            objectTabBtn.style.display = 'none';
-
-            if (objectTabBtn.classList.contains('active')) {
-                switchTab('overview');
-            }
-            console.log('✅ Object tab hidden');
         }
-    } else {
-        console.error('❌ Object tab elements not found');
-    }
-}
-
-
-function findFieldByAnyMeans(fieldId) {
-    // Try multiple strategies to find the field
-    let field = document.getElementById(fieldId);
-
-    if (!field) {
-        const fieldNumber = fieldId.replace('field', '');
-        field = document.querySelector(`[data-field="${fieldNumber}"]`);
-    }
-
-    if (!field) {
-        field = document.querySelector(`[name="${fieldId}"]`);
-    }
-
-    if (!field) {
-        // Try partial matches
-        field = document.querySelector(`[id*="${fieldId}"]`);
-    }
-
-    return field;
-}
-
-// Add to Overview tab functionality
-async function clearAllMarkers() {
-    try {
-        // Show confirmation dialog
-        if (!confirm('Delete all markers and associated SFAF data?\n\nThis action cannot be undone.')) {
-            return;
-        }
-
-        // Call backend bulk delete API
-        const response = await fetch('/api/markers', {
-            method: 'DELETE'
-        });
-
-        if (response.ok) {
-            const result = await response.json();
-            console.log('✅ Backend response:', result.message);
-
-            // ===== COMPREHENSIVE FRONTEND STATE CLEANUP =====
-
-            // 1. Clear markers Map (Source: map.txt pattern)
-            if (window.markers) {
-                window.markers.clear();
-                console.log('✅ Markers Map cleared');
-            }
-
-            // 2. Clear drawnItems layer group (Source: map.txt pattern)
-            if (window.drawnItems) {
-                window.drawnItems.clearLayers();
-                console.log('✅ DrawnItems layers cleared');
-            }
-
-            // 3. Remove ALL marker layers directly from map
-            map.eachLayer(function (layer) {
-                // Remove all marker instances (manual and imported)
-                if (layer instanceof L.Marker) {
-                    map.removeLayer(layer);
-                }
-            });
-            console.log('✅ All marker layers removed from map');
-
-            // 4. Clear coordinate cache (Source: map.txt)
-            if (window.coordinateCache) {
-                window.coordinateCache.clear();
-                console.log('✅ Coordinate cache cleared');
-            }
-
-            // 5. Clear current marker references
-            window.currentSelectedMarker = null;
-            if (window.currentSFAFMarker) {
-                window.currentSFAFMarker = null;
-            }
-            console.log('✅ Current marker references cleared');
-
-            // 6. Close sidebar if open (Source: map.txt)
-            closePersistentSidebar();
-
-            // 7. Force map redraw
-            map.invalidateSize();
-
-            // 8. Show success notification (Source: buttonFunctions.txt pattern)
-            showNotification('✅ All markers cleared successfully', 'success');
-
-            return true;
-
-        } else {
-            throw new Error(`HTTP ${response.status}`);
-        }
-
-    } catch (error) {
-        console.error('Failed to clear all markers:', error);
-        showNotification('❌ Failed to clear markers', 'error');
-        return false;
-    }
-}
-
-function showSFAFStatusMessage(message, type) {
-    // Remove any existing status messages
-    const existing = document.querySelectorAll('.sfaf-status-message');
-    existing.forEach(msg => msg.remove());
-
-    // Create status message
-    const statusDiv = document.createElement('div');
-    statusDiv.className = 'sfaf-status-message';
-    statusDiv.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 470px;
-        background: ${type === 'success' ? '#4CAF50' : '#f44336'};
-        color: white;
-        padding: 12px 20px;
-        border-radius: 6px;
-        z-index: 2000;
-        font-size: 14px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        max-width: 300px;
-    `;
-    statusDiv.textContent = message;
-    document.body.appendChild(statusDiv);
-
-    setTimeout(() => statusDiv.remove(), 4000);
-}
-
-async function openSidebar(markerId) {
-    try {
-        console.log('🔍 Opening sidebar for marker:', markerId);
-
-        // FIX: Use correct API endpoint
-        const response = await fetch(`/api/sfaf/object-data/${markerId}`);
-
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        console.log('📡 API Response:', data);
-
-        if (data.success) {
-            // CRITICAL: Open the sidebar FIRST
-            console.log('🔧 Opening persistent sidebar...');
-            openPersistentSidebar();
-
-            // THEN show object tab
-            console.log('🔧 Managing object tab visibility...');
-            manageObjectTabVisibility(true);
-
-            // THEN switch to object tab
-            console.log('🔧 Switching to object tab...');
-            switchTab('object');
-
-            // FINALLY populate the form
-            console.log('🔧 Populating SFAF form...');
-            populateExistingSFAFForm(data);
-        } else {
-            console.error('API Error:', data.error);
-            manageObjectTabVisibility(false);
-        }
-    } catch (error) {
-        console.error('Failed to load SFAF data:', error);
-        manageObjectTabVisibility(false);
-    }
-}
-
-
-// Load existing markers when page loads
-document.addEventListener('DOMContentLoaded', function () {
-    loadExistingMarkers();
+    });
 });
 
-// Make functions globally available
-window.openSidebar = openSidebar;
-window.openPersistentSidebar = openPersistentSidebar;
-window.closePersistentSidebar = closePersistentSidebar;
-window.switchTab = switchTab;
-window.clearAllMarkers = clearAllMarkers;
+// ==================== Selected Records Display ====================
+
+/**
+ * Display selected records from Database Viewer with Field 306/530 visualizations
+ */
+async function displaySelectedRecords(markerIds) {
+    if (!markerIds || markerIds.length === 0) return;
+
+    console.log(`📍 Loading ${markerIds.length} selected records...`);
+
+    const bounds = L.latLngBounds();
+    let displayedCount = 0;
+
+    for (const markerId of markerIds) {
+        try {
+            // Fetch marker data
+            const markerResponse = await fetch(`/api/markers/${markerId}`);
+            if (!markerResponse.ok) {
+                console.warn(`⚠️ Could not fetch marker ${markerId}`);
+                continue;
+            }
+            const markerData = await markerResponse.json();
+
+            // Get marker from MarkerManager
+            let marker = MarkerManager.getMarkerById(markerId);
+
+            if (marker) {
+                // Highlight the marker
+                marker.setZIndexOffset(1000);
+                bounds.extend(marker.getLatLng());
+                displayedCount++;
+
+                // Fetch SFAF data for Field 306 and 530
+                try {
+                    const sfafResponse = await fetch(`/api/sfaf/marker/${markerId}`);
+                    if (sfafResponse.ok) {
+                        const sfafData = await sfafResponse.json();
+
+                        // Display Field 306 (Authorization Radius) if present
+                        if (sfafData.marker?.sfafFields?.field306 && typeof AuthorizationRadiusManager !== 'undefined') {
+                            const field306Value = sfafData.marker.sfafFields.field306;
+                            console.log(`📐 Creating Field 306 radius for marker ${markerId}: ${field306Value}`);
+
+                            // Show the specific authorization radius for this marker
+                            await AuthorizationRadiusManager.createAuthorizationCircle(
+                                marker,
+                                field306Value,
+                                sfafData.marker.serial
+                            );
+                            AuthorizationRadiusManager.showAuthorizationRadii([markerId]);
+                        }
+
+                        // Display Field 530 (Polygon) if present
+                        if (sfafData.marker?.sfafFields?.field530 && typeof field530Manager !== 'undefined') {
+                            console.log(`📐 Loading Field 530 polygon for marker ${markerId}`);
+
+                            const polygonData = await field530Manager.fetchPolygonByMarker(markerId);
+                            if (polygonData) {
+                                field530Manager.displayPolygon(polygonData);
+                                // Extend bounds to include polygon
+                                const polygon = field530Manager.polygons.get(markerId);
+                                if (polygon) {
+                                    bounds.extend(polygon.getBounds());
+                                }
+                            }
+                        }
+                    }
+                } catch (sfafError) {
+                    console.warn(`⚠️ Could not fetch SFAF data for marker ${markerId}:`, sfafError);
+                }
+            }
+        } catch (error) {
+            console.error(`❌ Error displaying record ${markerId}:`, error);
+        }
+    }
+
+    // Zoom map to fit all selected markers and their visualizations
+    if (displayedCount > 0 && bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 13 });
+        console.log(`✅ Displayed ${displayedCount} records with Field 306/530 visualizations`);
+
+        // Show notification
+        UIHelpers.showNotification(
+            `Displaying ${displayedCount} selected record${displayedCount !== 1 ? 's' : ''} with Field 306/530 visualizations`,
+            'success'
+        );
+    } else {
+        UIHelpers.showNotification('No records could be displayed on the map', 'warning');
+    }
+}
+
+// ==================== Initialization ====================
+
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('🗺️ Initializing SFAF Plotter...');
+
+    // Load existing markers from backend
+    await MarkerManager.loadExistingMarkers();
+    console.log('✅ Markers loaded');
+
+    // Load existing geometries from backend
+    await CircleManager.loadExistingGeometries();
+    console.log('✅ Geometries loaded');
+
+    // Wire up SFAF action buttons
+    SFAFIntegration.wireUpActionButtons();
+    console.log('✅ SFAF buttons configured');
+
+    // Setup authorization radius integration
+    SFAFIntegration.setupAuthorizationRadius();
+    console.log('✅ Authorization radius integration enabled');
+
+    // Initialize Authorization Radius Manager
+    if (typeof AuthorizationRadiusManager !== 'undefined') {
+        AuthorizationRadiusManager.init(map);
+        // Load all authorization radius circles from SFAF records with Field 306
+        await AuthorizationRadiusManager.loadAllAuthorizationCircles();
+        console.log('✅ Authorization Radius Manager initialized');
+    }
+
+    // Check for selected records from Database Viewer
+    const selectedRecordsJSON = sessionStorage.getItem('selectedRecordsForMap');
+    if (selectedRecordsJSON) {
+        try {
+            const selectedIds = JSON.parse(selectedRecordsJSON);
+            console.log(`📍 Displaying ${selectedIds.length} selected records on map...`);
+
+            // Clear session storage
+            sessionStorage.removeItem('selectedRecordsForMap');
+
+            // Display selected records with Field 306/530 visualizations
+            await displaySelectedRecords(selectedIds);
+        } catch (error) {
+            console.error('❌ Error displaying selected records:', error);
+        }
+    }
+
+    // Setup close button for persistent sidebar
+    const closeBtn = document.querySelector('.close-persistent-sidebar');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+            UIHelpers.closePersistentSidebar();
+        });
+    }
+
+    // Setup clear all markers button
+    const clearAllBtn = document.getElementById('clearAllMarkersBtn');
+    if (clearAllBtn) {
+        clearAllBtn.addEventListener('click', async () => {
+            await MarkerManager.clearAllMarkers();
+        });
+    }
+
+    console.log('✅ SFAF Plotter initialized successfully');
+});

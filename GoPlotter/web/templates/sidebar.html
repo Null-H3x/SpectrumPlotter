@@ -17,7 +17,6 @@
     <div class="tab-navigation">
         <button class="tab-btn active" data-tab="filters">🔍 Filters</button>
         <button class="tab-btn" data-tab="overview">📊 Overview</button>
-        <button class="tab-btn" data-tab="settings">⚙️ Settings</button>
         <button class="tab-btn" data-tab="object" id="objectTab" style="display:none;">📝 Object</button>
         <button class="tab-btn" data-tab="geometry">📐 Geometry</button>
     </div>
@@ -27,43 +26,46 @@
         <div class="tab-content">
             <!-- FILTERS TAB -->
             <div id="tab-filters" class="tab-panel active">
-                <div class="collapsible-section" data-section="sfaf-filters">
+                <!-- Query Builder Section -->
+                <div class="collapsible-section" data-section="query-builder">
                     <div class="section-header">
-                        <h4>🔍 SFAF Filters</h4>
+                        <h4>🔍 Query Builder</h4>
                         <span class="collapse-toggle">▼</span>
                     </div>
                     <div class="section-content">
-                        <div class="form-row">
-                            <label>📍 Location (300/301/303):</label>
-                            <input type="text" id="filterLocation" class="form-control"
-                                placeholder="State, Location, Coordinates">
+                        <!-- Filter Queries Container -->
+                        <div id="filterQueriesContainer" class="filter-queries-container">
+                            <!-- Queries will be added dynamically here -->
                         </div>
-                        <div class="form-row">
-                            <label>📡 Frequency (110):</label>
-                            <input type="text" id="filterFrequency" class="form-control"
-                                placeholder="K4460, M228.625, M225-M400">
-                            <div class="filter-presets">
-                                <button class="preset-btn" data-range="hf">HF</button>
-                                <button class="preset-btn" data-range="vhf">VHF</button>
-                                <button class="preset-btn" data-range="uhf">UHF</button>
+
+                        <!-- Add Query Button -->
+                        <button id="addQueryBtn" class="action-btn add-query-btn">
+                            <i class="fas fa-plus"></i> Add Filter Query
+                        </button>
+
+                        <!-- Quick Filters -->
+                        <div class="quick-filters">
+                            <h5>Quick Filters:</h5>
+                            <div class="quick-filter-grid">
+                                <button class="quick-filter-btn" data-filter="hf">HF Band</button>
+                                <button class="quick-filter-btn" data-filter="vhf">VHF Band</button>
+                                <button class="quick-filter-btn" data-filter="uhf">UHF Band</button>
+                                <button class="quick-filter-btn" data-filter="manual">Manual Markers</button>
+                                <button class="quick-filter-btn" data-filter="imported">Imported Markers</button>
                             </div>
                         </div>
-                        <div class="form-row">
-                            <label>⚡ Power (115):</label>
-                            <input type="text" id="filterPower" class="form-control" placeholder="W10">
-                        </div>
-                        <div class="form-row">
-                            <label>🔧 Equipment (340):</label>
-                            <input type="text" id="filterEquipment" class="form-control" placeholder="AN/PRC">
-                        </div>
-                        <div class="form-row">
-                            <label>📊 Emission (114):</label>
-                            <input type="text" id="filterEmission" class="form-control" placeholder="J3E, 2K70J3E">
-                        </div>
+
+                        <!-- Filter Actions -->
                         <div class="filter-actions">
-                            <button id="applyFilters" class="action-btn">Apply Filters</button>
-                            <button id="clearFilters" class="action-btn secondary">Clear All</button>
+                            <button id="applyFiltersBtn" class="action-btn primary">
+                                <i class="fas fa-check"></i> Apply Filters
+                            </button>
+                            <button id="clearFiltersBtn" class="action-btn secondary">
+                                <i class="fas fa-times"></i> Clear All
+                            </button>
                         </div>
+
+                        <!-- Filter Results -->
                         <div class="filter-results">
                             <div class="stat-row">
                                 <span>Visible:</span>
@@ -78,6 +80,43 @@
                                 <span id="totalCount" class="stat-value">0</span>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Sort Section -->
+                <div class="collapsible-section" data-section="sort-controls">
+                    <div class="section-header">
+                        <h4>📊 Sort Controls</h4>
+                        <span class="collapse-toggle">▼</span>
+                    </div>
+                    <div class="section-content">
+                        <div class="form-row">
+                            <label>Sort By Field:</label>
+                            <select id="sortByField" class="form-control">
+                                <option value="">No Sorting</option>
+                                <option value="serial">Serial Number</option>
+                                <option value="frequency">Frequency (110)</option>
+                                <option value="location">Location (300)</option>
+                                <option value="power">Power (115)</option>
+                                <option value="emission">Emission (114)</option>
+                                <option value="equipment">Equipment (340)</option>
+                                <option value="created_at">Date Created</option>
+                            </select>
+                        </div>
+                        <div class="form-row">
+                            <label>Order:</label>
+                            <div class="sort-order-buttons">
+                                <button id="sortAscBtn" class="sort-order-btn active">
+                                    <i class="fas fa-sort-amount-up"></i> Ascending
+                                </button>
+                                <button id="sortDescBtn" class="sort-order-btn">
+                                    <i class="fas fa-sort-amount-down"></i> Descending
+                                </button>
+                            </div>
+                        </div>
+                        <button id="applySortBtn" class="action-btn primary">
+                            <i class="fas fa-sort"></i> Apply Sort
+                        </button>
                     </div>
                 </div>
             </div>
@@ -129,59 +168,6 @@
                             <button id="importData" class="action-btn secondary">📂 Import CSV</button>
                             <button id="clearAllMarkers" class="action-btn danger">🗑️ Clear All</button>
                         </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- SETTINGS TAB -->
-        <div id="tab-settings" class="tab-panel">
-            <div class="collapsible-section" data-section="display-settings">
-                <div class="section-header">
-                    <h4>⚙️ Display Settings</h4>
-                    <span class="collapse-toggle">▼</span>
-                </div>
-                <div class="section-content">
-                    <div class="form-row">
-                        <label>
-                            <input type="checkbox" id="showTooltips" checked>
-                            Show marker tooltips
-                        </label>
-                    </div>
-                    <div class="form-row">
-                        <label>
-                            <input type="checkbox" id="showCoordinates" checked>
-                            Show coordinates in tooltips
-                        </label>
-                    </div>
-                    <div class="form-row">
-                        <label>Coordinate Format:</label>
-                        <select id="coordFormat" class="form-control">
-                            <option value="dms">DMS (40° 42' 46" N)</option>
-                            <option value="compact">Compact DMS (404246N)</option>
-                            <option value="decimal">Decimal (40.7128)</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-
-            <div class="collapsible-section" data-section="theme-settings">
-                <div class="section-header">
-                    <h4>🎨 Theme</h4>
-                    <span class="collapse-toggle">▼</span>
-                </div>
-                <div class="section-content">
-                    <button id="themeToggle" class="theme-toggle" title="Toggle Dark/Light Mode">
-                        <span class="theme-icon">🌙</span>
-                        <span class="theme-text">Dark</span>
-                    </button>
-                    <div class="form-row">
-                        <label>Map Style:</label>
-                        <select id="mapStyle" class="form-control">
-                            <option value="osm">OpenStreetMap</option>
-                            <option value="satellite">Satellite</option>
-                            <option value="terrain">Terrain</option>
-                        </select>
                     </div>
                 </div>
             </div>

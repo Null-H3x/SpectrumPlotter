@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frequency Requests - SFAF Plotter</title>
+    <link rel="stylesheet" href="/css/db_viewer.css">
+    <link rel="stylesheet" href="/css/frequency.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+
+<div class="app">
+    <!-- Top Bar -->
+    <div class="topbar">
+        <div class="topbar-left">
+            <h1><i class="fas fa-clipboard-list"></i> Frequency Requests</h1>
+        </div>
+        <nav class="topbar-nav">
+            <a href="/map-viewer" class="nav-link">
+                <i class="fas fa-map-marked-alt"></i>
+                <span>Map Viewer</span>
+            </a>
+            <a href="/database" class="nav-link">
+                <i class="fas fa-database"></i>
+                <span>Database</span>
+            </a>
+            <a href="/frequency/assignments" class="nav-link">
+                <i class="fas fa-broadcast-tower"></i>
+                <span>Frequencies</span>
+            </a>
+            <a href="/frequency/requests" class="nav-link active">
+                <i class="fas fa-clipboard-list"></i>
+                <span>Requests</span>
+            </a>
+            <a href="/view-manager" class="nav-link">
+                <i class="fas fa-cog"></i>
+                <span>Table Manager</span>
+            </a>
+        </nav>
+        <div class="topbar-right">
+            <button id="refreshBtn" class="btn btn-icon" title="Refresh"><i class="fas fa-sync"></i></button>
+            <a href="/frequency/request" class="btn btn-primary btn-sm">
+                <i class="fas fa-plus"></i> New Request
+            </a>
+            <a href="/profile" class="btn btn-icon" title="User Account">
+                <i class="fas fa-user-circle"></i>
+            </a>
+            <span id="sessionInfo" class="session-badge"></span>
+        </div>
+    </div>
+
+    <!-- Tab Navigation -->
+    <div class="tabs">
+        <button class="tab active" data-tab="my-requests">
+            <i class="fas fa-user"></i> My Requests
+            <span class="badge" id="myRequestsCount">0</span>
+        </button>
+        <button class="tab" data-tab="unit-requests">
+            <i class="fas fa-users"></i> Unit Requests
+            <span class="badge" id="unitRequestsCount">0</span>
+        </button>
+        <button class="tab" data-tab="pending-review" data-role="s6,admin">
+            <i class="fas fa-clipboard-check"></i> Pending Reviews
+            <span class="badge badge-warning" id="pendingCount">0</span>
+        </button>
+    </div>
+
+    <!-- My Requests Tab -->
+    <div id="my-requests-tab" class="tab-panel active">
+        <div class="toolbar">
+            <div class="toolbar-left">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="myRequestsSearch" placeholder="Search my requests...">
+                </div>
+                <select id="myStatusFilter" class="select">
+                    <option value="">All Status</option>
+                    <option value="pending">Pending</option>
+                    <option value="under_review">Under Review</option>
+                    <option value="approved">Approved</option>
+                    <option value="denied">Denied</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="myRequestsContainer" class="requests-container">
+            <div class="loading-state">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>Loading your requests...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Unit Requests Tab -->
+    <div id="unit-requests-tab" class="tab-panel">
+        <div class="toolbar">
+            <div class="toolbar-left">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="unitRequestsSearch" placeholder="Search unit requests...">
+                </div>
+                <select id="unitRequestsFilter" class="select">
+                    <option value="">All Units</option>
+                </select>
+                <select id="unitStatusFilter" class="select">
+                    <option value="">All Status</option>
+                    <option value="pending">Pending</option>
+                    <option value="under_review">Under Review</option>
+                    <option value="approved">Approved</option>
+                    <option value="denied">Denied</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="unitRequestsContainer" class="requests-container">
+            <div class="loading-state">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>Loading unit requests...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pending Reviews Tab (S6/Admin only) -->
+    <div id="pending-review-tab" class="tab-panel">
+        <div class="toolbar">
+            <div class="toolbar-left">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="pendingSearch" placeholder="Search pending requests...">
+                </div>
+                <select id="priorityFilter" class="select">
+                    <option value="">All Priorities</option>
+                    <option value="emergency">Emergency</option>
+                    <option value="urgent">Urgent</option>
+                    <option value="priority">Priority</option>
+                    <option value="routine">Routine</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="pendingRequestsContainer" class="requests-container">
+            <div class="loading-state">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>Loading pending requests...</p>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Request Details Modal -->
+<div id="requestModal" class="modal" style="display: none;">
+    <div class="modal-content modal-large">
+        <div class="modal-header">
+            <h2><i class="fas fa-clipboard-list"></i> Request Details</h2>
+            <button class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body" id="requestDetails">
+            <!-- Request details will be loaded here -->
+        </div>
+        <div class="modal-footer" id="requestActions">
+            <!-- Actions will be loaded based on permissions -->
+        </div>
+    </div>
+</div>
+
+<!-- Review Request Modal (S6/Admin) -->
+<div id="reviewModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2><i class="fas fa-clipboard-check"></i> Review Request</h2>
+            <button class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label for="reviewStatus">Status <span class="required">*</span></label>
+                <select id="reviewStatus" class="form-control">
+                    <option value="under_review">Under Review</option>
+                    <option value="approved">Approved</option>
+                    <option value="denied">Denied</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="reviewNotes">Review Notes</label>
+                <textarea id="reviewNotes" class="form-control" rows="4" placeholder="Enter review notes..."></textarea>
+            </div>
+
+            <div id="approvalSection" style="display: none;">
+                <h3>Create Frequency Assignment</h3>
+                <p class="text-muted">Configure the approved frequency assignment details</p>
+                <!-- Approval form fields will be populated here -->
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn" onclick="closeReviewModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="submitReview()">Submit Review</button>
+        </div>
+    </div>
+</div>
+
+<!-- Approval Modal (Admin only) -->
+<div id="approvalModal" class="modal" style="display: none;">
+    <div class="modal-content modal-large">
+        <div class="modal-header">
+            <h2><i class="fas fa-check-circle"></i> Approve Request & Create Assignment</h2>
+            <button class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i>
+                Approving this request will create a frequency assignment for the unit.
+            </div>
+
+            <form id="approvalForm">
+                <input type="hidden" id="approvalRequestId">
+
+                <div class="form-group">
+                    <label for="approvalFrequency">Frequency <span class="required">*</span></label>
+                    <input type="text" id="approvalFrequency" class="form-control" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="approvalFrequencyMhz">Frequency (MHz) <span class="required">*</span></label>
+                    <input type="number" step="0.001" id="approvalFrequencyMhz" class="form-control" required>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="approvalAssignmentDate">Assignment Date <span class="required">*</span></label>
+                        <input type="date" id="approvalAssignmentDate" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="approvalExpirationDate">Expiration Date</label>
+                        <input type="date" id="approvalExpirationDate" class="form-control">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="approvalAuthority">Assignment Authority</label>
+                    <input type="text" id="approvalAuthority" class="form-control" placeholder="NTIA, Local Frequency Manager, etc.">
+                </div>
+
+                <div class="form-group">
+                    <label for="approvalAuthNumber">Authorization Number</label>
+                    <input type="text" id="approvalAuthNumber" class="form-control">
+                </div>
+
+                <div class="form-group">
+                    <label for="approvalNotes">Approval Notes</label>
+                    <textarea id="approvalNotes" class="form-control" rows="3"></textarea>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn" onclick="closeApprovalModal()">Cancel</button>
+            <button class="btn btn-success" onclick="submitApproval()">
+                <i class="fas fa-check"></i> Approve & Create Assignment
+            </button>
+        </div>
+    </div>
+</div>
+
+<script src="/js/request_dashboard.js"></script>
+</body>
+</html>
