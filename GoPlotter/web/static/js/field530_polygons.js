@@ -1,6 +1,6 @@
 /**
  * Field 530 Polygon Manager
- * Handles MCEB Pub 7 Field 530 Authorized Areas (polygons)
+ * Handles MC4EB Pub 7 CHG 1 Field 530 Authorized Areas (polygons)
  */
 
 class Field530PolygonManager {

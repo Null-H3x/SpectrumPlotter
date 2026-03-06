@@ -400,3 +400,27 @@ func (r *FrequencyRepository) SearchAvailableFrequencies(query *models.Frequency
 	err := r.db.Select(&assignments, sqlQuery, args...)
 	return assignments, err
 }
+
+// CleanupOrphanedAssignments deletes frequency assignments that don't have corresponding SFAF/marker records
+func (r *FrequencyRepository) CleanupOrphanedAssignments() (int64, error) {
+	query := `
+		DELETE FROM frequency_assignments fa
+		WHERE NOT EXISTS (
+			SELECT 1
+			FROM sfafs s
+			WHERE s.field102 = fa.serial
+		)
+		AND NOT EXISTS (
+			SELECT 1
+			FROM markers m
+			WHERE m.serial = fa.serial
+		)
+	`
+
+	result, err := r.db.Exec(query)
+	if err != nil {
+		return 0, err
+	}
+
+	return result.RowsAffected()
+}

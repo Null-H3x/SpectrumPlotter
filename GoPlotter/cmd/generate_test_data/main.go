@@ -255,7 +255,7 @@ func generateRecord(index int) (*Marker, *SFAF) {
 	band := selectWeightedBand()
 	frequencyMHz := band.MinMHz + rand.Float64()*(band.MaxMHz-band.MinMHz)
 
-	// Format frequency with K or M prefix per MCEB standard
+	// Format frequency with K or M prefix per MC4EB standard
 	formattedFreq := formatFrequency(frequencyMHz)
 
 	// Generate serial number in format: FREQ000001
@@ -345,7 +345,7 @@ func selectRandom(items []string) string {
 	return items[rand.Intn(len(items))]
 }
 
-// formatFrequency formats frequency with K or M prefix per MCEB standard
+// formatFrequency formats frequency with K or M prefix per MC4EB standard
 // K for 2000-29999 KHz (2.000-29.999 MHz)
 // M for everything else
 func formatFrequency(freqMHz float64) string {

@@ -57,9 +57,12 @@
                 <div class="table-manager">
                     <div class="toolbar">
                         <div class="toolbar-left">
-                            <h2><i class="fas fa-users"></i> Units Management</h2>
+                            <h2><i class="fas fa-users"></i> Unit Management</h2>
                         </div>
                         <div class="toolbar-right">
+                            <button class="btn btn-warning" onclick="referenceData.cleanupOrphanedAssignments()" title="Remove frequency assignments without SFAF records" style="margin-right: 10px;">
+                                <i class="fas fa-broom"></i> Cleanup Orphaned
+                            </button>
                             <button class="btn btn-primary" onclick="referenceData.showAddUnit()">
                                 <i class="fas fa-plus"></i> Add Unit
                             </button>
@@ -71,7 +74,6 @@
                             <thead>
                                 <tr>
                                     <th>Unit Designator</th>
-                                    <th>Type</th>
                                     <th>Organization</th>
                                     <th>Location</th>
                                     <th>Active</th>
@@ -80,7 +82,7 @@
                             </thead>
                             <tbody id="unitsTableBody">
                                 <tr class="loading-row">
-                                    <td colspan="6" style="text-align: center;">
+                                    <td colspan="5" style="text-align: center;">
                                         <i class="fas fa-spinner fa-spin"></i> Loading units...
                                     </td>
                                 </tr>
@@ -178,21 +180,6 @@
                         <div class="form-group">
                             <label for="unitCode">Unit Designator <span class="required">*</span></label>
                             <input type="text" id="unitCode" class="form-input" required placeholder="e.g., 23STS, 1SOCS, 552ACW">
-                        </div>
-
-                        <div class="form-group">
-                            <label for="unitType">Unit Type</label>
-                            <select id="unitType" class="form-input">
-                                <option value="">Select Type...</option>
-                                <option value="brigade">Brigade</option>
-                                <option value="battalion">Battalion</option>
-                                <option value="company">Company</option>
-                                <option value="platoon">Platoon</option>
-                                <option value="squadron">Squadron</option>
-                                <option value="group">Group</option>
-                                <option value="detachment">Detachment</option>
-                                <option value="other">Other</option>
-                            </select>
                         </div>
 
                         <div class="form-group">
@@ -332,6 +319,9 @@
                     </table>
                 </div>
                 <div class="modal-footer">
+                    <button class="btn btn-info" onclick="referenceData.refreshFrequenciesModal()" title="Refresh frequencies from database">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
                     <button class="btn btn-primary" onclick="referenceData.viewUnitInDatabase()">
                         <i class="fas fa-database"></i> View in Database
                     </button>

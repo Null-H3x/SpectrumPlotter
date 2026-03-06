@@ -9,7 +9,7 @@ This utility generates **100,000 realistic SFAF records** distributed across the
 ✅ **Geographic Distribution** - Records spread across 50 major US cities and military bases
 ✅ **Weighted Distribution** - Higher density in major metropolitan areas and military installations
 ✅ **Realistic Frequencies** - Proper frequency allocation across HF, VHF, UHF, and microwave bands
-✅ **SFAF Compliance** - All records include proper MCEB Publication 7 fields
+✅ **SFAF Compliance** - All records include proper MC4EB Publication 7, Change 1 fields
 ✅ **Performance Optimized** - Batch inserts for fast generation (~1000-2000 records/second)
 ✅ **Repeatable** - Consistent data generation for testing
 

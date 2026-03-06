@@ -1,4 +1,4 @@
-// buttonFunctions.js - MCEB Pub 7 Compliant Field Management (Standalone Version)
+// buttonFunctions.js - MC4EB Pub 7 CHG 1 Compliant Field Management (Standalone Version)
 
 // ===== UTILITY FUNCTIONS =====
 
@@ -169,7 +169,7 @@ function addEmissionCharacteristicsEntry() {
     }
 
     if (entryCount > 20) {
-        showNotification('Maximum 20 emission characteristic occurrences allowed per MCEB Pub 7', 'error');
+        showNotification('Maximum 20 emission characteristic occurrences allowed per MC4EB Pub 7 CHG 1', 'error');
         return;
     }
 
@@ -204,7 +204,7 @@ function addEmissionCharacteristicsEntry() {
             <label for="field114_${entryCount}">114 - Emission Designator:</label>
             <input type="text" id="field114_${entryCount}" class="form-control" 
                    maxlength="11" placeholder="3K00J3E, 16K0F3E, 2K70J3E" data-field="114">
-            <small class="field-help">Format: bandwidth + emission class (max 11 chars per MCEB Pub 7)</small>
+            <small class="field-help">Format: bandwidth + emission class (max 11 chars per MC4EB Pub 7 CHG 1)</small>
         </div>
         <div class="form-row">
             <label for="field115_${entryCount}">115 - Transmitter Power:</label>
@@ -260,7 +260,7 @@ function addTransmitterEntry() {
     }
 
     if (entryCount > 10) {
-        showNotification('Maximum 10 Transmitter occurrences allowed per MCEB Pub 7', 'error');
+        showNotification('Maximum 10 Transmitter occurrences allowed per MC4EB Pub 7 CHG 1', 'error');
         return;
     }
 
@@ -325,7 +325,7 @@ function addReceiverEntry() {
     }
 
     if (entryCount > 10) {
-        showNotification('Maximum 10 Receiver occurrences allowed per MCEB Pub 7', 'error');
+        showNotification('Maximum 10 Receiver occurrences allowed per MC4EB Pub 7 CHG 1', 'error');
         return;
     }
 
@@ -407,7 +407,7 @@ async function populateIracNotesSelect(selectElement) {
     }
 }
 
-// 500 IRAC Notes Entry (MCEB Pub 7 Compliant)
+// 500 IRAC Notes Entry (MC4EB Pub 7 CHG 1 Compliant)
 document.addEventListener('DOMContentLoaded', async () => {
     // ✅ Connect Notes Button (using existing button from sidebar.txt)
     const addIracBtn = document.getElementById('addIRACNotesEntry');
@@ -441,7 +441,7 @@ async function addIRACNotesEntry() {
     const entryCount = container.querySelectorAll('.notes-entry').length + 1;
 
     if (entryCount > 10) {
-        showNotification('Maximum 10 IRAC note occurrences allowed per MCEB Pub 7 field 500', 'error');
+        showNotification('Maximum 10 IRAC note occurrences allowed per MC4EB Pub 7 CHG 1 field 500', 'error');
         return;
     }
 
@@ -459,7 +459,7 @@ async function addIRACNotesEntry() {
             <select id="field500_${entryCount}" class="form-control irac-notes-select" data-field="500">
                 <option value="">Loading IRAC notes...</option>
             </select>
-            <small class="field-help">Official IRAC coordination note codes (MCEB Pub 7 Annex E)</small>
+            <small class="field-help">Official IRAC coordination note codes (MC4EB Pub 7 CHG 1 Annex E)</small>
         </div>
         <div class="irac-note-details" style="display:none;">
             <small class="note-description"></small>
@@ -990,7 +990,7 @@ function removeMarkerFromMap(markerId) {
     }
 }
 
-// 501 Comments Entry (MCEB Pub 7 Compliant)
+// 501 Comments Entry (MC4EB Pub 7 CHG 1 Compliant)
 function addCommentsEntryManual() {
     const container = document.getElementById('comments-entries');
     if (!container) {
@@ -1000,13 +1000,13 @@ function addCommentsEntryManual() {
 
     const entryCount = container.querySelectorAll('.comment-entry').length + 1;
     if (entryCount > 30) {
-        showNotification('Maximum 30 comment occurrences allowed per MCEB Pub 7 field 501', 'error');
+        showNotification('Maximum 30 comment occurrences allowed per MC4EB Pub 7 CHG 1 field 501', 'error');
         return;
     }
 
     container.appendChild(newEntry);
     addValidationListeners(newEntry);
-    console.log(`✅ Added emission characteristics entry #${entryCount} (MCEB Pub 7 compliant)`);
+    console.log(`✅ Added emission characteristics entry #${entryCount} (MC4EB Pub 7 CHG 1 compliant)`);
     showNotification(`Emission characteristics #${entryCount} added`, 'success')
 };
 
@@ -1044,7 +1044,7 @@ async function generateSFAFContent() {
 function formatSFAFRecord(sfafFields, markerData) {
     const lines = [];
     
-    // Standard MCEB Publication 7 field order (Source: map.txt field mapping)
+    // Standard MC4EB Publication 7, Change 1 field order (Source: map.txt field mapping)
     const fieldOrder = [
         '005', '010', '102', '103', '107', '110', '113', '114', '115', '116',
         '130', '142', '143', '144', '200', '201', '202', '204', '205', '206',
@@ -1123,16 +1123,16 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 3. Geometry Buttons
     connectGeometryButtons();
-    
+
     // 4. Import/Export Buttons
-    connectImportExportButtons();
-    
+    // connectImportExportButtons(); // TODO: Function not defined
+
     // 5. Tab Navigation Buttons
-    connectTabButtons();
-    
+    // connectTabButtons(); // TODO: Function not defined
+
     // 6. Settings and Filter Buttons
-    connectUtilityButtons();
-    
+    // connectUtilityButtons(); // TODO: Function not defined
+
     console.log('✅ All button connections initialized');
 });
 

@@ -297,7 +297,7 @@ body {
     backdrop-filter: blur(20px);
     border-radius: 16px;
     padding: 16px 24px;
-    margin-bottom: 20px;
+    margin-bottom: 0px;
     display: flex;
     gap: 14px;
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3), 0 0 1px rgba(102, 126, 234, 0.2);
@@ -463,10 +463,15 @@ body {
 /* Table */
 .data-table {
     width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
+    border-collapse: collapse;
     background: transparent;
     min-width: max-content;
+}
+
+.data-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
 }
 
 .data-table th,
@@ -479,16 +484,15 @@ body {
 }
 
 .data-table th {
-    background: rgba(15, 15, 35, 0.9);
+    background: rgba(15, 15, 35, 0.98);
     font-weight: 700;
     color: #a78bfa;
-    position: sticky;
-    top: 0;
-    z-index: 10;
     font-size: 13px;
     text-transform: uppercase;
     letter-spacing: 0.8px;
     border-bottom: 2px solid rgba(102, 126, 234, 0.3);
+    position: sticky;
+    top: 0;
 }
 
 .data-table tbody tr {
@@ -502,25 +506,43 @@ body {
 
 .data-table tbody tr:hover {
     background: linear-gradient(90deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
-    transform: scale(1.001);
 }
 
-/* Sticky First Column */
+/* Sticky First Column (Checkbox) */
 .data-table th:first-child,
 .data-table td:first-child {
     position: sticky;
     left: 0;
     background: rgba(26, 26, 46, 0.98);
-    z-index: 9;
+    z-index: 8;
     box-shadow: 4px 0 8px rgba(0, 0, 0, 0.2);
 }
 
 .data-table th:first-child {
     background: rgba(15, 15, 35, 0.98);
-    z-index: 11;
+    z-index: 12 !important;
 }
 
 .data-table tr:hover td:first-child {
+    background: linear-gradient(90deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
+}
+
+/* Sticky Second Column (Serial) */
+.data-table th:nth-child(2),
+.data-table td:nth-child(2) {
+    position: sticky;
+    left: 60px;
+    background: rgba(26, 26, 46, 0.98);
+    z-index: 7;
+    box-shadow: 4px 0 8px rgba(0, 0, 0, 0.2);
+}
+
+.data-table th:nth-child(2) {
+    background: rgba(15, 15, 35, 0.98);
+    z-index: 11 !important;
+}
+
+.data-table tr:hover td:nth-child(2) {
     background: linear-gradient(90deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
 }
 
@@ -564,8 +586,11 @@ body {
 /* Filter Row */
 .filter-row th {
     padding: 8px 12px;
-    background: rgba(15, 15, 35, 0.95);
+    background: rgba(15, 15, 35, 0.98);
     border-bottom: 1px solid rgba(102, 126, 234, 0.2);
+    position: sticky;
+    top: 53px;
+    z-index: 9;
 }
 
 .column-filter {
@@ -964,12 +989,13 @@ body {
 
 .checkbox-col.sticky-col {
     left: 0;
-    z-index: 11;
+    z-index: 14;
 }
 
 .actions-col.sticky-col {
     right: 0;
     box-shadow: -2px 0 4px rgba(0,0,0,0.1);
+    min-width: 280px;
 }
 
 /* Field cells in spreadsheet view */
@@ -1018,6 +1044,48 @@ body {
     z-index: 13;
 }
 
+/* Checkbox column needs highest z-index to stay on top */
+table.sfaf-records-table thead tr th.checkbox-col.sticky-col,
+table.sfaf-records-table tbody tr td.checkbox-col.sticky-col {
+    z-index: 50 !important;
+    background: #f9fafb !important;
+    position: sticky !important;
+    left: 0 !important;
+}
+
+/* Actions column needs high z-index but lower than checkbox */
+table.sfaf-records-table thead tr th.actions-col.sticky-col,
+table.sfaf-records-table tbody tr td.actions-col.sticky-col {
+    z-index: 30 !important;
+    background: #f9fafb !important;
+    position: sticky !important;
+    right: 0 !important;
+}
+
+/* Header row specific overrides */
+table.sfaf-records-table thead tr.header-row th.checkbox-col.sticky-col {
+    z-index: 51 !important;
+}
+
+table.sfaf-records-table thead tr.header-row th.actions-col.sticky-col {
+    z-index: 31 !important;
+}
+
+/* Filter row cells in checkbox and actions columns need proper z-index */
+table.sfaf-records-table thead tr.filter-row th.checkbox-col.sticky-col {
+    z-index: 52 !important;
+    background: rgba(15, 15, 35, 0.98) !important;
+    position: sticky !important;
+    left: 0 !important;
+}
+
+table.sfaf-records-table thead tr.filter-row th.actions-col.sticky-col {
+    z-index: 32 !important;
+    background: rgba(15, 15, 35, 0.98) !important;
+    position: sticky !important;
+    right: 0 !important;
+}
+
 /* Dark mode support for frozen columns */
 @media (prefers-color-scheme: dark) {
     .sticky-col {
@@ -1026,6 +1094,13 @@ body {
 
     .sfaf-records-table thead th {
         background: #111827;
+    }
+
+    .sfaf-records-table thead th.checkbox-col.sticky-col,
+    .sfaf-records-table tbody td.checkbox-col.sticky-col,
+    .sfaf-records-table thead th.actions-col.sticky-col,
+    .sfaf-records-table tbody td.actions-col.sticky-col {
+        background: #111827 !important;
     }
 }
 
@@ -1075,6 +1150,8 @@ body {
     display: flex;
     gap: 8px;
     align-items: center;
+    flex-wrap: nowrap;
+    white-space: nowrap;
 }
 
 .table-action-btn {

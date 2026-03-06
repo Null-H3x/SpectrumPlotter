@@ -83,6 +83,21 @@ func (r *SFAFFieldOccurrenceRepository) CreateBatch(occurrences []models.SFAFFie
 	return tx.Commit()
 }
 
+// BatchCreate is an alias for CreateBatch to match naming pattern with other repositories
+func (r *SFAFFieldOccurrenceRepository) BatchCreate(occurrences []*models.SFAFFieldOccurrence) error {
+	if len(occurrences) == 0 {
+		return nil
+	}
+
+	// Convert pointer slice to value slice for CreateBatch
+	valueOccs := make([]models.SFAFFieldOccurrence, len(occurrences))
+	for i, occ := range occurrences {
+		valueOccs[i] = *occ
+	}
+
+	return r.CreateBatch(valueOccs)
+}
+
 // GetBySFAFID retrieves all field occurrences for a given SFAF record
 func (r *SFAFFieldOccurrenceRepository) GetBySFAFID(sfafID uuid.UUID) ([]models.SFAFFieldOccurrence, error) {
 	var occurrences []models.SFAFFieldOccurrence

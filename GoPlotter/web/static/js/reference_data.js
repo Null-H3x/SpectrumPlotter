@@ -70,7 +70,7 @@ const referenceData = {
         if (this.units.length === 0) {
             tbody.innerHTML = `
                 <tr class="empty-row">
-                    <td colspan="6" style="text-align: center;">
+                    <td colspan="5" style="text-align: center;">
                         <i class="fas fa-inbox"></i> No units found
                     </td>
                 </tr>
@@ -81,7 +81,6 @@ const referenceData = {
         tbody.innerHTML = this.units.map(unit => `
             <tr>
                 <td><strong>${unit.unit_code}</strong></td>
-                <td>${unit.unit_type || '-'}</td>
                 <td>${unit.organization || '-'}</td>
                 <td>${unit.location || '-'}</td>
                 <td>
@@ -119,7 +118,6 @@ const referenceData = {
         document.getElementById('unitModalTitle').innerHTML = '<i class="fas fa-users"></i> Edit Unit';
         document.getElementById('unitId').value = unit.id;
         document.getElementById('unitCode').value = unit.unit_code;
-        document.getElementById('unitType').value = unit.unit_type || '';
         document.getElementById('unitOrganization').value = unit.organization || '';
         document.getElementById('unitLocation').value = unit.location || '';
         document.getElementById('commanderName').value = unit.commander_name || '';
@@ -136,7 +134,6 @@ const referenceData = {
         const unitData = {
             unit_code: document.getElementById('unitCode').value,
             name: document.getElementById('unitCode').value, // Use unit_code as name for backend compatibility
-            unit_type: document.getElementById('unitType').value,
             organization: document.getElementById('unitOrganization').value,
             location: document.getElementById('unitLocation').value,
             commander_name: document.getElementById('commanderName').value,
@@ -291,6 +288,32 @@ const referenceData = {
         modal.style.display = 'block';
     },
 
+    async refreshFrequenciesModal() {
+        // Re-fetch the unit data to get latest frequencies
+        try {
+            const response = await fetch(`/api/frequency/units`);
+            if (!response.ok) {
+                throw new Error('Failed to refresh frequencies');
+            }
+
+            const data = await response.json();
+            const unitWithAssignments = data.units.find(u => u.unit.id === this.currentViewingUnitId);
+
+            if (!unitWithAssignments) {
+                this.showToast('Unit not found', 'error');
+                return;
+            }
+
+            // Update the modal with fresh data
+            this.currentViewingAssignments = unitWithAssignments.frequency_assignments || [];
+            this.showFrequenciesModal(unitWithAssignments.unit, unitWithAssignments.frequency_assignments || []);
+            this.showToast('Frequencies refreshed', 'success');
+        } catch (error) {
+            console.error('Error refreshing frequencies:', error);
+            this.showToast('Error refreshing frequencies: ' + error.message, 'error');
+        }
+    },
+
     viewUnitInDatabase() {
         // Extract serial numbers from assignments
         const serials = this.currentViewingAssignments.map(assignment => assignment.serial).filter(serial => serial);
@@ -311,6 +334,34 @@ const referenceData = {
 
     closeUnitModal() {
         document.getElementById('unitModal').style.display = 'none';
+    },
+
+    async cleanupOrphanedAssignments() {
+        if (!confirm('This will delete all frequency assignments that don\'t have corresponding SFAF records. Continue?')) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/frequency/cleanup-orphaned', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to cleanup orphaned assignments');
+            }
+
+            const data = await response.json();
+            this.showToast(`Successfully deleted ${data.deleted} orphaned frequency assignment(s)`, 'success');
+
+            // Reload units to refresh the display
+            this.loadUnits();
+        } catch (error) {
+            console.error('Error cleaning up orphaned assignments:', error);
+            this.showToast('Error cleaning up orphaned assignments: ' + error.message, 'error');
+        }
     },
 
     // ============================================

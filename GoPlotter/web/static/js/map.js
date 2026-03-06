@@ -2,7 +2,7 @@
  * SFAF Plotter - Main Map Application
  *
  * Coordinates between modules to provide interactive map functionality
- * with SFAF form integration and MCEB Publication 7 compliance
+ * with SFAF form integration and MC4EB Publication 7, Change 1 compliance
  */
 
 // ==================== Base Map Configuration ====================

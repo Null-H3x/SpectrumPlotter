@@ -29,6 +29,16 @@ func (r *UserRepository) GetUserByID(id uuid.UUID) (*models.User, error) {
 	return &user, err
 }
 
+// GetByID retrieves a user by ID (alias for compatibility)
+func (r *UserRepository) GetByID(id uuid.UUID) (*models.User, error) {
+	return r.GetUserByID(id)
+}
+
+// GetByUsername retrieves a user by username (alias for compatibility)
+func (r *UserRepository) GetByUsername(username string) (*models.User, error) {
+	return r.GetUserByUsername(username)
+}
+
 // GetUserByUsername retrieves a user by username
 func (r *UserRepository) GetUserByUsername(username string) (*models.User, error) {
 	var user models.User
@@ -54,8 +64,8 @@ func (r *UserRepository) GetUserByCertificateSerial(serial string) (*models.User
 // CreateUser creates a new user
 func (r *UserRepository) CreateUser(user *models.User) error {
 	query := `
-		INSERT INTO users (id, username, email, full_name, organization, role, is_active, certificate_serial, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		INSERT INTO users (id, username, email, password_hash, full_name, organization, role, is_active, certificate_serial, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING id, created_at, updated_at`
 
 	user.ID = uuid.New()
@@ -63,17 +73,17 @@ func (r *UserRepository) CreateUser(user *models.User) error {
 	user.UpdatedAt = time.Now()
 
 	return r.db.QueryRow(query,
-		user.ID, user.Username, user.Email, user.FullName,
+		user.ID, user.Username, user.Email, user.PasswordHash, user.FullName,
 		user.Organization, user.Role, user.IsActive, user.CertificateSerial,
 		user.CreatedAt, user.UpdatedAt,
 	).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
 }
 
 // UpdateLastLogin updates user's last login time
-func (r *UserRepository) UpdateLastLogin(userID uuid.UUID) error {
+func (r *UserRepository) UpdateLastLogin(userID uuid.UUID, loginTime time.Time) error {
 	query := `UPDATE users SET last_login = $1, updated_at = $2 WHERE id = $3`
 	now := time.Now()
-	_, err := r.db.Exec(query, now, now, userID)
+	_, err := r.db.Exec(query, loginTime, now, userID)
 	return err
 }
 
@@ -146,64 +156,5 @@ func (r *CertificateRepository) RevokeCertificate(certID uuid.UUID, reason strin
 		WHERE id = $4`
 	now := time.Now()
 	_, err := r.db.Exec(query, now, reason, now, certID)
-	return err
-}
-
-// SessionRepository handles session operations
-type SessionRepository struct {
-	db *sqlx.DB
-}
-
-func NewSessionRepository(db *sqlx.DB) *SessionRepository {
-	return &SessionRepository{db: db}
-}
-
-// CreateSession creates a new session
-func (r *SessionRepository) CreateSession(session *models.Session) error {
-	query := `
-		INSERT INTO sessions (id, user_id, token, auth_method, ip_address, user_agent, expires_at, last_activity, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-		RETURNING id, created_at`
-
-	session.ID = uuid.New()
-	session.CreatedAt = time.Now()
-	session.LastActivity = time.Now()
-
-	return r.db.QueryRow(query,
-		session.ID, session.UserID, session.Token, session.AuthMethod,
-		session.IPAddress, session.UserAgent, session.ExpiresAt,
-		session.LastActivity, session.CreatedAt,
-	).Scan(&session.ID, &session.CreatedAt)
-}
-
-// GetSessionByToken retrieves a session by token
-func (r *SessionRepository) GetSessionByToken(token string) (*models.Session, error) {
-	var session models.Session
-	query := `SELECT * FROM sessions WHERE token = $1 AND expires_at > NOW()`
-	err := r.db.Get(&session, query, token)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	return &session, err
-}
-
-// UpdateSessionActivity updates session last activity
-func (r *SessionRepository) UpdateSessionActivity(sessionID uuid.UUID) error {
-	query := `UPDATE sessions SET last_activity = $1 WHERE id = $2`
-	_, err := r.db.Exec(query, time.Now(), sessionID)
-	return err
-}
-
-// DeleteSession deletes a session (logout)
-func (r *SessionRepository) DeleteSession(token string) error {
-	query := `DELETE FROM sessions WHERE token = $1`
-	_, err := r.db.Exec(query, token)
-	return err
-}
-
-// CleanupExpiredSessions removes expired sessions
-func (r *SessionRepository) CleanupExpiredSessions() error {
-	query := `DELETE FROM sessions WHERE expires_at < NOW()`
-	_, err := r.db.Exec(query)
 	return err
 }

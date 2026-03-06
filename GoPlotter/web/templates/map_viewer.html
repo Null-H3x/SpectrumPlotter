@@ -72,6 +72,19 @@
             width: 200px !important;
             max-width: 200px !important;
         }
+
+        /* Settings button in navigation */
+        .nav-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: inherit;
+        }
+
+        .nav-btn:hover {
+            background: rgba(102, 126, 234, 0.1);
+        }
     </style>
 </head>
 
@@ -99,6 +112,10 @@
                 <i class="fas fa-cog"></i>
                 <span>Table Manager</span>
             </a>
+            <button id="settingsNavBtn" class="nav-link nav-btn" title="Map Settings" onclick="SettingsUI.toggleSettings()">
+                <i class="fas fa-sliders-h"></i>
+                <span>Settings</span>
+            </button>
             <a href="/profile" class="nav-link" title="User Account">
                 <i class="fas fa-user-circle"></i>
                 <span>Account</span>
@@ -139,22 +156,22 @@
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 
     <!-- Application modules (load in dependency order) -->
-    <script src="/js/modules/settings-manager.js"></script>
-    <script src="/js/modules/api-client.js"></script>
-    <script src="/js/modules/tooltip-manager.js"></script>
-    <script src="/js/modules/ui-helpers.js"></script>
-    <script src="/js/modules/marker-manager.js"></script>
-    <script src="/js/modules/circle-manager.js"></script>
-    <script src="/js/modules/sfaf-integration.js"></script>
-    <script src="/js/modules/settings-ui.js"></script>
-    <script src="/js/modules/settings-applier.js"></script>
-    <script src="/js/modules/filter-engine.js"></script>
-    <script src="/js/modules/authorization-radius-manager.js"></script>
+    <script src="/js/modules/settings-manager.js?v=20260115b"></script>
+    <script src="/js/modules/api-client.js?v=20260115b"></script>
+    <script src="/js/modules/tooltip-manager.js?v=20260115b"></script>
+    <script src="/js/modules/ui-helpers.js?v=20260115b"></script>
+    <script src="/js/modules/marker-manager.js?v=20260115b"></script>
+    <script src="/js/modules/circle-manager.js?v=20260115b"></script>
+    <script src="/js/modules/sfaf-integration.js?v=20260115b"></script>
+    <script src="/js/modules/settings-ui.js?v=20260115b"></script>
+    <script src="/js/modules/settings-applier.js?v=20260115b"></script>
+    <script src="/js/modules/filter-engine.js?v=20260115b"></script>
+    <script src="/js/modules/authorization-radius-manager.js?v=20260115b"></script>
 
     <!-- Main application -->
-    <script src="/js/map.js"></script>
-    <script src="/js/field530_polygons.js"></script>
-    <script src="/js/buttonFunctions.js"></script>
+    <script src="/js/map.js?v=20260115b"></script>
+    <script src="/js/field530_polygons.js?v=20260115b"></script>
+    <script src="/js/buttonFunctions.js?v=20260115b"></script>
     <!-- <script src="/js/sfaf-import-export.js"></script>
     <script src="/js/sfaf-state-manager.js"></script>
     <script src="/js/sfaf-utilities.js"></script>

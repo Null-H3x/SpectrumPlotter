@@ -40,6 +40,25 @@ const MarkerManager = (() => {
                     zoomToBoundsOnClick: true,
                     disableClusteringAtZoom: 15 // Show individual markers at zoom 15+
                 });
+
+                // Add click handler for markers within clusters
+                window.markerClusterGroup.on('click', function(e) {
+                    console.log('🎯 Cluster marker clicked:', e.layer);
+                    if (e.layer && e.layer.markerId) {
+                        console.log('🖱️ Marker clicked (from cluster):', e.layer.markerId, e.layer.markerData);
+                        currentSelectedMarker = e.layer;
+                        UIHelpers.manageObjectTabVisibility(true);
+
+                        // Open sidebar if SFAFIntegration is available
+                        if (window.SFAFIntegration && window.SFAFIntegration.openSidebar) {
+                            console.log('✅ SFAFIntegration available, calling openSidebar');
+                            window.SFAFIntegration.openSidebar(e.layer.markerId);
+                        } else {
+                            console.warn('⚠️ SFAFIntegration not available');
+                        }
+                    }
+                });
+
                 window.map.addLayer(window.markerClusterGroup);
             }
 
@@ -93,12 +112,16 @@ const MarkerManager = (() => {
 
         // Click handler
         marker.on('click', async () => {
+            console.log('🖱️ Marker clicked:', marker.markerId, marker.markerData);
             currentSelectedMarker = marker;
             UIHelpers.manageObjectTabVisibility(true);
 
             // Open sidebar if SFAFIntegration is available
             if (window.SFAFIntegration && window.SFAFIntegration.openSidebar) {
+                console.log('✅ SFAFIntegration available, calling openSidebar');
                 await window.SFAFIntegration.openSidebar(marker.markerId);
+            } else {
+                console.warn('⚠️ SFAFIntegration not available');
             }
         });
 

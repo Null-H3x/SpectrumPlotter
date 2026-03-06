@@ -6,6 +6,12 @@
 (function() {
     'use strict';
 
+    // CRITICAL: Only run on landing page (root path only)
+    if (!window.location.pathname.match(/^\/?$/)) {
+        console.log('⏭️  Skipping landing.js - not on landing page (path: ' + window.location.pathname + ')');
+        return;
+    }
+
     // Check if user is already logged in
     let isLoggedIn = false;
 

@@ -14,10 +14,10 @@ import (
 // Maps directly to the sfafs table in PostgreSQL (Source: table_info.txt)
 type SFAF struct {
 	// Core identification fields
-	ID        uuid.UUID `json:"id" db:"id"`
-	MarkerID  uuid.UUID `json:"marker_id" db:"marker_id"`
-	CreatedAt time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+	ID        uuid.UUID  `json:"id" db:"id"`
+	MarkerID  *uuid.UUID `json:"marker_id,omitempty" db:"marker_id"` // Nullable - SFAF may not have associated marker
+	CreatedAt time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at" db:"updated_at"`
 
 	// Individual SFAF fields matching database schema (Source: table_info.txt)
 	// 000 Series - Basic Information
@@ -65,7 +65,7 @@ type SFAF struct {
 	Field151 string     `json:"field151,omitempty" db:"field151"` // VARCHAR(1) - Status indicators
 	Field152 string     `json:"field152,omitempty" db:"field152"` // VARCHAR(35) - Descriptive text
 
-	// 200 Series - Organizational Information (Source: MCEB Pub 7)
+	// 200 Series - Organizational Information (Source: MC4EB Pub 7 CHG 1)
 	Field200 string `json:"field200,omitempty" db:"field200"` // VARCHAR(6) - Agency
 	Field201 string `json:"field201,omitempty" db:"field201"` // VARCHAR(8) - Unified Command
 	Field202 string `json:"field202,omitempty" db:"field202"` // VARCHAR(8) - Unified Command Service
@@ -121,7 +121,7 @@ type SFAF struct {
 	Field373 string   `json:"field373,omitempty" db:"field373"` // VARCHAR(1) - Operational flags
 	Field374 string   `json:"field374,omitempty" db:"field374"` // VARCHAR(1) - Status indicators
 
-	// 400+ Series - Receiver Location Data (Source: MCEB Pub 7)
+	// 400+ Series - Receiver Location Data (Source: MC4EB Pub 7 CHG 1)
 	Field400 string   `json:"field400,omitempty" db:"field400"` // VARCHAR(4) - State/Country
 	Field401 string   `json:"field401,omitempty" db:"field401"` // VARCHAR(24) - Alternate Frequency
 	Field402 string   `json:"field402,omitempty" db:"field402"` // Power (Watts)
@@ -158,9 +158,9 @@ type SFAF struct {
 	Field472 *int     `db:"field472"` // INTEGER - Performance values (Source: table_info.txt)
 	Field473 string   `db:"field473"` // VARCHAR(1) - Status indicators (Source: table_info.txt)
 
-	// 500+ Series - IRAC Notes and Equipment (Source: services.txt, handlers.txt MCEB compliance)
-	Field500 string `db:"field500"` // VARCHAR(4) - Transmitter Make - IRAC Note references (max 10 per MCEB Pub 7)
-	Field501 string `db:"field501"` // VARCHAR(35) - Transmitter Model - IRAC Note codes (max 30 per MCEB Pub 7)
+	// 500+ Series - IRAC Notes and Equipment (Source: services.txt, handlers.txt MC4EB compliance)
+	Field500 string `db:"field500"` // VARCHAR(4) - Transmitter Make - IRAC Note references (max 10 per MC4EB Pub 7 CHG 1)
+	Field501 string `db:"field501"` // VARCHAR(35) - Transmitter Model - IRAC Note codes (max 30 per MC4EB Pub 7 CHG 1)
 	Field502 string `db:"field502"` // TEXT - Transmitter S/N - Purpose descriptions (long text)
 	Field503 string `db:"field503"` // VARCHAR(35) - Receiver Make - Additional notes
 	Field504 string `db:"field504"` // VARCHAR(72) - Receiver Model - Technical notes
@@ -1898,7 +1898,7 @@ func (req *CreateSFAFRequest) ToSFAF() (*SFAF, error) {
 	// Create new SFAF with timestamps
 	sfaf := &SFAF{
 		ID:        uuid.New(),
-		MarkerID:  markerUUID,
+		MarkerID:  &markerUUID, // Use pointer for nullable marker_id
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
@@ -1920,7 +1920,7 @@ type ValidationResult struct {
 	Errors          map[string]string `json:"errors"`
 	Warnings        map[string]string `json:"warnings"`
 	RequiredMissing []string          `json:"required_missing"`
-	MCEBCompliant   bool              `json:"mceb_compliant"` // MCEB Publication 7 compliance (Source: handlers.txt)
+	MCEBCompliant   bool              `json:"mceb_compliant"` // MC4EB Publication 7, Change 1 compliance (Source: handlers.txt)
 }
 
 // SFAFImportResult represents the results of a bulk SFAF import operation (Source: services.txt)

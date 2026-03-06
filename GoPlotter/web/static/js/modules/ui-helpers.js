@@ -168,7 +168,7 @@ const UIHelpers = (() => {
     }
 
     /**
-     * Show MCEB Publication 7 compliance notification
+     * Show MC4EB Publication 7, Change 1 compliance notification
      */
     function showComplianceNotification(successCount, totalSkipped) {
         const notification = document.createElement('div');
@@ -190,12 +190,12 @@ const UIHelpers = (() => {
 
         notification.innerHTML = `
             <div style="font-weight: 600; margin-bottom: 8px;">
-                📖 MCEB Publication 7 Compliance
+                📖 MC4EB Publication 7, Change 1 Compliance
             </div>
             <div style="font-size: 0.9em; opacity: 0.95;">
                 ${successCount} fields populated successfully<br>
                 ${totalSkipped} fields skipped (deprecated/not applicable)<br>
-                <strong>Standard: MCEB Pub 7, June 30, 2005</strong>
+                <strong>Standard: MC4EB Pub 7 CHG 1 (08 May 2025)</strong>
             </div>
         `;
 

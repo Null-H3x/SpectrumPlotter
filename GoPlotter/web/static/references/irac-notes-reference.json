@@ -4722,7 +4722,7 @@
         "field_500_max_length": 4,
         "field_501_max_length": 35,
         "compliance_notes": {
-            "field_500": "Official IRAC coordination note codes (MCEB Pub 7 Annex E)",
+            "field_500": "Official IRAC coordination note codes (MC4EB Pub 7 CHG 1 Annex E)",
             "field_501": "Coordination comments and reference numbers",
             "m_series_placement": "M-series notes (M001-M018) belong in field 501, not field 500"
         },
@@ -4747,7 +4747,7 @@
             "field_501_usage": "Use for coordination comments, reference numbers, and M-series notes (35 character max)",
             "dropdown_implementation": "Reference file supports comprehensive dropdown population in SFAF forms",
             "search_capability": "JSON structure enables search by code, title, description, agency, or category",
-            "mceb_pub_7_compliance": "All entries verified against official MCEB Publication 7, Change 1"
+            "mceb_pub_7_compliance": "All entries verified against official MC4EB Publication 7, Change 1"
         },
         "file_completion_status": {
             "coordination_notes": "Complete (C002-C095)",

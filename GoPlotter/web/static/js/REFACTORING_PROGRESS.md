@@ -61,7 +61,7 @@ Successfully extracted **4 focused modules** from the monolithic `map.js` file, 
 - Sidebar visibility management
 - Tab switching logic
 - Multi-type notification system (success, error, warning, info)
-- MCEB Publication 7 compliance notifications
+- MC4EB Publication 7, Change 1 compliance notifications
 - Flexible field lookup utility
 
 **Status**: ✅ **Completed**
@@ -126,7 +126,7 @@ window.geometries // Maps to CircleManager.getGeometriesMap()
 ---
 
 ### ✅ 6. sfaf-integration.js (580 lines)
-**Purpose**: SFAF form integration and MCEB Publication 7 compliance
+**Purpose**: SFAF form integration and MC4EB Publication 7, Change 1 compliance
 
 **Exports**:
 - `openSidebar(markerId)`
@@ -135,7 +135,7 @@ window.geometries // Maps to CircleManager.getGeometriesMap()
 - `setupAuthorizationRadius()`, `wireUpActionButtons()`
 
 **Key Features**:
-- Complete MCEB Publication 7 field mapping (June 30, 2005)
+- Complete MC4EB Publication 7, Change 1 field mapping (June 30, 2005)
 - Handles deprecated fields (field208, field407, field470, field471, field472, field903)
 - Field500 variants mapping (500/02, 500/03, etc.)
 - Auto-population of coordinate fields (field303, field403)
@@ -144,8 +144,8 @@ window.geometries // Maps to CircleManager.getGeometriesMap()
 - SFAF JSON export with ISO timestamps
 - Compliance notifications with success/skip/deprecated counts
 
-**MCEB Pub 7 Compliance**:
-- ✅ 80+ field mappings from MCEB Publication 7
+**MC4EB Pub 7 CHG 1 Compliance**:
+- ✅ 80+ field mappings from MC4EB Publication 7, Change 1
 - ✅ Deprecated field handling
 - ✅ Dynamic field variants (_1, _2, etc.)
 - ✅ Geographic code validation (A-Z)
@@ -213,7 +213,7 @@ window.geometries // Maps to CircleManager.getGeometriesMap()
    - SFAF form population
    - Field 306 authorization circle integration
    - Coordinate tooltips
-   - MCEB Pub 7 compliance notifications
+   - MC4EB Pub 7 CHG 1 compliance notifications
 
 ## Benefits Achieved
 
@@ -255,7 +255,7 @@ window.geometries // Maps to CircleManager.getGeometriesMap()
 ⏳ Circle creation with radius prompt
 ⏳ SFAF form population
 ⏳ Field 306 authorization circle
-⏳ MCEB Pub 7 compliance notifications
+⏳ MC4EB Pub 7 CHG 1 compliance notifications
 ⏳ Marker deletion and cleanup
 
 ## Architecture Diagram

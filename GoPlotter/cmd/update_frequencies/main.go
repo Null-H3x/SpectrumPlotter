@@ -1,5 +1,5 @@
 // cmd/update_frequencies/main.go
-// Updates existing marker frequencies to add K or M prefix per MCEB standard
+// Updates existing marker frequencies to add K or M prefix per MC4EB standard
 package main
 
 import (
@@ -111,7 +111,7 @@ func getEnv(key, fallback string) string {
 	return value
 }
 
-// formatFrequency formats frequency with K or M prefix per MCEB standard
+// formatFrequency formats frequency with K or M prefix per MC4EB standard
 // K for 2000-29999 KHz (2.000-29.999 MHz)
 // M for everything else
 func formatFrequency(freqMHz float64) string {

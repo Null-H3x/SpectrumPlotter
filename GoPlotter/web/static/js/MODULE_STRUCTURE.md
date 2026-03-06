@@ -122,7 +122,7 @@ web/static/js/
 - `updateCircleFromField306(circle, value)` - Sync circle with field
 
 **Features**:
-- MCEB Pub 7 field mapping
+- MC4EB Pub 7 CHG 1 field mapping
 - Form population
 - Validation with visual feedback
 - Authorization circle sync
@@ -139,7 +139,7 @@ web/static/js/
 - `switchTab(tabId)` - Switch sidebar tabs
 - `manageObjectTabVisibility(show)` - Show/hide object tab
 - `showNotification(message, type)` - Display notification
-- `showComplianceNotification(success, skipped)` - MCEB notification
+- `showComplianceNotification(success, skipped)` - MC4EB notification
 - `showSFAFStatusMessage(message, type)` - SFAF status notification
 
 **Features**:

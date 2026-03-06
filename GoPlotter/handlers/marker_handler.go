@@ -189,20 +189,20 @@ func (mh *MarkerHandler) AddIRACNoteToMarker(c *gin.Context) {
 		return
 	}
 
-	// Validate field number based on MCEB Publication 7 standards
+	// Validate field number based on MC4EB Publication 7, Change 1 standards
 	if req.FieldNumber != 500 && req.FieldNumber != 501 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Field number must be 500 or 501"})
 		return
 	}
 
-	// Validate occurrence limits based on MCEB Pub 7 (Source: irac-notes-reference.txt)
+	// Validate occurrence limits based on MC4EB Pub 7 CHG 1 (Source: irac-notes-reference.txt)
 	if req.FieldNumber == 500 && req.OccurrenceNumber > 10 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Field 500 maximum 10 occurrences per MCEB Pub 7"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Field 500 maximum 10 occurrences per MC4EB Pub 7 CHG 1"})
 		return
 	}
 
 	if req.FieldNumber == 501 && req.OccurrenceNumber > 30 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Field 501 maximum 30 occurrences per MCEB Pub 7"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Field 501 maximum 30 occurrences per MC4EB Pub 7 CHG 1"})
 		return
 	}
 

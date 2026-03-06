@@ -461,3 +461,8 @@ func (s *FrequencyService) CanUserManageUnit(userID, unitID uuid.UUID) (bool, er
 
 	return false, nil
 }
+
+// CleanupOrphanedAssignments removes frequency assignments that don't have corresponding SFAF records
+func (s *FrequencyService) CleanupOrphanedAssignments() (int64, error) {
+	return s.repo.CleanupOrphanedAssignments()
+}

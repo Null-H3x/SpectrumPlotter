@@ -64,7 +64,7 @@ func (s *Field530Service) ParseField530Coordinate(value string) (*models.Field53
 	}, nil
 }
 
-// parseCoordinateString parses MCEB Pub 7 coordinate format: DDMMSSN/SDDDMMSSE/W
+// parseCoordinateString parses MC4EB Pub 7 CHG 1 coordinate format: DDMMSSN/SDDDMMSSE/W
 // Example: 450000N0050000E = 45°00'00"N, 005°00'00"E
 func (s *Field530Service) parseCoordinateString(coordStr string) (float64, float64, error) {
 	coordStr = strings.TrimSpace(coordStr)

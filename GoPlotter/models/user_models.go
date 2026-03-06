@@ -12,6 +12,7 @@ type User struct {
 	ID                uuid.UUID  `json:"id" db:"id"`
 	Username          string     `json:"username" db:"username"`
 	Email             string     `json:"email" db:"email"`
+	PasswordHash      string     `json:"-" db:"password_hash"` // Never expose in JSON
 	FullName          string     `json:"full_name" db:"full_name"`
 	Organization      string     `json:"organization" db:"organization"`
 	Role              string     `json:"role" db:"role"` // admin, operator, viewer

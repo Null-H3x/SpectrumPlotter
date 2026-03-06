@@ -77,6 +77,8 @@ func main() {
 	sfafFieldOccRepo := repositories.NewSFAFFieldOccurrenceRepository(sqlxDB)
 	geometryRepo := repositories.NewGeometryRepository(sqlxDB)
 	frequencyRepo := repositories.NewFrequencyRepository(sqlxDB)
+	userRepo := repositories.NewUserRepository(sqlxDB)
+	sessionRepo := repositories.NewSessionRepository(sqlxDB)
 
 	// Initialize services
 	serialService := services.NewSerialService(sqlxDB)
@@ -87,6 +89,7 @@ func main() {
 
 	// Wire up marker service to SFAF service for import functionality
 	sfafService.SetMarkerService(markerService)
+	sfafService.SetMarkerRepo(markerRepo)
 	sfafService.SetSerialService(serialService)
 
 	// Update existing imported markers to be non-draggable
@@ -99,12 +102,14 @@ func main() {
 
 	geometryService := services.NewGeometryService(geometryRepo, markerService, serialService, coordService)
 	frequencyService := services.NewFrequencyService(frequencyRepo)
+	authService := services.NewAuthService(userRepo, sessionRepo)
 
 	// Initialize handlers with properly created services
 	markerHandler := handlers.NewMarkerHandler(markerService)
 	sfafHandler := handlers.NewSFAFHandler(sfafService, markerService, field530Service)
 	geometryHandler := handlers.NewGeometryHandler(geometryService)
 	frequencyHandler := handlers.NewFrequencyHandler(frequencyService)
+	authHandler := handlers.NewAuthHandler(authService)
 
 	// Setup Gin router (without default middleware)
 	r := gin.New()
@@ -210,6 +215,14 @@ func main() {
 	// API routes
 	api := r.Group("/api")
 	{
+		// AUTHENTICATION ROUTES (public - no auth required)
+		auth := api.Group("/auth")
+		{
+			auth.POST("/login", authHandler.Login)
+			auth.POST("/logout", authHandler.Logout)
+			auth.GET("/session", authHandler.VerifySession)
+			auth.POST("/create-superuser", authHandler.CreateSuperuser)
+		}
 
 		api.GET("/convert-coords", func(c *gin.Context) {
 			lat := c.Query("lat")
@@ -247,6 +260,7 @@ func main() {
 		api.GET("/sfaf/object-data/:marker_id", sfafHandler.GetObjectData)
 		api.PUT("/sfaf/:id", sfafHandler.UpdateSFAF)
 		api.DELETE("/sfaf/:id", sfafHandler.DeleteSFAF)
+		api.DELETE("/sfaf/delete-all", sfafHandler.DeleteAllSFAFs)
 		api.GET("/sfaf", sfafHandler.GetAllSFAFs)
 		api.GET("/sfaf/:id", sfafHandler.GetSFAF)
 		api.GET("/sfaf/marker/:marker_id", sfafHandler.GetSFAFByMarkerID)
@@ -255,6 +269,7 @@ func main() {
 		api.POST("/sfaf/import", sfafHandler.ImportSFAF)
 		api.GET("/sfaf/export", sfafHandler.ExportAllSFAF)
 		api.GET("/sfaf/export/:marker_id", sfafHandler.ExportSingleSFAF)
+		api.POST("/sfaf/export-selected", sfafHandler.ExportSelectedSFAFs)
 
 		// FIELD 530 POLYGON ROUTES
 		api.GET("/sfaf/field530/polygons", sfafHandler.GetAllField530Polygons)
@@ -292,6 +307,9 @@ func main() {
 			frequency.POST("/requests", frequencyHandler.SubmitFrequencyRequest)
 			frequency.PUT("/requests/:id/review", frequencyHandler.ReviewFrequencyRequest)
 			frequency.POST("/requests/:id/approve", frequencyHandler.ApproveFrequencyRequest)
+
+			// Admin cleanup routes
+			frequency.POST("/cleanup-orphaned", frequencyHandler.CleanupOrphanedAssignments)
 		}
 	}
 
@@ -305,7 +323,7 @@ func main() {
 		zap.String("host", appConfig.Database.Host),
 		zap.String("database", appConfig.Database.DBName),
 	)
-	logger.Info("🗺️ MCEB Publication 7 compliance enabled")
+	logger.Info("🗺️ MC4EB Publication 7, Change 1 compliance enabled")
 
 	if err := r.Run(serverAddr); err != nil {
 		logger.Fatal("Failed to start server", zap.Error(err))

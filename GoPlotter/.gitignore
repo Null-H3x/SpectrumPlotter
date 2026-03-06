@@ -50,10 +50,10 @@ temp/
 Backup/
 
 # AWS deployment files (not ready for commit yet)
-Dockerfile
-docker-compose.yml
-deploy-to-ec2.sh
-AWS_DEPLOYMENT_GUIDE.md
+scripts/Dockerfile
+scripts/docker-compose.yml
+scripts/deploy-to-ec2.sh
+docs/AWS_DEPLOYMENT_GUIDE.md
 
 # Documentation .txt files (replaced with .md files)
 *.txt

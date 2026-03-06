@@ -300,6 +300,21 @@ class DatabaseViewer {
 
                 this.currentView = newViewMode;
 
+                // ✅ If it's a custom view, load the custom view data
+                if (newViewMode && newViewMode.startsWith('custom_')) {
+                    const viewId = newViewMode.replace('custom_', '');
+                    const view = this.customViews.find(v => v.id === viewId);
+                    if (view) {
+                        this.currentCustomView = view;
+                        console.log(`✅ Loaded custom view: ${view.name}`);
+                    } else {
+                        console.warn(`⚠️ Custom view not found: ${viewId}`);
+                    }
+                } else {
+                    // Clear custom view when switching to built-in view
+                    this.currentCustomView = null;
+                }
+
                 // ✅ Save view mode preference to session
                 this.sessionManager.updatePreference('viewMode', newViewMode);
 
@@ -384,6 +399,14 @@ class DatabaseViewer {
         if (deleteSelectedBtn) {
             deleteSelectedBtn.addEventListener('click', () => {
                 this.deleteSelected();
+            });
+        }
+
+        // Delete all button
+        const deleteAllBtn = document.getElementById('deleteAllBtn');
+        if (deleteAllBtn) {
+            deleteAllBtn.addEventListener('click', () => {
+                this.deleteAllSFAFs();
             });
         }
 
@@ -488,6 +511,14 @@ class DatabaseViewer {
                 this.activeFilters.frequencyBand = e.target.value;
                 this.currentPage = 1;
                 this.loadData();
+            });
+        }
+
+        // Clear Filters button
+        const clearFiltersBtn = document.getElementById('clearFiltersBtn');
+        if (clearFiltersBtn) {
+            clearFiltersBtn.addEventListener('click', () => {
+                this.clearAllFilters();
             });
         }
 
@@ -674,6 +705,12 @@ class DatabaseViewer {
         const data = await response.json();
 
         if (data.success) {
+            // If no markers exist, automatically switch to SFAF tab
+            if (!data.markers || data.markers.length === 0) {
+                console.log('⚠️ No markers found in database, switching to SFAF tab');
+                this.switchTab('sfaf');
+                return;
+            }
             this.renderMarkersTable(data.markers);
             this.updatePagination(data.markers.length);
         } else {
@@ -919,6 +956,7 @@ class DatabaseViewer {
     updateBulkActionButtons() {
         const bulkEditBtn = document.getElementById('bulkEditBtn');
         const exportSelectedBtn = document.getElementById('exportSelectedBtn');
+        const exportSelectedToCSVBtn = document.getElementById('exportSelectedToCSVBtn');
         const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
         const viewOnMapBtn = document.getElementById('viewOnMapBtn');
         const hasSelection = this.selectedItems.size > 0;
@@ -933,6 +971,18 @@ class DatabaseViewer {
             exportSelectedBtn.disabled = !hasSelection;
             exportSelectedBtn.textContent = hasSelection ?
                 `Export (${this.selectedItems.size})` : 'Export';
+        }
+
+        // Enable/disable Export Selected to CSV button in dropdown
+        if (exportSelectedToCSVBtn) {
+            exportSelectedToCSVBtn.disabled = !hasSelection;
+            if (hasSelection) {
+                exportSelectedToCSVBtn.style.opacity = '1';
+                exportSelectedToCSVBtn.style.cursor = 'pointer';
+            } else {
+                exportSelectedToCSVBtn.style.opacity = '0.5';
+                exportSelectedToCSVBtn.style.cursor = 'not-allowed';
+            }
         }
 
         if (deleteSelectedBtn) {
@@ -988,13 +1038,12 @@ class DatabaseViewer {
             return;
         }
 
-        // ✅ PERFORMANCE: Apply pagination to only render current page
+        // ✅ Server-side pagination: Data is already paginated from API, no need to slice again
+        // The records passed in are already the correct page from the server
         const totalRecords = validRecords.length;
-        const startIndex = (this.currentPage - 1) * this.itemsPerPage;
-        const endIndex = startIndex + this.itemsPerPage;
-        const paginatedRecords = validRecords.slice(startIndex, endIndex);
+        const paginatedRecords = validRecords; // Don't slice - already paginated by server
 
-        console.log(`📊 Rendering ${paginatedRecords.length} of ${totalRecords} records (page ${this.currentPage})`);
+        console.log(`📊 Rendering ${paginatedRecords.length} records for page ${this.currentPage}`);
 
         // Hide empty state, show data grid
         const emptyState = document.getElementById('sfafEmptyState');
@@ -1024,7 +1073,7 @@ class DatabaseViewer {
         </tr>
         <tr class="filter-row">
             ${headers.map(header =>
-            `<th data-field="${header.field}">
+            `<th data-field="${header.field}" class="${header.class || ''}">
                     ${header.filterable !== false ?
                         `<input type="text"
                                 class="column-filter"
@@ -1169,7 +1218,7 @@ class DatabaseViewer {
                 </div>
             </div>
 
-            <!-- MCEB Compliance Summary -->
+            <!-- MC4EB Compliance Summary -->
             ${this.renderMCEBComplianceSummary(sfafFields)}
         </div>
     `;
@@ -1371,7 +1420,7 @@ class DatabaseViewer {
         return null;
     }
 
-    // Helper method to render MCEB compliance summary
+    // Helper method to render MC4EB compliance summary
     renderMCEBComplianceSummary(sfafFields) {
         const requiredFields = ['field005', 'field010', 'field102', 'field110', 'field200', 'field300'];
         const missingRequired = requiredFields.filter(field => !sfafFields[field] || !sfafFields[field].trim());
@@ -1381,7 +1430,7 @@ class DatabaseViewer {
 
         return `
             <div class="mceb-compliance-summary">
-                <h4>MCEB Publication 7 Compliance</h4>
+                <h4>MC4EB Publication 7, Change 1 Compliance</h4>
                 <div class="compliance-status ${isCompliant ? 'compliant' : 'non-compliant'}">
                     ${isCompliant ?
                         '<span class="status-icon">✓</span> Compliant - All required fields present' :
@@ -1425,11 +1474,37 @@ class DatabaseViewer {
         localStorage.setItem('sfafCustomViews', JSON.stringify(views));
     }
 
+    getAllAvailableSFAFFields() {
+        // Get all possible SFAF field keys (field005 through field999)
+        const allFieldKeys = [];
+
+        // Generate all field keys from 005-999
+        for (let i = 5; i <= 999; i++) {
+            const fieldKey = `field${String(i).padStart(3, '0')}`;
+            allFieldKeys.push(fieldKey);
+        }
+
+        // Also collect any fields that exist in current data (in case of custom fields)
+        if (this.currentSFAFData && this.currentSFAFData.length > 0) {
+            this.currentSFAFData.forEach(record => {
+                if (record.rawSFAFFields) {
+                    Object.keys(record.rawSFAFFields).forEach(key => {
+                        if (!allFieldKeys.includes(key)) {
+                            allFieldKeys.push(key);
+                        }
+                    });
+                }
+            });
+        }
+
+        return allFieldKeys.sort();
+    }
+
     createCustomView() {
         const viewName = prompt('Enter a name for your custom view:');
         if (!viewName || viewName.trim() === '') return;
 
-        const allFields = Object.keys(this.currentSFAFData?.[0]?.rawSFAFFields || {});
+        const allFields = this.getAllAvailableSFAFFields();
 
         this.showFieldSelectionModal({
             mode: 'create',
@@ -1447,7 +1522,7 @@ class DatabaseViewer {
             return;
         }
 
-        const allFields = Object.keys(this.currentSFAFData?.[0]?.rawSFAFFields || {});
+        const allFields = this.getAllAvailableSFAFFields();
 
         this.showFieldSelectionModal({
             mode: 'edit',
@@ -1469,6 +1544,10 @@ class DatabaseViewer {
         };
 
         this.currentFieldView = selectedView;
+
+        // Save the selected view to session preferences
+        this.sessionManager.updatePreference('lastFieldView', viewId);
+        console.log(`💾 Saved field view preference: ${viewId}`);
 
         // Refresh the field display
         this.refreshFieldDisplay();
@@ -1621,105 +1700,100 @@ class DatabaseViewer {
             console.log('📊 Loading enhanced SFAF records with default view...');
             this.showLoading(true);
 
-            const markersResponse = await fetch('/api/markers');
-            if (!markersResponse.ok) {
-                throw new Error(`Markers API failed: ${markersResponse.status} ${markersResponse.statusText}`);
+            // Use pagination parameters
+            const page = this.currentPage || 1;
+            const limit = this.itemsPerPage || 50;
+
+            // Load SFAF records first (includes Pool Assignments without markers)
+            const sfafResponse = await fetch(`/api/sfaf?page=${page}&limit=${limit}`);
+            if (!sfafResponse.ok) {
+                throw new Error(`SFAF API failed: ${sfafResponse.status} ${sfafResponse.statusText}`);
             }
 
-            const markersData = await markersResponse.json();
-            console.log('📊 Raw markers data:', markersData);
+            const sfafData = await sfafResponse.json();
+            console.log('📊 SFAF API response:', sfafData);
 
-            if (!markersData.success) {
-                throw new Error(markersData.error || 'Failed to load markers');
+            if (!sfafData.success) {
+                throw new Error(sfafData.error || 'Failed to load SFAF records');
             }
 
-            if (!markersData.markers || markersData.markers.length === 0) {
-                console.log('⚠️ No markers found in database');
+            // Store total database count from pagination
+            if (sfafData.pagination && sfafData.pagination.total !== undefined) {
+                this.totalDatabaseRecords = sfafData.pagination.total;
+                console.log(`✅ Set totalDatabaseRecords to: ${this.totalDatabaseRecords}`);
+            } else {
+                console.warn('⚠️ No pagination.total in API response:', sfafData.pagination);
+            }
+
+            if (!sfafData.sfafs || sfafData.sfafs.length === 0) {
+                console.log('⚠️ No SFAF records found in database');
                 this.renderEnhancedSFAFTable([]);
                 this.updateSFAFSummaryStats([]);
                 return;
             }
 
-            console.log(`📊 Found ${markersData.markers.length} markers, enhancing with SFAF data...`);
+            console.log(`📊 Found ${sfafData.sfafs.length} SFAF records, loading markers...`);
 
-            // ✅ OPTIMIZED: Fetch all SFAF records in one batch request
-            let sfafMap = new Map(); // marker_id -> sfaf_data
-            let sfafFoundCount = 0;
-
+            // Load markers (may be empty for Pool Assignments)
+            let markersMap = new Map();
             try {
-                console.log(`📊 Fetching all SFAF records in batch...`);
-                // Request with large limit to get all records (API has max 1000)
-                const sfafResponse = await fetch('/api/sfaf?limit=1000');
-                if (sfafResponse.ok) {
-                    const sfafData = await sfafResponse.json();
-                    console.log('📊 SFAF API response:', sfafData);
-                    // API returns 'sfafs' not 'data'
-                    if (sfafData.success && sfafData.sfafs) {
-                        // Create a map of marker_id -> sfaf_data for quick lookup
-                        sfafData.sfafs.forEach(sfaf => {
-                            if (sfaf.marker_id) {
-                                sfafMap.set(sfaf.marker_id, sfaf);
-                            }
+                const markersResponse = await fetch('/api/markers');
+                if (markersResponse.ok) {
+                    const markersData = await markersResponse.json();
+                    if (markersData.success && markersData.markers) {
+                        markersData.markers.forEach(marker => {
+                            markersMap.set(marker.id, marker);
                         });
-                        sfafFoundCount = sfafMap.size;
-                        console.log(`📊 Loaded ${sfafFoundCount} SFAF records from ${sfafData.sfafs.length} total records`);
+                        console.log(`📊 Loaded ${markersMap.size} markers`);
                     }
                 }
-            } catch (batchError) {
-                console.warn('⚠️ Failed to load SFAF records in batch, continuing without SFAF data:', batchError);
+            } catch (markerError) {
+                console.warn('⚠️ Failed to load markers, continuing with SFAF-only records:', markerError);
             }
 
-            // ✅ ENHANCED: Process records with SFAF data from batch
+            // ✅ ENHANCED: Process SFAF records (with or without markers)
             const enhancedRecords = [];
             let successCount = 0;
 
-            for (const marker of markersData.markers) {
+            for (const sfaf of sfafData.sfafs) {
                 try {
-                    // Create basic enhanced record
+                    // Extract SFAF fields
+                    const sfafFields = {};
+                    Object.keys(sfaf).forEach(key => {
+                        if (key.match(/^[Ff]ield\d+$/)) {
+                            const normalizedKey = key.toLowerCase();
+                            sfafFields[normalizedKey] = sfaf[key];
+                        }
+                    });
+
+                    // Get marker data if available
+                    const marker = sfaf.marker_id ? markersMap.get(sfaf.marker_id) : null;
+
+                    // Create enhanced record
                     const enhancedRecord = {
-                        id: marker.id,
-                        serial: marker.serial || 'Unknown',
-                        frequency: marker.frequency || 'Not Specified',
-                        location: marker.lat && marker.lng ?
-                            `${marker.lat.toFixed(4)}, ${marker.lng.toFixed(4)}` : 'No Coordinates',
-                        agency: 'TBD',
-                        markerType: marker.type || marker.marker_type || 'imported',
+                        id: sfaf.id,  // Use SFAF ID as primary ID
+                        markerId: sfaf.marker_id,  // May be null for Pool Assignments
+                        serial: sfafFields.field102 || (marker?.serial) || 'Unknown',
+                        frequency: sfafFields.field110 || (marker?.frequency) || 'Not Specified',
+                        location: 'No Coordinates',
+                        agency: sfafFields.field200 || 'TBD',
+                        markerType: marker ? (marker.type || marker.marker_type || 'imported') : 'pool_assignment',
                         coordinates: {
-                            lat: marker.lat,
-                            lng: marker.lng
+                            lat: marker?.lat || null,
+                            lng: marker?.lng || null
                         },
-                        sfafFields: {},
-                        rawSFAFFields: {},
+                        sfafFields: sfafFields,
+                        rawSFAFFields: sfafFields,
                         completionPercentage: 0,
-                        validationStatus: 'no_sfaf_data',
-                        mcebCompliant: { isCompliant: false, issues: ['No SFAF data'] }
+                        validationStatus: 'complete',
+                        mcebCompliant: { isCompliant: false, issues: [] }
                     };
 
-                    // ✅ Check if this marker has SFAF data in our batch
-                    const sfafData = sfafMap.get(marker.id);
-                    if (sfafData) {
-                        // The API returns fields directly on the object, not nested under sfaf_fields
-                        // Extract all fieldXXX properties into sfafFields object
-                        const sfafFields = {};
-                        Object.keys(sfafData).forEach(key => {
-                            // Include both lowercase field### and capitalized Field### properties
-                            if (key.match(/^[Ff]ield\d+$/)) {
-                                // Normalize to lowercase for consistency
-                                const normalizedKey = key.toLowerCase();
-                                sfafFields[normalizedKey] = sfafData[key];
-                            }
-                        });
-
-                        enhancedRecord.sfafFields = sfafFields;
-                        enhancedRecord.rawSFAFFields = sfafFields;
-                        enhancedRecord.agency = sfafFields.field200 || 'TBD';
-
-                        // Extract frequency from SFAF field110 if available
-                        if (sfafFields.field110) {
-                            enhancedRecord.frequency = sfafFields.field110;
-                        }
-
-                        // Extract coordinates from SFAF fields if available
+                    // Extract coordinates from marker or SFAF fields
+                    if (marker && marker.lat && marker.lng) {
+                        enhancedRecord.location = `${marker.lat.toFixed(4)}, ${marker.lng.toFixed(4)}`;
+                    } else {
+                        // Try to extract from SFAF fields
                         const coordString = sfafFields.field303 || sfafFields.field403;
                         if (coordString) {
                             const coords = this.parseCoordinateString(coordString);
@@ -1731,59 +1805,37 @@ class DatabaseViewer {
                                 enhancedRecord.location = `${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`;
                             }
                         }
-
-                        enhancedRecord.completionPercentage = this.calculateCompletionPercentage(sfafFields);
-                        enhancedRecord.validationStatus = 'complete';
-                        enhancedRecord.mcebCompliant = this.validateMCEBCompliance(sfafFields);
                     }
+
+                    enhancedRecord.completionPercentage = this.calculateCompletionPercentage(sfafFields);
+                    enhancedRecord.mcebCompliant = this.validateMCEBCompliance(sfafFields);
 
                     enhancedRecords.push(enhancedRecord);
                     successCount++;
 
                 } catch (recordError) {
-                    console.error(`❌ Failed to process marker ${marker.id}:`, recordError);
-                    // Create minimal record even on error
-                    enhancedRecords.push({
-                        id: marker.id,
-                        serial: marker.serial || 'Unknown',
-                        frequency: marker.frequency || 'Not Specified',
-                        location: 'Error loading data',
-                        agency: 'Error',
-                        markerType: 'error',
-                        coordinates: { lat: null, lng: null },
-                        sfafFields: {},
-                        completionPercentage: 0,
-                        validationStatus: 'error'
-                    });
+                    console.error(`❌ Failed to process SFAF ${sfaf.id}:`, recordError);
                 }
             }
 
-            console.log(`📊 Processing complete: ${successCount} markers processed, ${sfafFoundCount} with SFAF data`);
+            console.log(`📊 Processing complete: ${successCount} SFAF records processed`);
             console.log('📊 Enhanced records:', enhancedRecords);
 
-            // ✅ FILTER: Only show records that have SFAF data (not just markers)
-            const recordsWithSFAF = enhancedRecords.filter(record => {
-                // Must have sfafFields and at least one field populated
-                return record.sfafFields && Object.keys(record.sfafFields).length > 0;
-            });
-
-            console.log(`📊 Filtered to SFAF records only: ${recordsWithSFAF.length} of ${enhancedRecords.length} total markers`);
-
-            // ✅ Store SFAF records only (not all markers)
-            this.currentSFAFData = recordsWithSFAF;
-            this.enhancedRecords = recordsWithSFAF; // Store for sorting/filtering
+            // ✅ Store all SFAF records (including Pool Assignments)
+            this.currentSFAFData = enhancedRecords;
+            this.enhancedRecords = enhancedRecords; // Store for sorting/filtering
 
             // ✅ Apply serial filter if set (from Table Manager)
-            let filteredRecords = recordsWithSFAF;
+            let filteredRecords = enhancedRecords;
             if (this.serialFilter && this.serialFilter.length > 0) {
                 console.log('🔍 Looking for serials:', this.serialFilter);
-                console.log('🔍 Sample of record serials:', recordsWithSFAF.slice(0, 10).map(r => r.serial));
+                console.log('🔍 Sample of record serials:', enhancedRecords.slice(0, 10).map(r => r.serial));
 
-                filteredRecords = recordsWithSFAF.filter(record => {
+                filteredRecords = enhancedRecords.filter(record => {
                     // Check if record serial matches any of the unit's assigned serials
                     return this.serialFilter.includes(record.serial);
                 });
-                console.log(`🔍 Serial filter applied: ${filteredRecords.length} of ${recordsWithSFAF.length} records match`);
+                console.log(`🔍 Serial filter applied: ${filteredRecords.length} of ${enhancedRecords.length} records match`);
             }
 
             // ✅ Apply currentFilter if set
@@ -1824,7 +1876,7 @@ class DatabaseViewer {
             return 0;
         }
 
-        // Calculate based on MCEB Publication 7 required fields (Source: db_viewer_js.txt validation)
+        // Calculate based on MC4EB Publication 7, Change 1 required fields (Source: db_viewer_js.txt validation)
         const requiredFields = ['field005', 'field010', 'field102', 'field110', 'field200', 'field300'];
         const optionalImportantFields = ['field113', 'field114', 'field115', 'field301', 'field144'];
 
@@ -1847,20 +1899,20 @@ class DatabaseViewer {
         return Math.round(requiredScore + optionalScore);
     }
 
-    // ✅ ENHANCED: Validate MCEB compliance for SFAF fields
+    // ✅ ENHANCED: Validate MC4EB compliance for SFAF fields
     validateMCEBCompliance(sfafFields) {
         const issues = [];
 
-        // Field 500 occurrence limit (Source: db_viewer_js.txt MCEB validation)
+        // Field 500 occurrence limit (Source: db_viewer_js.txt MC4EB validation)
         const field500Count = this.countFieldOccurrences(sfafFields, '500');
         if (field500Count > 10) {
-            issues.push('Field 500 exceeds maximum 10 occurrences per MCEB Publication 7');
+            issues.push('Field 500 exceeds maximum 10 occurrences per MC4EB Publication 7, Change 1');
         }
 
         // Field 501 occurrence limit
         const field501Count = this.countFieldOccurrences(sfafFields, '501');
         if (field501Count > 30) {
-            issues.push('Field 501 exceeds maximum 30 occurrences per MCEB Publication 7');
+            issues.push('Field 501 exceeds maximum 30 occurrences per MC4EB Publication 7, Change 1');
         }
 
         // Required field validation
@@ -1895,18 +1947,18 @@ class DatabaseViewer {
         };
     }
 
-    // ✅ ENHANCED: Count field occurrences for MCEB limits
+    // ✅ ENHANCED: Count field occurrences for MC4EB limits
     countFieldOccurrences(sfafFields, fieldNumber) {
         return Object.keys(sfafFields).filter(key =>
             key.startsWith(`field${fieldNumber}`)
         ).length;
     }
 
-    // ✅ ENHANCED: Validate frequency format according to MCEB standards
+    // ✅ ENHANCED: Validate frequency format according to MC4EB standards
     isValidFrequencyFormat(frequency) {
         if (!frequency || typeof frequency !== 'string') return false;
 
-        // MCEB Publication 7 frequency formats (Source: db_viewer_js.txt frequency analysis)
+        // MC4EB Publication 7, Change 1 frequency formats (Source: db_viewer_js.txt frequency analysis)
         const patterns = [
             /^K\d+(\.\d+)?$/, // K-band format: K4028
             /^K\d+\(\d+(\.\d+)?\)$/, // K-band with parentheses: K4028(4026.5)
@@ -1921,7 +1973,7 @@ class DatabaseViewer {
     isValidEmissionDesignator(emission) {
         if (!emission || typeof emission !== 'string') return false;
 
-        // MCEB Publication 7 emission designator format: bandwidth + emission class + modulation
+        // MC4EB Publication 7, Change 1 emission designator format: bandwidth + emission class + modulation
         const emissionPattern = /^\d+[KMG]?\d*[A-Z]\d*[A-Z]?$/;
 
         // Common valid formats: 2K70J3E, 16K0F3E, 1M00G7W, etc.
@@ -2027,7 +2079,7 @@ class DatabaseViewer {
                 <div class="sfaf-fields-editor">
                     <!-- Create basic required fields -->
                     <div class="field-section">
-                        <h5>Required Fields (MCEB Publication 7)</h5>
+                        <h5>Required Fields (MC4EB Publication 7, Change 1)</h5>
                         ${this.generateFieldInputs({}, ['field102', 'field110', 'field200', 'field201', 'field202', 'field203', 'field300', 'field301', 'field303'], true)}
                     </div>
                 </div>
@@ -2050,14 +2102,14 @@ class DatabaseViewer {
             <p class="completion-status">
                 Current completion: ${record.completionPercentage || 0}%
                 <span class="compliance-indicator ${record.mcebCompliant?.isCompliant ? 'compliant' : 'non-compliant'}">
-                    ${record.mcebCompliant?.isCompliant ? '✅ MCEB Compliant' : '⚠️ Compliance Issues'}
+                    ${record.mcebCompliant?.isCompliant ? '✅ MC4EB Compliant' : '⚠️ Compliance Issues'}
                 </span>
             </p>
 
             <div class="sfaf-fields-editor">
                 <!-- Required Fields Section -->
                 <div class="field-section">
-                    <h5>Required Fields (MCEB Publication 7)</h5>
+                    <h5>Required Fields (MC4EB Publication 7, Change 1)</h5>
                     ${this.generateFieldInputs(sfafFields, ['field102', 'field110', 'field200', 'field201', 'field202', 'field203', 'field300', 'field301', 'field303'], true)}
                 </div>
 
@@ -2085,7 +2137,7 @@ class DatabaseViewer {
                     Cancel
                 </button>
                 <button class="btn btn-info" onclick="databaseViewer.validateSFAFForm('${record.id}')">
-                    Validate MCEB Compliance
+                    Validate MC4EB Compliance
                 </button>
             </div>
         </div>
@@ -2126,7 +2178,7 @@ class DatabaseViewer {
     `;
     }
 
-    // ✅ ENHANCED: Get field labels for display (MCEB Pub 7 compliant)
+    // ✅ ENHANCED: Get field labels for display (MC4EB Pub 7 CHG 1 compliant)
     getFieldLabel(fieldId) {
         const labels = {
             // Core identification
@@ -2172,7 +2224,7 @@ class DatabaseViewer {
         return labels[fieldId] || fieldId.replace('field', 'Field ');
     }
 
-    // ✅ ENHANCED: Get field hints for user guidance (MCEB Pub 7 compliant)
+    // ✅ ENHANCED: Get field hints for user guidance (MC4EB Pub 7 CHG 1 compliant)
     getFieldHint(fieldId) {
         const hints = {
             'field005': 'CLA = Classification (e.g., UNCLASS, FOUO)',
@@ -2272,7 +2324,7 @@ class DatabaseViewer {
             iracNotesCount: sfafData.success ? (sfafData.marker.irac_notes || []).length : 0,
             iracNotes: sfafData.success ? sfafData.marker.irac_notes || [] : [],
 
-            // Regulatory compliance (Source: database_dump.txt MCEB Publication 7 context)
+            // Regulatory compliance (Source: database_dump.txt MC4EB Publication 7, Change 1 context)
             mcebCompliant: this.checkMCEBCompliance(sfafFields, fieldDefs),
             approvalAuthority: sfafFields.field144 || 'TBD',
             coordinationRequired: this.requiresCoordination(sfafFields),
@@ -2390,7 +2442,7 @@ class DatabaseViewer {
     }
 
     checkMCEBCompliance(sfafFields, fieldDefs) {
-        // MCEB Publication 7 compliance checks (Source: database_dump.txt system_config)
+        // MC4EB Publication 7, Change 1 compliance checks (Source: database_dump.txt system_config)
         const complianceIssues = [];
 
         // Field 500/501 occurrence limits (Source: database_dump.txt system_config)
@@ -2671,7 +2723,7 @@ class DatabaseViewer {
         `).join('');
     }
 
-    // Analytics dashboard leveraging MCEB Publication 7 compliance data (Source: handlers.txt, models.txt)
+    // Analytics dashboard leveraging MC4EB Publication 7, Change 1 compliance data (Source: handlers.txt, models.txt)
     async loadAnalytics() {
         try {
             console.log('📊 Loading analytics data...');
@@ -2804,19 +2856,19 @@ class DatabaseViewer {
             </div>
         `;
 
-            // ✅ SAFE: MCEB Publication 7 Compliance Report with validation
+            // ✅ SAFE: MC4EB Publication 7, Change 1 Compliance Report with validation
             const complianceReport = await this.generateComplianceReport(markers);
             const complianceHtml = `
             <div class="compliance-grid">
                 <div class="compliance-item ${complianceReport.field500Compliance ? 'compliant' : 'non-compliant'}">
                     <span class="compliance-label">Field 500 Compliance</span>
                     <span class="compliance-status">${complianceReport.field500Compliance ? '✅ Compliant' : '❌ Non-Compliant'}</span>
-                    <span class="compliance-detail">Max 10 occurrences per MCEB Pub 7</span>
+                    <span class="compliance-detail">Max 10 occurrences per MC4EB Pub 7 CHG 1</span>
                 </div>
                 <div class="compliance-item ${complianceReport.field501Compliance ? 'compliant' : 'non-compliant'}">
                     <span class="compliance-label">Field 501 Compliance</span>
                     <span class="compliance-status">${complianceReport.field501Compliance ? '✅ Compliant' : '❌ Non-Compliant'}</span>
-                    <span class="compliance-detail">Max 30 occurrences per MCEB Pub 7</span>
+                    <span class="compliance-detail">Max 30 occurrences per MC4EB Pub 7 CHG 1</span>
                 </div>
                 <div class="compliance-item">
                     <span class="compliance-label">IRAC Categories</span>
@@ -2922,7 +2974,7 @@ class DatabaseViewer {
         return stats;
     }
 
-    // MCEB Publication 7 compliance analysis (Source: handlers.txt validation rules)
+    // MC4EB Publication 7, Change 1 compliance analysis (Source: handlers.txt validation rules)
     async generateComplianceReport(markers) {
         if (markers.length === 0) {
             return { spread: 0, center: { lat: 0, lng: 0 }, bounds: { north: 0, south: 0, east: 0, west: 0 } };
@@ -3176,7 +3228,7 @@ class DatabaseViewer {
             '900': 'Comments and Special Requirements'
         };
 
-        let html = '<div class="sfaf-fields-section"><h4>SFAF Fields (MCEB Publication 7)</h4>';
+        let html = '<div class="sfaf-fields-section"><h4>SFAF Fields (MC4EB Publication 7, Change 1)</h4>';
 
         // Group fields by series (Source: services.txt field organization)
         const groupedFields = {};
@@ -3539,7 +3591,9 @@ class DatabaseViewer {
 
                 try {
                     let totalImported = 0;
-                    let totalErrors = 0;
+                    let totalFailed = 0;
+                    let totalRecords = 0;
+                    const allErrors = [];
 
                     for (const file of files) {
                         try {
@@ -3547,32 +3601,79 @@ class DatabaseViewer {
                             const text = await file.text();
                             const result = await this.importSFAFRecords(text);
 
-                            // ✅ CRITICAL FIX: Proper result validation
+                            // ✅ Collect import statistics
                             if (result && typeof result === 'object') {
+                                totalRecords += result.total || 0;
+                                totalImported += result.imported || 0;
+
+                                // Calculate failed records for this file
+                                const fileFailed = (result.total || 0) - (result.imported || 0);
+                                totalFailed += fileFailed;
+
                                 if (result.success) {
-                                    totalImported += result.imported || 0;
                                     console.log(`✅ Successfully imported ${result.imported} records from ${file.name}`);
-                                } else {
-                                    totalErrors++;
+                                }
+
+                                // Collect detailed error messages
+                                if (result.errorMessages && result.errorMessages.length > 0) {
+                                    result.errorMessages.forEach(err => {
+                                        // Handle different error object structures
+                                        const errorMsg = err.error || err.message || err.toString();
+                                        const lineNum = err.line_number || err.line || '?';
+
+                                        allErrors.push({
+                                            file: file.name,
+                                            line: lineNum,
+                                            error: errorMsg
+                                        });
+                                    });
+                                    console.error(`❌ Failed to import ${file.name}. Errors:`);
+                                    result.errorMessages.forEach((err, idx) => {
+                                        const errorMsg = err.error || err.message || err.toString();
+                                        const lineNum = err.line_number || err.line || '?';
+                                        console.error(`  ${idx + 1}. Line ${lineNum}: ${errorMsg}`);
+                                    });
+                                } else if (result.error) {
+                                    allErrors.push({
+                                        file: file.name,
+                                        line: '?',
+                                        error: result.error
+                                    });
                                     console.error(`❌ Failed to import ${file.name}:`, result.error);
                                 }
                             } else {
-                                totalErrors++;
+                                totalFailed++;
+                                allErrors.push({
+                                    file: file.name,
+                                    line: '?',
+                                    error: 'Invalid result from server'
+                                });
                                 console.error(`❌ Invalid result from ${file.name}:`, result);
                             }
 
                         } catch (error) {
-                            totalErrors++;
+                            totalFailed++;
+                            allErrors.push({
+                                file: file.name,
+                                line: '?',
+                                error: error.message || 'Unknown error'
+                            });
                             console.error(`❌ Error processing ${file.name}:`, error);
                         }
                     }
 
-                    // Show results
+                    // Show import summary modal
+                    this.showImportSummaryModal({
+                        totalRecords: totalRecords,
+                        successCount: totalImported,
+                        failedCount: totalFailed,
+                        errorCount: allErrors.length,
+                        errors: allErrors
+                    });
+
+                    // Refresh display if any records were imported
                     if (totalImported > 0) {
-                        this.showSuccess(`✅ Successfully imported ${totalImported} SFAF records`);
-                        await this.loadSFAFRecords(); // Refresh display
-                    } else {
-                        this.showError(`❌ Failed to import SFAF files. ${totalErrors} errors occurred.`);
+                        await this.loadSFAFRecords();
                     }
 
                     // Clear file input for next use
@@ -3591,6 +3692,9 @@ class DatabaseViewer {
     async importSFAFRecords(sfafText) {
         try {
             console.log('📥 Starting SFAF import process...');
+
+            // Show progress indicator
+            this.showLoading(true, 'Importing SFAF records...');
 
             // Create a Blob from the text content
             const blob = new Blob([sfafText], { type: 'text/plain' });
@@ -3636,6 +3740,9 @@ class DatabaseViewer {
                 console.warn('⚠️ Import Errors:', importResults.errors);
             }
 
+            // Hide progress indicator
+            this.showLoading(false);
+
             return {
                 success: importResults.successful_count > 0,
                 imported: importResults.successful_count,
@@ -3646,12 +3753,243 @@ class DatabaseViewer {
 
         } catch (error) {
             console.error('❌ Import failed:', error);
+
+            // Hide progress indicator on error
+            this.showLoading(false);
+
             return {
                 success: false,
                 imported: 0,
                 errors: 1,
                 error: error.message
             };
+        }
+    }
+
+    showImportSummaryModal(summary) {
+        const { totalRecords, successCount, failedCount, errorCount, errors } = summary;
+
+        // Determine overall status
+        const allSuccess = errorCount === 0;
+        const partialSuccess = successCount > 0 && errorCount > 0;
+        const allFailed = successCount === 0 && errorCount > 0;
+
+        // Build modal content
+        let modalContent = `
+            <div class="import-summary">
+                <div class="import-summary-stats">
+                    ${allSuccess ? '<div class="import-status-icon success">✅</div>' : ''}
+                    ${partialSuccess ? '<div class="import-status-icon warning">⚠️</div>' : ''}
+                    ${allFailed ? '<div class="import-status-icon error">❌</div>' : ''}
+
+                    <h3>${allSuccess ? 'Import Successful' : (allFailed ? 'Import Failed' : 'Import Partially Successful')}</h3>
+
+                    <div class="import-stats-grid">
+                        <div class="import-stat">
+                            <div class="import-stat-value">${totalRecords}</div>
+                            <div class="import-stat-label">Total Records</div>
+                        </div>
+                        <div class="import-stat success">
+                            <div class="import-stat-value">${successCount}</div>
+                            <div class="import-stat-label">Successfully Imported</div>
+                        </div>
+                        <div class="import-stat ${errorCount > 0 ? 'error' : ''}">
+                            <div class="import-stat-value">${failedCount}</div>
+                            <div class="import-stat-label">Failed Records</div>
+                        </div>
+                        <div class="import-stat ${errorCount > 0 ? 'error' : ''}">
+                            <div class="import-stat-value">${errorCount}</div>
+                            <div class="import-stat-label">Total Errors</div>
+                        </div>
+                    </div>
+                </div>
+        `;
+
+        // Add detailed errors section if there are errors
+        if (errors && errors.length > 0) {
+            modalContent += `
+                <div class="import-errors-section">
+                    <button type="button" class="btn btn-secondary" onclick="databaseViewer.toggleImportErrors()" id="toggleErrorsBtn">
+                        Show Detailed Errors ▼
+                    </button>
+
+                    <div id="importErrorDetails" style="display: none; margin-top: 15px;">
+                        <div class="import-errors-list">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 30%">File</th>
+                                        <th style="width: 10%">Line</th>
+                                        <th style="width: 60%">Error</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+            `;
+
+            errors.forEach((err, idx) => {
+                modalContent += `
+                    <tr>
+                        <td><code>${err.file}</code></td>
+                        <td><code>${err.line}</code></td>
+                        <td>${err.error}</td>
+                    </tr>
+                `;
+            });
+
+            modalContent += `
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        modalContent += `</div>`;
+
+        // Add custom styles for import summary
+        const style = `
+            <style>
+                #editModal .modal-dialog {
+                    max-width: 700px;
+                }
+                .import-summary {
+                    padding: 20px 0;
+                }
+                .import-summary-stats {
+                    text-align: center;
+                    margin-bottom: 25px;
+                }
+                .import-status-icon {
+                    font-size: 64px;
+                    margin-bottom: 15px;
+                }
+                .import-status-icon.success { color: #10b981; }
+                .import-status-icon.warning { color: #f59e0b; }
+                .import-status-icon.error { color: #ef4444; }
+                .import-summary h3 {
+                    margin: 15px 0 0 0;
+                    color: #e2e8f0;
+                    font-size: 24px;
+                    font-weight: 600;
+                }
+                .import-stats-grid {
+                    display: grid;
+                    grid-template-columns: repeat(4, 1fr);
+                    gap: 12px;
+                    margin-top: 30px;
+                }
+                .import-stat {
+                    padding: 20px 15px;
+                    background: rgba(30, 41, 59, 0.6);
+                    border-radius: 12px;
+                    border: 2px solid rgba(71, 85, 105, 0.5);
+                }
+                .import-stat.success {
+                    background: rgba(6, 78, 59, 0.4);
+                    border-color: rgba(16, 185, 129, 0.6);
+                }
+                .import-stat.error {
+                    background: rgba(127, 29, 29, 0.4);
+                    border-color: rgba(239, 68, 68, 0.6);
+                }
+                .import-stat-value {
+                    font-size: 36px;
+                    font-weight: 700;
+                    color: #f1f5f9;
+                    line-height: 1;
+                }
+                .import-stat-label {
+                    font-size: 11px;
+                    color: #94a3b8;
+                    margin-top: 8px;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                    font-weight: 500;
+                }
+                .import-errors-section {
+                    margin-top: 25px;
+                    padding-top: 25px;
+                    border-top: 1px solid rgba(71, 85, 105, 0.5);
+                }
+                #toggleErrorsBtn {
+                    background: rgba(71, 85, 105, 0.6);
+                    border: 1px solid rgba(100, 116, 139, 0.5);
+                    color: #cbd5e1;
+                    padding: 10px 20px;
+                    border-radius: 8px;
+                    font-size: 14px;
+                    font-weight: 500;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                }
+                #toggleErrorsBtn:hover {
+                    background: rgba(100, 116, 139, 0.7);
+                    border-color: rgba(148, 163, 184, 0.6);
+                }
+                .import-errors-list {
+                    max-height: 350px;
+                    overflow-y: auto;
+                    background: rgba(15, 23, 42, 0.6);
+                    padding: 0;
+                    border-radius: 12px;
+                    border: 1px solid rgba(71, 85, 105, 0.5);
+                }
+                .import-errors-list table {
+                    margin-bottom: 0;
+                    font-size: 13px;
+                    width: 100%;
+                }
+                .import-errors-list thead {
+                    position: sticky;
+                    top: 0;
+                    z-index: 10;
+                }
+                .import-errors-list th {
+                    background: rgba(30, 41, 59, 0.95);
+                    color: #94a3b8;
+                    padding: 12px 15px;
+                    font-size: 11px;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                    border-bottom: 1px solid rgba(71, 85, 105, 0.5);
+                }
+                .import-errors-list td {
+                    padding: 12px 15px;
+                    color: #cbd5e1;
+                    border-bottom: 1px solid rgba(51, 65, 85, 0.3);
+                }
+                .import-errors-list tbody tr:hover {
+                    background: rgba(51, 65, 85, 0.3);
+                }
+                .import-errors-list code {
+                    background: rgba(51, 65, 85, 0.6);
+                    color: #fbbf24;
+                    padding: 3px 8px;
+                    border-radius: 4px;
+                    font-size: 12px;
+                    font-family: 'Monaco', 'Menlo', monospace;
+                }
+            </style>
+        `;
+
+        // Show modal
+        this.showModal('SFAF Import Summary', style + modalContent);
+    }
+
+    toggleImportErrors() {
+        const errorDetails = document.getElementById('importErrorDetails');
+        const toggleBtn = document.getElementById('toggleErrorsBtn');
+
+        if (errorDetails && toggleBtn) {
+            if (errorDetails.style.display === 'none') {
+                errorDetails.style.display = 'block';
+                toggleBtn.innerHTML = 'Hide Detailed Errors ▲';
+            } else {
+                errorDetails.style.display = 'none';
+                toggleBtn.innerHTML = 'Show Detailed Errors ▼';
+            }
         }
     }
 
@@ -3674,7 +4012,7 @@ class DatabaseViewer {
         }
     }
 
-    // MCEB Publication 7 Compliance Validation
+    // MC4EB Publication 7, Change 1 Compliance Validation
     validateSFAFImport(record) {
         const validationIssues = [];
 
@@ -4015,7 +4353,7 @@ class DatabaseViewer {
                     <div class="form-group">
                         <label>Occurrence Number:</label>
                         <input type="number" name="occurrence_number" min="1" max="30" required>
-                        <small class="field-help">Field 500: max 10, Field 501: max 30 (MCEB Pub 7)</small>
+                        <small class="field-help">Field 500: max 10, Field 501: max 30 (MC4EB Pub 7 CHG 1)</small>
                     </div>
                 </div>
 
@@ -4325,6 +4663,7 @@ class DatabaseViewer {
             const totalRecords = this.selectedItems.size;
             const selectedArray = Array.from(this.selectedItems);
 
+            console.log(`🗑️ Starting bulk delete of ${totalRecords} records:`, selectedArray);
             this.showLoading(true, `Deleting ${totalRecords} record${totalRecords !== 1 ? 's' : ''}...`);
 
             // Delete with progress tracking
@@ -4333,19 +4672,24 @@ class DatabaseViewer {
                 this.showLoading(true, `Deleting record ${i + 1} of ${totalRecords}...`);
 
                 try {
-                    const response = await fetch(`/api/markers/${recordId}`, {
+                    console.log(`🗑️ Deleting SFAF record ${i + 1}/${totalRecords}: ${recordId}`);
+                    const response = await fetch(`/api/sfaf/${recordId}`, {
                         method: 'DELETE',
                         headers: { 'Content-Type': 'application/json' }
                     });
 
                     if (response.ok) {
                         successCount++;
+                        console.log(`✅ Successfully deleted record ${recordId}`);
                     } else {
                         errorCount++;
-                        errors.push({ id: recordId, error: `HTTP ${response.status}` });
+                        const responseText = await response.text();
+                        console.error(`❌ Failed to delete record ${recordId}: HTTP ${response.status} - ${responseText}`);
+                        errors.push({ id: recordId, error: `HTTP ${response.status}: ${responseText}` });
                     }
                 } catch (error) {
                     errorCount++;
+                    console.error(`❌ Error deleting record ${recordId}:`, error);
                     errors.push({ id: recordId, error: error.message });
                 }
             }
@@ -4378,6 +4722,61 @@ class DatabaseViewer {
     }
 
     /**
+     * Delete all SFAF records with confirmation
+     */
+    async deleteAllSFAFs() {
+        const totalRecords = this.totalDatabaseRecords || 0;
+
+        if (totalRecords === 0) {
+            this.showError('No records to delete');
+            return;
+        }
+
+        if (!confirm(`⚠️ WARNING: Delete ALL ${totalRecords} SFAF records?\n\n` +
+                     `This will permanently delete:\n` +
+                     `- ALL ${totalRecords} SFAF records\n` +
+                     `- ALL associated markers\n` +
+                     `- ALL geometries and IRAC notes\n\n` +
+                     `THIS ACTION CANNOT BE UNDONE!\n\n` +
+                     `Type 'DELETE ALL' in the next prompt to confirm.`)) {
+            return;
+        }
+
+        const confirmation = prompt('Type "DELETE ALL" to confirm deletion of all records:');
+        if (confirmation !== 'DELETE ALL') {
+            this.showError('Deletion cancelled - confirmation text did not match');
+            return;
+        }
+
+        try {
+            this.showLoading(true, `Deleting all ${totalRecords} records...`);
+
+            const response = await fetch('/api/sfaf/delete-all', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to delete all records: ${response.status} ${response.statusText}`);
+            }
+
+            const result = await response.json();
+
+            this.showLoading(false);
+            this.showSuccess(`Successfully deleted all ${result.deleted_count || totalRecords} SFAF records`);
+
+            // Clear selection and reload
+            this.selectedItems.clear();
+            this.updateBulkActionButtons();
+            this.loadSFAFRecords();
+        } catch (error) {
+            this.showLoading(false);
+            console.error('Delete all failed:', error);
+            this.showError(`Failed to delete all records: ${error.message}`);
+        }
+    }
+
+    /**
      * Delete a single record with confirmation
      */
     async deleteSingleRecord(recordId) {
@@ -4385,7 +4784,7 @@ class DatabaseViewer {
         const recordInfo = record ? `${record.serial || 'Unknown'}` : 'this record';
 
         if (!confirm(`Delete ${recordInfo} and all associated data?\n\n` +
-                     `This will permanently delete:\n- SFAF record\n- Marker\n- Geometry (if any)\n` +
+                     `This will permanently delete:\n- SFAF record\n- Marker (if any)\n- Geometry (if any)\n` +
                      `- IRAC notes\n\nThis action cannot be undone.`)) {
             return;
         }
@@ -4393,7 +4792,8 @@ class DatabaseViewer {
         try {
             this.showLoading(true, 'Deleting record...');
 
-            const response = await fetch(`/api/markers/${recordId}`, {
+            // Delete SFAF record (which will cascade to marker if it exists)
+            const response = await fetch(`/api/sfaf/${recordId}`, {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' }
             });
@@ -4453,7 +4853,7 @@ class DatabaseViewer {
                             exported_at: new Date().toISOString(),
                             total_count: enhancedMarkers.length,
                             markers: enhancedMarkers,
-                            compliance: 'MCEB Publication 7',
+                            compliance: 'MC4EB Publication 7, Change 1',
                             version: '1.0'
                         };
                         filename = `SFAF_Markers_${new Date().toISOString().split('T')[0]}.json`;
@@ -4465,7 +4865,7 @@ class DatabaseViewer {
                     exportData = {
                         type: 'SFAF_Records_Export',
                         exported_at: new Date().toISOString(),
-                        compliance: 'MCEB Publication 7',
+                        compliance: 'MC4EB Publication 7, Change 1',
                         version: '1.0',
                         records: [] // Will be populated by loading SFAF data for each marker
                     };
@@ -4483,7 +4883,7 @@ class DatabaseViewer {
                             total_count: iracData.notes.length,
                             notes: iracData.notes,
                             categories: [...new Set(iracData.notes.map(note => note.category))],
-                            compliance: 'MCEB Publication 7',
+                            compliance: 'MC4EB Publication 7, Change 1',
                             version: '1.0'
                         };
                         filename = `IRAC_Notes_${new Date().toISOString().split('T')[0]}.json`;
@@ -4515,7 +4915,7 @@ class DatabaseViewer {
                             frequency_analysis: this.analyzeFrequencyDistribution(markersResult.markers),
                             geographic_distribution: this.analyzeGeographicDistribution(markersResult.markers),
                             compliance_report: complianceReport,
-                            compliance: 'MCEB Publication 7',
+                            compliance: 'MC4EB Publication 7, Change 1',
                             version: '1.0'
                         };
                         filename = `SFAF_Analytics_${new Date().toISOString().split('T')[0]}.json`;
@@ -4716,26 +5116,21 @@ class DatabaseViewer {
     previousPage() {
         if (this.currentPage > 1) {
             this.currentPage--;
-            // Re-render current data with new page
-            if (this.currentSFAFData && this.currentSFAFData.length > 0) {
-                this.renderEnhancedSFAFTable(this.currentSFAFData);
-            } else {
-                this.loadData();
-            }
+            // Load previous page from API
+            this.loadSFAFRecords();
+            // Scroll to top of table
+            this.scrollToTopOfTable();
         }
     }
 
     nextPage() {
-        const totalItems = this.currentSFAFData ? this.currentSFAFData.length : this.getTotalItemsForCurrentTab();
-        const totalPages = Math.ceil(totalItems / this.itemsPerPage);
+        const totalPages = Math.ceil(this.totalDatabaseRecords / this.itemsPerPage);
         if (this.currentPage < totalPages) {
             this.currentPage++;
-            // Re-render current data with new page
-            if (this.currentSFAFData && this.currentSFAFData.length > 0) {
-                this.renderEnhancedSFAFTable(this.currentSFAFData);
-            } else {
-                this.loadData();
-            }
+            // Load next page from API
+            this.loadSFAFRecords();
+            // Scroll to top of table
+            this.scrollToTopOfTable();
         }
     }
 
@@ -5001,9 +5396,23 @@ class DatabaseViewer {
             input.value = '';
         });
 
+        // Clear the main filter dropdowns
+        const completionStatusFilter = document.getElementById('completionStatusFilter');
+        if (completionStatusFilter) completionStatusFilter.value = '';
+
+        const agencyFilter = document.getElementById('agencyFilter');
+        if (agencyFilter) agencyFilter.value = '';
+
+        const frequencyBandFilter = document.getElementById('frequencyBandFilter');
+        if (frequencyBandFilter) frequencyBandFilter.value = '';
+
+        // Clear search input
+        const searchInput = document.getElementById('sfafRecordsSearch');
+        if (searchInput) searchInput.value = '';
+        this.currentFilter = '';
+
         this.currentPage = 1;
-        this.reloadAssignmentData();
-        this.updateFilterStats();
+        this.loadData(); // Use loadData instead of reloadAssignmentData for SFAF tab
 
         this.showSuccess('All filters cleared');
     }
@@ -5132,36 +5541,36 @@ class DatabaseViewer {
     getHeadersForView(viewMode) {
         const headerConfigs = {
             summary: [
-                { field: 'select', label: '<input type="checkbox" id="selectAllCheckbox" title="Select All">', class: 'checkbox-col', filterable: false },
+                { field: 'select', label: '<input type="checkbox" id="selectAllCheckbox" title="Select All">', class: 'checkbox-col sticky-col', filterable: false },
                 { field: 'field102', label: '102 - Agency Serial', class: 'serial-col' },
                 { field: 'field110', label: '110 - Frequency', class: 'frequency-col' },
                 { field: 'field301', label: '301 - City/Location', class: 'location-col' },
                 { field: 'field200', label: '200 - Agency', class: 'agency-col' },
                 { field: 'status', label: 'SFAF Status', class: 'status-col' },
-                { field: 'actions', label: 'Actions', class: 'actions-col', filterable: false }
+                { field: 'actions', label: 'Actions', class: 'actions-col sticky-col', filterable: false }
             ],
             spreadsheet: this.getAllFieldsHeaders(),
             technical: [
-                { field: 'select', label: '<input type="checkbox" id="selectAllCheckbox" title="Select All">', class: 'checkbox-col', filterable: false },
+                { field: 'select', label: '<input type="checkbox" id="selectAllCheckbox" title="Select All">', class: 'checkbox-col sticky-col', filterable: false },
                 { field: 'field102', label: '102 - Agency Serial' },
                 { field: 'field110', label: '110 - Frequency' },
                 { field: 'field114', label: '114 - Emission Designator' },
                 { field: 'field115', label: '115 - Power (W###/K###)' },
                 { field: 'field300', label: '300 - State/Country' },
                 { field: 'field301', label: '301 - City/Location' },
-                { field: 'actions', label: 'Actions', filterable: false }
+                { field: 'actions', label: 'Actions', class: 'actions-col sticky-col', filterable: false }
             ],
             administrative: [
-                { field: 'select', label: '<input type="checkbox" id="selectAllCheckbox" title="Select All">', class: 'checkbox-col', filterable: false },
+                { field: 'select', label: '<input type="checkbox" id="selectAllCheckbox" title="Select All">', class: 'checkbox-col sticky-col', filterable: false },
                 { field: 'field102', label: '102 - Agency Serial' },
                 { field: 'field200', label: '200 - Agency' },
                 { field: 'field140', label: '140 - Date' },
                 { field: 'field141', label: '141 - Date' },
-                { field: 'compliance', label: 'MCEB Compliance' },
-                { field: 'actions', label: 'Actions', filterable: false }
+                { field: 'compliance', label: 'MC4EB Compliance' },
+                { field: 'actions', label: 'Actions', class: 'actions-col sticky-col', filterable: false }
             ],
             compliance: [
-                { field: 'select', label: '<input type="checkbox" id="selectAllCheckbox" title="Select All">', class: 'checkbox-col', filterable: false },
+                { field: 'select', label: '<input type="checkbox" id="selectAllCheckbox" title="Select All">', class: 'checkbox-col sticky-col', filterable: false },
                 { field: 'field102', label: '102 - Agency Serial' },
                 { field: 'field200', label: '200 - Agency' },
                 { field: 'field005', label: '005 - Status' },
@@ -5172,9 +5581,9 @@ class DatabaseViewer {
                 { field: 'field306', label: '306 - Authorization Radius' },
                 { field: 'field500', label: '500 - Coordination' },
                 { field: 'field501', label: '501 - Approval' },
-                { field: 'compliance', label: 'MCEB Compliance Status' },
+                { field: 'compliance', label: 'MC4EB Compliance Status' },
                 { field: 'completionRate', label: 'Completion %' },
-                { field: 'actions', label: 'Actions', filterable: false }
+                { field: 'actions', label: 'Actions', class: 'actions-col sticky-col', filterable: false }
             ]
         };
 
@@ -5211,7 +5620,7 @@ class DatabaseViewer {
             { field: 'serial', label: 'Serial (102)', class: 'serial-col sticky-col frozen-col' }
         ];
 
-        // MCEB Pub 7 field labels - Complete and accurate naming
+        // MC4EB Pub 7 CHG 1 field labels - Complete and accurate naming
         const fieldLabels = {
             // 005-020 Series: Administrative Data
             field005: '005 - Security Classification',
@@ -5721,7 +6130,11 @@ class DatabaseViewer {
         this.safeUpdateElement('incompleteSFAFRecords', stats.incomplete);
         this.safeUpdateElement('compliantRecords', stats.compliant);
 
-        console.log('📊 SFAF Summary Statistics Updated:', stats);
+        // Update database total count
+        const dbTotal = this.totalDatabaseRecords || stats.total;
+        this.safeUpdateElement('databaseTotalRecords', `of ${dbTotal} in DB`);
+
+        console.log('📊 SFAF Summary Statistics Updated:', stats, '| DB Total:', dbTotal);
     }
 
     safeUpdateElement(elementId, value) {
@@ -5767,7 +6180,7 @@ class DatabaseViewer {
                     stats.empty++;
                 }
 
-                // MCEB Publication 7 compliance analysis with safe access
+                // MC4EB Publication 7, Change 1 compliance analysis with safe access
                 const mcebCompliant = record.mcebCompliant || { isCompliant: false };
                 if (mcebCompliant.isCompliant) {
                     stats.compliant++;
@@ -5801,13 +6214,17 @@ class DatabaseViewer {
         if (recordsDisplayInfo) {
             const startIndex = ((this.currentPage || 1) - 1) * (this.itemsPerPage || 25);
             const endIndex = Math.min(startIndex + (this.itemsPerPage || 25), recordCount);
-            recordsDisplayInfo.textContent = `Showing ${startIndex + 1}-${endIndex} of ${recordCount} records`;
+            // Use total database records instead of current page count
+            const totalRecords = this.totalDatabaseRecords || recordCount;
+            recordsDisplayInfo.textContent = `Showing ${startIndex + 1}-${endIndex} of ${totalRecords} records`;
         }
 
         // Update page info
         const pageInfo = document.getElementById('sfafPageInfo');
         if (pageInfo) {
-            const totalPages = Math.ceil(recordCount / (this.itemsPerPage || 25));
+            // Use total database records for calculating total pages
+            const totalRecords = this.totalDatabaseRecords || recordCount;
+            const totalPages = Math.ceil(totalRecords / (this.itemsPerPage || 25));
             pageInfo.textContent = `Page ${this.currentPage || 1} of ${totalPages || 1}`;
         }
 
@@ -5815,7 +6232,9 @@ class DatabaseViewer {
     }
 
     updatePaginationControls(totalRecords) {
-        const totalPages = Math.ceil(totalRecords / this.itemsPerPage);
+        // Use total database records for pagination, not just current view count
+        const actualTotalRecords = this.totalDatabaseRecords || totalRecords;
+        const totalPages = Math.ceil(actualTotalRecords / this.itemsPerPage);
 
         // Update button states
         const firstPageBtn = document.getElementById('firstPageBtn');
@@ -5827,6 +6246,14 @@ class DatabaseViewer {
         if (prevPageBtn) prevPageBtn.disabled = this.currentPage <= 1;
         if (nextPageBtn) nextPageBtn.disabled = this.currentPage >= totalPages;
         if (lastPageBtn) lastPageBtn.disabled = this.currentPage >= totalPages;
+
+        // Update pagination display text
+        const recordsDisplayInfo = document.getElementById('recordsDisplayInfo');
+        if (recordsDisplayInfo) {
+            const startIndex = (this.currentPage - 1) * this.itemsPerPage;
+            const endIndex = Math.min(startIndex + this.itemsPerPage, actualTotalRecords);
+            recordsDisplayInfo.textContent = `Showing ${startIndex + 1}-${endIndex} of ${actualTotalRecords} records`;
+        }
     }
 
     // Supporting function for DOM updates
@@ -5855,8 +6282,9 @@ class DatabaseViewer {
         // Update pagination info
         const recordsDisplayInfo = document.getElementById('recordsDisplayInfo');
         if (recordsDisplayInfo) {
-            const visibleCount = Math.min(stats.total, this.itemsPerPage);
-            recordsDisplayInfo.textContent = `Showing ${visibleCount} of ${stats.total} records`;
+            const startIndex = ((this.currentPage || 1) - 1) * (this.itemsPerPage || 25);
+            const endIndex = Math.min(startIndex + (this.itemsPerPage || 25), stats.total);
+            recordsDisplayInfo.textContent = `Showing ${startIndex + 1}-${endIndex} of ${stats.total} records`;
         }
 
         // Update filter results count
@@ -5884,7 +6312,7 @@ class DatabaseViewer {
                 <span class="stat-value">${stats.completionPercentage}%</span>
             </div>
             <div class="stat-item">
-                <span class="stat-label">MCEB Compliance</span>
+                <span class="stat-label">MC4EB Compliance</span>
                 <span class="stat-value">${stats.compliancePercentage}%</span>
             </div>
             <div class="stat-item">
@@ -5899,7 +6327,7 @@ class DatabaseViewer {
         if (complianceReport) {
             complianceReport.innerHTML = `
             <div class="compliance-summary">
-                <h4>MCEB Publication 7 Compliance Status</h4>
+                <h4>MC4EB Publication 7, Change 1 Compliance Status</h4>
                 <div class="compliance-stats">
                     <div class="compliance-item compliant">
                         <span>Compliant Records:</span>
@@ -6020,7 +6448,7 @@ class DatabaseViewer {
             </div>
             <div class="record-metadata">
                 <p>Completion: ${record.sfafCompletionPercentage || 0}%</p>
-                <p>MCEB Compliant: ${record.mcebCompliant?.isCompliant ? '✅ Yes' : '❌ No'}</p>
+                <p>MC4EB Compliant: ${record.mcebCompliant?.isCompliant ? '✅ Yes' : '❌ No'}</p>
             </div>
         </div>
     `;
@@ -6174,7 +6602,7 @@ class DatabaseViewer {
         // Update all analytics sections with error state
         this.updateAnalyticsElement('systemStats', errorContent);
         this.updateAnalyticsElement('frequencyChart', this.generateErrorPlaceholder('Frequency Distribution'));
-        this.updateAnalyticsElement('complianceReport', this.generateErrorPlaceholder('MCEB Compliance Report'));
+        this.updateAnalyticsElement('complianceReport', this.generateErrorPlaceholder('MC4EB Compliance Report'));
         this.updateAnalyticsElement('geoStats', this.generateErrorPlaceholder('Geographic Distribution'));
 
         console.log('📊 Analytics error state rendered');
@@ -6311,12 +6739,12 @@ class DatabaseViewer {
                         <div class="compliance-item ${complianceReport.field500Compliance ? 'compliant' : 'non-compliant'}">
                             <span class="compliance-label">Field 500 Compliance</span>
                             <span class="compliance-status">${complianceReport.field500Compliance ? '✅ Compliant' : '❌ Non-Compliant'}</span>
-                            <span class="compliance-detail">Max 10 occurrences per MCEB Pub 7</span>
+                            <span class="compliance-detail">Max 10 occurrences per MC4EB Pub 7 CHG 1</span>
                         </div>
                         <div class="compliance-item ${complianceReport.field501Compliance ? 'compliant' : 'non-compliant'}">
                             <span class="compliance-label">Field 501 Compliance</span>
                             <span class="compliance-status">${complianceReport.field501Compliance ? '✅ Compliant' : '❌ Non-Compliant'}</span>
-                            <span class="compliance-detail">Max 30 occurrences per MCEB Pub 7</span>
+                            <span class="compliance-detail">Max 30 occurrences per MC4EB Pub 7 CHG 1</span>
                         </div>
                         <div class="compliance-item">
                             <span class="compliance-label">IRAC Categories</span>
@@ -7234,7 +7662,7 @@ class DatabaseViewer {
             <h1>🌍 SFAF Plotter Geographic Analysis Report</h1>
             <p>Military Frequency Coordination Database - Geographic Distribution Analysis</p>
             <p><strong>Generated:</strong> ${reportDate} | <strong>Region:</strong> ${region}</p>
-            <p><strong>Compliance:</strong> MCEB Publication 7 Standards</p>
+            <p><strong>Compliance:</strong> MC4EB Publication 7, Change 1 Standards</p>
         </div>
 
         <div class="section">
@@ -7405,7 +7833,7 @@ class DatabaseViewer {
                     <div class="stat-label" style="color: rgba(255,255,255,0.8);">Geographic Theater</div>
                 </div>
                 <div class="stat-card" style="background: rgba(255,255,255,0.1); border-left: 4px solid white; color: white;">
-                    <div class="stat-value" style="color: white;">MCEB Pub 7</div>
+                    <div class="stat-value" style="color: white;">MC4EB Pub 7 CHG 1</div>
                     <div class="stat-label" style="color: rgba(255,255,255,0.8);">Compliance Standard</div>
                 </div>
             </div>
@@ -7519,7 +7947,7 @@ class DatabaseViewer {
                 <p><strong>Precision:</strong> 6 decimal places (±0.111 meters at equator)</p>
                 <p><strong>Distance Calculations:</strong> Haversine formula for great-circle distances</p>
                 <p><strong>Projection:</strong> Geographic coordinate system (unprojected)</p>
-                <p><strong>Compliance:</strong> MCEB Publication 7 coordinate standards</p>
+                <p><strong>Compliance:</strong> MC4EB Publication 7, Change 1 coordinate standards</p>
             </div>
         </div>
 
@@ -7565,7 +7993,7 @@ class DatabaseViewer {
         <div class="footer">
             <p><strong>Report Generated:</strong> ${reportDate}</p>
             <p><strong>System:</strong> SFAF Plotter Database Viewer v1.0</p>
-            <p><strong>Compliance:</strong> MCEB Publication 7 Standards</p>
+            <p><strong>Compliance:</strong> MC4EB Publication 7, Change 1 Standards</p>
             <p><strong>Data Source:</strong> Military Frequency Coordination Database</p>
             <p><strong>Coordinate System:</strong> WGS84 Geographic</p>
             <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #ecf0f1;">
@@ -7960,7 +8388,7 @@ class DatabaseViewer {
                     title: 'SFAF Plotter Comprehensive Analysis Report',
                     generated: new Date().toISOString(),
                     system: 'SFAF Plotter Database Viewer v1.0',
-                    compliance: 'MCEB Publication 7 Standards',
+                    compliance: 'MC4EB Publication 7, Change 1 Standards',
                     analyst: 'Automated System Analysis',
                     classification: 'FOR OFFICIAL USE ONLY'
                 },
@@ -8417,7 +8845,7 @@ class DatabaseViewer {
                 validation.dataTypes.issues.push(...dataTypeIssues);
             }
 
-            // ✅ MCEB Publication 7 Specific Validations (Source: db_viewer_js.txt MCEB compliance)
+            // ✅ MC4EB Publication 7, Change 1 Specific Validations (Source: db_viewer_js.txt MC4EB compliance)
             if (marker.frequency) {
                 // Validate frequency band compliance
                 const freq = parseFloat(marker.frequency.replace(/[^0-9.]/g, ''));
@@ -8501,7 +8929,7 @@ class DatabaseViewer {
                 category: 'Frequencies',
                 priority: 'critical',
                 issue: `${validation.frequencyFormat.invalid.length} markers have invalid frequency formats`,
-                recommendation: 'Update frequency values to standard MCEB format: K####(####.#) or numeric with units',
+                recommendation: 'Update frequency values to standard MC4EB format: K####(####.#) or numeric with units',
                 affectedMarkers: validation.frequencyFormat.invalid.map(i => i.id)
             });
         }
@@ -8559,12 +8987,12 @@ class DatabaseViewer {
             });
         }
 
-        // MCEB Publication 7 compliance recommendations
+        // MC4EB Publication 7, Change 1 compliance recommendations
         recommendations.push({
-            category: 'MCEB Compliance',
+            category: 'MC4EB Compliance',
             priority: 'medium',
-            issue: 'Ensure continued compliance with MCEB Publication 7 standards',
-            recommendation: 'Regular compliance reviews and updates to match latest MCEB requirements',
+            issue: 'Ensure continued compliance with MC4EB Publication 7, Change 1 standards',
+            recommendation: 'Regular compliance reviews and updates to match latest MC4EB requirements',
             actions: [
                 'Monthly compliance audits',
                 'Update field definitions as needed',
@@ -8585,15 +9013,15 @@ class DatabaseViewer {
             recommendations.push({
                 category: 'Field 500 Compliance',
                 priority: 'critical',
-                issue: 'Field 500 occurrences exceed MCEB Publication 7 limit (max 10)',
-                recommendation: 'Reduce Field 500 occurrences to comply with MCEB standards',
+                issue: 'Field 500 occurrences exceed MC4EB Publication 7, Change 1 limit (max 10)',
+                recommendation: 'Reduce Field 500 occurrences to comply with MC4EB standards',
                 actions: [
                     'Review Field 500 usage in SFAF records',
                     'Consolidate multiple Field 500 entries where possible',
-                    'Ensure compliance with MCEB Publication 7 Section 4.2.3',
+                    'Ensure compliance with MC4EB Publication 7, Change 1 Section 4.2.3',
                     'Document justification for essential Field 500 entries'
                 ],
-                reference: 'MCEB Publication 7, Section 4.2.3'
+                reference: 'MC4EB Publication 7, Change 1, Section 4.2.3'
             });
         }
 
@@ -8602,15 +9030,15 @@ class DatabaseViewer {
             recommendations.push({
                 category: 'Field 501 Compliance',
                 priority: 'critical',
-                issue: 'Field 501 occurrences exceed MCEB Publication 7 limit (max 30)',
-                recommendation: 'Reduce Field 501 occurrences to comply with MCEB standards',
+                issue: 'Field 501 occurrences exceed MC4EB Publication 7, Change 1 limit (max 30)',
+                recommendation: 'Reduce Field 501 occurrences to comply with MC4EB standards',
                 actions: [
                     'Audit Field 501 usage across all SFAF records',
                     'Remove unnecessary Field 501 entries',
-                    'Ensure compliance with MCEB Publication 7 Section 4.2.4',
+                    'Ensure compliance with MC4EB Publication 7, Change 1 Section 4.2.4',
                     'Implement Field 501 usage guidelines'
                 ],
-                reference: 'MCEB Publication 7, Section 4.2.4'
+                reference: 'MC4EB Publication 7, Change 1, Section 4.2.4'
             });
         }
 
@@ -8643,7 +9071,7 @@ class DatabaseViewer {
                 'Ensure WGS84 datum consistency',
                 'Test coordinate conversion accuracy'
             ],
-            reference: 'MCEB Publication 7, Coordinate Standards'
+            reference: 'MC4EB Publication 7, Change 1, Coordinate Standards'
         });
 
         // Frequency coordination compliance (Source: db_viewer_js.txt frequency analysis)
@@ -8672,7 +9100,7 @@ class DatabaseViewer {
                 'Regular SFAF field validation',
                 'Automated compliance checking',
                 'Monthly data quality reports',
-                'Staff training on MCEB standards'
+                'Staff training on MC4EB standards'
             ]
         });
 
@@ -8709,11 +9137,11 @@ class DatabaseViewer {
             recommendations.unshift({
                 category: 'Overall Compliance',
                 priority: 'info',
-                issue: 'System demonstrates good MCEB Publication 7 compliance',
+                issue: 'System demonstrates good MC4EB Publication 7, Change 1 compliance',
                 recommendation: 'Continue current compliance practices and monitor for changes',
                 actions: [
                     'Maintain current data quality standards',
-                    'Monitor for MCEB Publication updates',
+                    'Monitor for MC4EB Publication updates',
                     'Continue regular compliance audits',
                     'Document best practices'
                 ]
@@ -8842,13 +9270,17 @@ class DatabaseViewer {
         if (recordsDisplayInfo) {
             const startIndex = ((this.currentPage || 1) - 1) * (this.itemsPerPage || 25);
             const endIndex = Math.min(startIndex + (this.itemsPerPage || 25), recordCount);
-            recordsDisplayInfo.textContent = `Showing ${startIndex + 1}-${endIndex} of ${recordCount} records`;
+            // Use total database records instead of current page count
+            const totalRecords = this.totalDatabaseRecords || recordCount;
+            recordsDisplayInfo.textContent = `Showing ${startIndex + 1}-${endIndex} of ${totalRecords} records`;
         }
 
         // Update page info (Source: db_viewer_html.txt pagination controls)
         const pageInfo = document.getElementById('sfafPageInfo');
         if (pageInfo) {
-            const totalPages = Math.ceil(recordCount / (this.itemsPerPage || 25));
+            // Use total database records for calculating total pages
+            const totalRecords = this.totalDatabaseRecords || recordCount;
+            const totalPages = Math.ceil(totalRecords / (this.itemsPerPage || 25));
             pageInfo.textContent = `Page ${this.currentPage || 1} of ${totalPages || 1}`;
         }
 
@@ -8871,7 +9303,7 @@ class DatabaseViewer {
                 <div class="status-indicators">
                     <span class="completion-badge">Completion: ${record.completionPercentage || 0}%</span>
                     <span class="compliance-badge ${record.mcebCompliant?.isCompliant ? 'compliant' : 'non-compliant'}">
-                        ${record.mcebCompliant?.isCompliant ? '✅ MCEB Compliant' : '⚠️ Issues Found'}
+                        ${record.mcebCompliant?.isCompliant ? '✅ MC4EB Compliant' : '⚠️ Issues Found'}
                     </span>
                 </div>
             </div>
@@ -8949,7 +9381,7 @@ class DatabaseViewer {
 
             ${record.mcebCompliant && !record.mcebCompliant.isCompliant ? `
                 <div class="compliance-issues">
-                    <h5>⚠️ MCEB Compliance Issues</h5>
+                    <h5>⚠️ MC4EB Compliance Issues</h5>
                     <div class="compliance-errors">
                         ${record.mcebCompliant.issues?.map(issue => `
                             <div class="compliance-error">
@@ -8959,7 +9391,7 @@ class DatabaseViewer {
                         `).join('') || 'Compliance issues detected but details unavailable'}
                     </div>
                     <div class="compliance-note">
-                        <small>Issues must be resolved for MCEB Publication 7 compliance</small>
+                        <small>Issues must be resolved for MC4EB Publication 7, Change 1 compliance</small>
                     </div>
                 </div>
             ` : ''}
@@ -9047,7 +9479,7 @@ class DatabaseViewer {
         lines.push(`=== SFAF Export for ${record.serial} ===`);
         lines.push(`Generated: ${new Date().toISOString()}`);
         lines.push(`Source: SFAF Plotter Database Viewer`);
-        lines.push(`MCEB Publication 7 Format`);
+        lines.push(`MC4EB Publication 7, Change 1 Format`);
         lines.push('');
 
         // Generate SFAF field lines
@@ -9099,7 +9531,7 @@ class DatabaseViewer {
                         ${validation.isValid ? '✅ All validations passed' : '❌ Validation issues found'}
                     </div>
                     <div class="compliance-status ${mcebCompliance.isCompliant ? 'compliant' : 'non-compliant'}">
-                        ${mcebCompliance.isCompliant ? '✅ MCEB Publication 7 Compliant' : '⚠️ MCEB Compliance Issues'}
+                        ${mcebCompliance.isCompliant ? '✅ MC4EB Publication 7, Change 1 Compliant' : '⚠️ MC4EB Compliance Issues'}
                     </div>
                 </div>
 
@@ -9123,7 +9555,7 @@ class DatabaseViewer {
 
                 ${mcebCompliance.issues && mcebCompliance.issues.length > 0 ? `
                     <div class="compliance-issues">
-                        <h5>MCEB Compliance Issues</h5>
+                        <h5>MC4EB Compliance Issues</h5>
                         <ul>
                             ${mcebCompliance.issues.map(issue => `<li>${issue}</li>`).join('')}
                         </ul>
@@ -9271,7 +9703,7 @@ class DatabaseViewer {
         const errors = [];
         const warnings = [];
 
-        // Required fields validation (Source: db_viewer_js.txt MCEB compliance)
+        // Required fields validation (Source: db_viewer_js.txt MC4EB compliance)
         const requiredFields = {
             'field005': 'Type of Application',
             'field010': 'Type of Action',
@@ -9316,16 +9748,16 @@ class DatabaseViewer {
             }
         }
 
-        // MCEB Publication 7 field occurrence limits (Source: db_viewer_js.txt validation)
+        // MC4EB Publication 7, Change 1 field occurrence limits (Source: db_viewer_js.txt validation)
         const field500Count = this.countFieldOccurrencesInForm(sfafFields, '500');
         const field501Count = this.countFieldOccurrencesInForm(sfafFields, '501');
 
         if (field500Count > 10) {
-            errors.push('Field 500 occurrences exceed MCEB Publication 7 limit (max 10)');
+            errors.push('Field 500 occurrences exceed MC4EB Publication 7, Change 1 limit (max 10)');
         }
 
         if (field501Count > 30) {
-            errors.push('Field 501 occurrences exceed MCEB Publication 7 limit (max 30)');
+            errors.push('Field 501 occurrences exceed MC4EB Publication 7, Change 1 limit (max 30)');
         }
 
         return {
@@ -9534,9 +9966,9 @@ class DatabaseViewer {
             }
 
             if (mcebCompliance.isCompliant) {
-                message += '\n✅ MCEB Publication 7 Compliant';
+                message += '\n✅ MC4EB Publication 7, Change 1 Compliant';
             } else {
-                message += '\n⚠️ MCEB Compliance Issues:\n';
+                message += '\n⚠️ MC4EB Compliance Issues:\n';
                 mcebCompliance.issues.forEach(issue => {
                     message += `  • ${issue}\n`;
                 });
@@ -9557,20 +9989,20 @@ class DatabaseViewer {
         }
     }
 
-    // ✅ ENHANCED: Check MCEB compliance for form data
+    // ✅ ENHANCED: Check MC4EB compliance for form data
     checkMCEBComplianceForForm(sfafFields) {
         const issues = [];
 
-        // Field occurrence limits (Source: db_viewer_js.txt MCEB compliance)
+        // Field occurrence limits (Source: db_viewer_js.txt MC4EB compliance)
         const field500Count = this.countFieldOccurrencesInForm(sfafFields, '500');
         const field501Count = this.countFieldOccurrencesInForm(sfafFields, '501');
 
         if (field500Count > 10) {
-            issues.push('Field 500 exceeds maximum 10 occurrences per MCEB Publication 7');
+            issues.push('Field 500 exceeds maximum 10 occurrences per MC4EB Publication 7, Change 1');
         }
 
         if (field501Count > 30) {
-            issues.push('Field 501 exceeds maximum 30 occurrences per MCEB Publication 7');
+            issues.push('Field 501 exceeds maximum 30 occurrences per MC4EB Publication 7, Change 1');
         }
 
         // Field length limits
@@ -9582,14 +10014,14 @@ class DatabaseViewer {
             issues.push('Field 501 exceeds maximum 35 characters');
         }
 
-        // Required field validation for MCEB compliance
+        // Required field validation for MC4EB compliance
         const requiredForCompliance = ['field005', 'field010', 'field102', 'field110', 'field200', 'field300'];
         const missingRequired = requiredForCompliance.filter(field =>
             !sfafFields[field] || sfafFields[field].trim() === ''
         );
 
         if (missingRequired.length > 0) {
-            issues.push(`Missing required fields for MCEB compliance: ${missingRequired.join(', ')}`);
+            issues.push(`Missing required fields for MC4EB compliance: ${missingRequired.join(', ')}`);
         }
 
         return {
@@ -9924,10 +10356,10 @@ class DatabaseViewer {
         const modalContent = `
         <div class="sfaf-field-modal-content">
             <h4>SFAF Field Editor</h4>
-            <p class="modal-description">Edit SFAF fields according to MCEB Publication 7 standards</p>
+            <p class="modal-description">Edit SFAF fields according to MC4EB Publication 7, Change 1 standards</p>
             
             <form id="sfafFieldForm" class="sfaf-field-form">
-                <!-- Required Fields Section (Source: db_viewer_js.txt MCEB compliance) -->
+                <!-- Required Fields Section (Source: db_viewer_js.txt MC4EB compliance) -->
                 <div class="field-section required-fields">
                     <h5>Required Fields <span class="required-indicator">*</span></h5>
                     
@@ -10048,7 +10480,7 @@ class DatabaseViewer {
                 
                 <!-- Compliance Information -->
                 <div class="field-section compliance-info">
-                    <h5>MCEB Publication 7 Compliance Status</h5>
+                    <h5>MC4EB Publication 7, Change 1 Compliance Status</h5>
                     <div class="compliance-status-display">
                         <div class="compliance-indicator" id="complianceIndicator">
                             <i class="fas fa-clock"></i> Validation pending...
@@ -10093,7 +10525,7 @@ class DatabaseViewer {
         console.log(`📋 SFAF Field Editor opened for marker: ${markerId}`);
     }
 
-    // ✅ ENHANCED: Real-time SFAF form validation with MCEB Publication 7 compliance
+    // ✅ ENHANCED: Real-time SFAF form validation with MC4EB Publication 7, Change 1 compliance
     addSFAFFormValidation() {
         const form = document.getElementById('sfafFieldForm');
         if (!form) {
@@ -10159,7 +10591,7 @@ class DatabaseViewer {
         console.log('✅ Real-time SFAF validation activated');
     }
 
-    // ✅ ENHANCED: Real-time field validation with MCEB standards
+    // ✅ ENHANCED: Real-time field validation with MC4EB standards
     validateSFAFFieldRealTime(input) {
         const fieldId = input.id;
         const value = input.value.trim();
@@ -10181,7 +10613,7 @@ class DatabaseViewer {
 
         let validation = { isValid: true, message: null, type: 'success' };
 
-        // Field-specific validation based on MCEB Publication 7 standards (Source: db_viewer_js.txt MCEB compliance)
+        // Field-specific validation based on MC4EB Publication 7, Change 1 standards (Source: db_viewer_js.txt MC4EB compliance)
         switch (fieldId) {
             case 'field005':
                 validation = this.validateField005(value);
@@ -10225,7 +10657,7 @@ class DatabaseViewer {
         return validation;
     }
 
-    // ✅ ENHANCED: Specific field validation functions for MCEB Publication 7 compliance
+    // ✅ ENHANCED: Specific field validation functions for MC4EB Publication 7, Change 1 compliance
     validateField005(value) {
         // Field 005 - Type of Application
         const validValues = ['UE', 'CE'];
@@ -10488,7 +10920,7 @@ class DatabaseViewer {
 
         console.log('🔍 Updating form compliance status...');
 
-        // Required fields for MCEB Publication 7 compliance (Source: db_viewer_js.txt MCEB compliance)
+        // Required fields for MC4EB Publication 7, Change 1 compliance (Source: db_viewer_js.txt MC4EB compliance)
         const requiredFields = ['field005', 'field010', 'field102', 'field110', 'field200'];
         const optionalImportantFields = ['field113', 'field114', 'field115', 'field300', 'field301', 'field144'];
 
@@ -10563,7 +10995,7 @@ class DatabaseViewer {
             if (optionalCompletionRate >= 50) {
                 complianceStatus = 'compliant';
                 complianceIcon = 'fas fa-check-circle';
-                complianceText = 'MCEB Publication 7 Compliant';
+                complianceText = 'MC4EB Publication 7, Change 1 Compliant';
                 complianceClass = 'compliance-compliant';
             } else {
                 complianceStatus = 'partial';
@@ -10681,7 +11113,7 @@ class DatabaseViewer {
         message += `Optional Fields: ${validationState.completedOptional || 0}/6\n`;
 
         if (validationState.complianceStatus === 'compliant') {
-            message += '\n🎉 Ready for MCEB Publication 7 compliance!';
+            message += '\n🎉 Ready for MC4EB Publication 7, Change 1 compliance!';
         }
 
         alert(message);
@@ -10690,24 +11122,28 @@ class DatabaseViewer {
     // Navigate to first page
     goToFirstPage() {
         this.currentPage = 1;
-        // Re-render current data with new page
-        if (this.currentSFAFData && this.currentSFAFData.length > 0) {
-            this.renderEnhancedSFAFTable(this.currentSFAFData);
-        } else {
-            this.loadData();
-        }
+        // Load first page from API
+        this.loadSFAFRecords();
+        // Scroll to top of table
+        this.scrollToTopOfTable();
     }
 
     // Navigate to last page
     goToLastPage() {
-        const totalItems = this.currentSFAFData ? this.currentSFAFData.length : this.getTotalItemsForCurrentTab();
-        const totalPages = Math.ceil(totalItems / this.itemsPerPage);
+        // Calculate last page based on total database records
+        const totalPages = Math.ceil(this.totalDatabaseRecords / this.itemsPerPage);
         this.currentPage = totalPages;
-        // Re-render current data with new page
-        if (this.currentSFAFData && this.currentSFAFData.length > 0) {
-            this.renderEnhancedSFAFTable(this.currentSFAFData);
-        } else {
-            this.loadData();
+        // Load last page from API
+        this.loadSFAFRecords();
+        // Scroll to top of table
+        this.scrollToTopOfTable();
+    }
+
+    // Scroll to top of table container
+    scrollToTopOfTable() {
+        const tableContainer = document.querySelector('.table-container');
+        if (tableContainer) {
+            tableContainer.scrollTop = 0;
         }
     }
 
@@ -10729,7 +11165,7 @@ class DatabaseViewer {
                 modalBody.innerHTML = `
                     <form id="newSFAFForm">
                         <p>New SFAF record form would go here.</p>
-                        <p>This would include all required SFAF fields according to MCEB Publication 7.</p>
+                        <p>This would include all required SFAF fields according to MC4EB Publication 7, Change 1.</p>
                     </form>
                 `;
             }
@@ -10956,6 +11392,116 @@ class DatabaseViewer {
         URL.revokeObjectURL(url);
 
         alert(`Exported ${this.selectedItems.size} records successfully.`);
+    }
+
+    // Toggle export dropdown menu
+    toggleExportDropdown() {
+        const dropdown = document.getElementById('exportDropdown');
+        if (dropdown) {
+            dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+        }
+
+        // Close dropdown when clicking outside
+        if (dropdown.style.display === 'block') {
+            setTimeout(() => {
+                document.addEventListener('click', (e) => {
+                    if (!e.target.closest('#exportDropdownBtn') && !e.target.closest('#exportDropdown')) {
+                        dropdown.style.display = 'none';
+                    }
+                }, { once: true });
+            }, 0);
+        }
+    }
+
+    // Export all records to CSV
+    async exportAllToCSV() {
+        console.log('📤 Exporting all SFAF records to CSV...');
+
+        this.showLoading(true, 'Exporting all records to CSV...');
+
+        try {
+            // Use the existing backend export endpoint
+            const response = await fetch('/api/sfaf/export?format=csv');
+
+            if (!response.ok) {
+                throw new Error(`Export failed: ${response.status} ${response.statusText}`);
+            }
+
+            // Get the CSV content
+            const blob = await response.blob();
+
+            // Create download link
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `SFAF_All_Records_${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            this.showLoading(false);
+            this.showSuccess('All records exported to CSV successfully!');
+
+            // Close dropdown
+            document.getElementById('exportDropdown').style.display = 'none';
+
+        } catch (error) {
+            this.showLoading(false);
+            console.error('Export failed:', error);
+            this.showError(`Failed to export: ${error.message}`);
+        }
+    }
+
+    // Export selected records to CSV
+    async exportSelectedToCSV() {
+        if (this.selectedItems.size === 0) {
+            alert('Please select at least one record to export.');
+            return;
+        }
+
+        console.log(`📤 Exporting ${this.selectedItems.size} selected records to CSV...`);
+
+        this.showLoading(true, `Exporting ${this.selectedItems.size} records to CSV...`);
+
+        try {
+            const response = await fetch('/api/sfaf/export-selected', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ids: Array.from(this.selectedItems),
+                    format: 'csv'
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Export failed: ${response.status} ${response.statusText}`);
+            }
+
+            // Get the CSV content
+            const blob = await response.blob();
+
+            // Create download link
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `SFAF_Selected_${this.selectedItems.size}_Records_${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            this.showLoading(false);
+            this.showSuccess(`${this.selectedItems.size} records exported to CSV successfully!`);
+
+            // Close dropdown
+            document.getElementById('exportDropdown').style.display = 'none';
+
+        } catch (error) {
+            this.showLoading(false);
+            console.error('Export failed:', error);
+            this.showError(`Failed to export: ${error.message}`);
+        }
     }
 
     // View selected records on map with Field 306/530 visualizations
@@ -11679,6 +12225,25 @@ class DatabaseViewer {
                 }
             }
         }
+
+        // Restore the last used field view
+        const preferences = this.sessionManager.getSessionPreferences();
+        if (preferences.lastFieldView) {
+            const views = this.getCustomViews();
+            const savedView = views.find(v => v.id === preferences.lastFieldView);
+            if (savedView) {
+                this.currentFieldView = savedView;
+                console.log(`✅ Restored field view: ${preferences.lastFieldView}`);
+            } else if (preferences.lastFieldView === 'all') {
+                this.currentFieldView = {
+                    id: 'all',
+                    name: 'All Fields',
+                    fields: null,
+                    fieldOrder: null
+                };
+                console.log(`✅ Restored field view: all`);
+            }
+        }
     }
 
     // ==================== QUERY BUILDER METHODS ====================
@@ -11939,7 +12504,7 @@ class DatabaseViewer {
         // Reload original data
         this.currentData = this.currentSFAFData || [];
         this.currentPage = 1;
-        this.renderSFAFTable();
+        this.renderEnhancedSFAFTable(this.currentSFAFData || []);
         this.updatePagination();
         this.updateDBQueryStats();
 
@@ -12034,7 +12599,7 @@ class DatabaseViewer {
             return;
         }
 
-        // Generate field options from MCEB Pub 7 fields
+        // Generate field options from MC4EB Pub 7 CHG 1 fields
         const fieldOptions = [
             '<option value="field005">005 - Security Classification</option>',
             '<option value="field006">006 - Security Classification Modification</option>',

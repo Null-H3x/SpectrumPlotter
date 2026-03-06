@@ -24,11 +24,11 @@
 /* ==================== SIDEBAR CONTAINER ==================== */
 .persistent-sidebar {
     position: fixed;
-    top: 60px;
+    top: 72px;
     right: -420px;
     width: 420px;
-    height: calc(100vh - 60px);
-    max-height: calc(100vh - 60px);
+    height: calc(100vh - 72px);
+    max-height: calc(100vh - 72px);
     background: var(--sidebar-bg-primary);
     border-left: 1px solid var(--sidebar-border);
     box-shadow: -4px 0 24px rgba(0, 0, 0, 0.5);
@@ -68,6 +68,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    position: relative;
+    z-index: 2100;
 }
 
 #sidebarToggle:hover {

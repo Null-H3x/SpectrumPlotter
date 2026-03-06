@@ -466,8 +466,8 @@ window.MarkerSystem = {
 
     editMarker(markerId) {
         const marker = this.markers.get(markerId);
-        if (marker && typeof window.openSidebar === 'function') {
-            window.openSidebar(markerId);
+        if (marker && window.SFAFIntegration && window.SFAFIntegration.openSidebar) {
+            window.SFAFIntegration.openSidebar(markerId);
         }
     },
 
@@ -584,8 +584,8 @@ window.MarkerSystem = {
 
     editMarker(markerId) {
         const marker = this.markers.get(markerId);
-        if (marker && typeof window.openSidebar === 'function') {
-            window.openSidebar(markerId);
+        if (marker && window.SFAFIntegration && window.SFAFIntegration.openSidebar) {
+            window.SFAFIntegration.openSidebar(markerId);
             console.log(`✏️ Opening editor for marker: ${markerId}`);
         }
     },
@@ -738,8 +738,8 @@ window.MarkerSystem = {
         // Click handler
         marker.on('click', async () => {
             this.currentSelectedMarker = marker;
-            if (typeof window.openSidebar === 'function') {
-                await window.openSidebar(marker.markerId);
+            if (window.SFAFIntegration && window.SFAFIntegration.openSidebar) {
+                await window.SFAFIntegration.openSidebar(marker.markerId);
             }
         });
 
@@ -1118,7 +1118,7 @@ window.MarkerSystem = {
 
     // === EXPORT FUNCTIONS === (Source: db_viewer.txt export functionality)
     exportMarkersToCSV() {
-        // Prepare CSV headers with MCEB Publication 7 compliance (Source: models.txt SFAF fields)
+        // Prepare CSV headers with MC4EB Publication 7, Change 1 compliance (Source: models.txt SFAF fields)
         const headers = [
             'ID',
             'Serial',
@@ -1185,7 +1185,7 @@ window.MarkerSystem = {
             type: 'SFAF_Markers_Export',
             exported_at: new Date().toISOString(),
             total_count: this.markers.size,
-            compliance: 'MCEB Publication 7',
+            compliance: 'MC4EB Publication 7, Change 1',
             version: '1.0',
             metadata: {
                 system: 'SFAF Plotter',
@@ -1308,7 +1308,7 @@ window.MarkerSystem = {
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
     <name>SFAF Plotter Markers Export</name>
-    <description>Military Frequency Coordination Markers - MCEB Publication 7 Compliant</description>
+    <description>Military Frequency Coordination Markers - MC4EB Publication 7, Change 1 Compliant</description>
     
     <!-- Manual Marker Style -->
     <Style id="manualMarkerStyle">
@@ -1431,7 +1431,7 @@ window.MarkerSystem = {
     },
 
     validateMarkerCompliance(markerData) {
-        // MCEB Publication 7 compliance validation
+        // MC4EB Publication 7, Change 1 compliance validation
         const issues = [];
 
         if (!markerData.frequency || markerData.frequency.trim() === '') {
@@ -1574,7 +1574,7 @@ window.MarkerSystem = {
             type: 'SFAF_Import_Report',
             generated_at: new Date().toISOString(),
             total_imported: importedMarkers.length,
-            compliance: 'MCEB Publication 7',
+            compliance: 'MC4EB Publication 7, Change 1',
             statistics: {
                 with_frequency: importedMarkers.filter(m => m.markerData.frequency).length,
                 with_notes: importedMarkers.filter(m => m.markerData.notes).length,

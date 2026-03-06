@@ -596,7 +596,7 @@
                                     <select id="field500_1" class="form-control irac-notes-select" data-field="500">
                                         <option value="">Loading IRAC notes...</option>
                                     </select>
-                                    <small class="field-help">Official IRAC coordination note codes (MCEB Pub 7 Annex
+                                    <small class="field-help">Official IRAC coordination note codes (MC4EB Pub 7 CHG 1 Annex
                                         E)</small>
                                 </div>
                                 <div class="irac-note-details" style="display:none;">
@@ -1002,15 +1002,15 @@
     .persistent-sidebar {
         position: fixed;
         right: -450px;
-        top: 0;
+        top: 72px;
         width: 450px;
-        height: 100vh;
-        max-height: 100vh;
+        height: calc(100vh - 72px);
+        max-height: calc(100vh - 72px);
         background: var(--bg-primary);
         border-left: 1px solid var(--border-color);
         box-shadow: -2px 0 10px rgba(0, 0, 0, 0.3);
         transition: right 0.3s ease;
-        z-index: 1000;
+        z-index: 1500;
         display: flex;
         flex-direction: column;
         overflow: hidden;

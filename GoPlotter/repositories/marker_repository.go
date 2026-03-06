@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sfaf-plotter/models"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
@@ -37,8 +38,7 @@ func (r *MarkerRepository) GetAll() ([]models.Marker, error) {
         SELECT id, serial, latitude, longitude, frequency, notes,
                marker_type, is_draggable, created_at, updated_at
         FROM markers
-        ORDER BY created_at DESC
-        LIMIT 500`
+        ORDER BY created_at DESC`
 
 	var markers []models.Marker
 	err := r.db.Select(&markers, query)
@@ -66,6 +66,22 @@ func (r *MarkerRepository) GetByID(id uuid.UUID) (*models.Marker, error) {
 
 	// Load associated SFAF fields
 	marker.SFAFFields, err = r.getSFAFFieldsByMarkerID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	return &marker, nil
+}
+
+func (r *MarkerRepository) GetBySerial(serial string) (*models.Marker, error) {
+	query := `
+        SELECT id, serial, latitude, longitude, frequency, notes,
+               marker_type, is_draggable, created_at, updated_at
+        FROM markers
+        WHERE serial = $1`
+
+	var marker models.Marker
+	err := r.db.Get(&marker, query, serial)
 	if err != nil {
 		return nil, err
 	}
@@ -206,4 +222,50 @@ func (r *MarkerRepository) GetByBounds(minLat, maxLat, minLng, maxLng float64) (
 	var markers []models.Marker
 	err := r.db.Select(&markers, query, minLat, maxLat, minLng, maxLng)
 	return markers, err
+}
+
+// BatchCreate creates multiple markers in a single transaction
+func (r *MarkerRepository) BatchCreate(markers []*models.Marker) error {
+	if len(markers) == 0 {
+		return nil
+	}
+
+	tx, err := r.db.Beginx()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	now := time.Now()
+	for _, marker := range markers {
+		if marker.ID == uuid.Nil {
+			marker.ID = uuid.New()
+		}
+		marker.CreatedAt = now
+		marker.UpdatedAt = now
+
+		// Use ON CONFLICT to handle duplicate serials gracefully
+		// If a marker with the same serial exists, update its location and frequency
+		query := `
+			INSERT INTO markers (id, serial, latitude, longitude, frequency, notes, marker_type, is_draggable, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			ON CONFLICT (serial) DO UPDATE SET
+				latitude = EXCLUDED.latitude,
+				longitude = EXCLUDED.longitude,
+				frequency = EXCLUDED.frequency,
+				notes = EXCLUDED.notes,
+				marker_type = EXCLUDED.marker_type,
+				updated_at = EXCLUDED.updated_at
+		`
+		_, err := tx.Exec(query, marker.ID, marker.Serial, marker.Latitude, marker.Longitude, marker.Frequency, marker.Notes, marker.MarkerType, marker.IsDraggable, marker.CreatedAt, marker.UpdatedAt)
+		if err != nil {
+			return fmt.Errorf("failed to upsert marker %s: %w", marker.Serial, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
 }

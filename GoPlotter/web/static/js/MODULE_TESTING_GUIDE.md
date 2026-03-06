@@ -205,13 +205,13 @@ Open browser console (F12) and verify:
      - Color-coded (green=success, red=error)
      - Auto-dismiss after 4 seconds
 
-4. **MCEB Pub 7 Compliance Notification**
+4. **MC4EB Pub 7 CHG 1 Compliance Notification**
    - Import SFAF data (if import feature exists)
    - Verify compliance notification shows:
      - Center of screen
      - Blue gradient background
      - Success/skipped counts
-     - "MCEB Pub 7, June 30, 2005" reference
+     - "MC4EB Pub 7 CHG 1 (08 May 2025)" reference
 
 ### ✅ Phase 6: Performance & Caching
 

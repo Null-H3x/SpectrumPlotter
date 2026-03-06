@@ -88,7 +88,7 @@ func (c *AppConfig) PrintConfiguration() {
 	log.Printf("   Server: %s (mode: %s)", c.GetServerAddress(), c.Server.GinMode)
 	log.Printf("   Database: %s:%s/%s", c.Database.Host, c.Database.Port, c.Database.DBName)
 	log.Printf("   CORS Origins: %v", c.CORS.AllowedOrigins)
-	log.Printf("   MCEB Validation: %v", c.Features.EnableMCEBValidation)
+	log.Printf("   MC4EB Validation: %v", c.Features.EnableMCEBValidation)
 	log.Printf("   Coordinate Caching: %v", c.Features.EnableCoordinateCaching)
 }
 

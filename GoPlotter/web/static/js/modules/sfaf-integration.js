@@ -1,12 +1,12 @@
 /**
  * SFAF Integration Module
  *
- * Manages SFAF form integration, validation, and MCEB Publication 7 compliance
+ * Manages SFAF form integration, validation, and MC4EB Publication 7, Change 1 compliance
  */
 
 const SFAFIntegration = (() => {
 
-    // MCEB Publication 7 field mapping (June 30, 2005)
+    // MC4EB Publication 7, Change 1 field mapping (June 30, 2005)
     const SFAF_FIELD_MAPPING = {
         // Administrative Data
         'field005': 'field005',    // Security Classification
@@ -29,8 +29,6 @@ const SFAFIntegration = (() => {
         // Time/Date Information
         'field130': 'field130',    // Time
         'field131': 'field131',    // Percent Time
-        'field140': 'field140',    // Required Date (YYYYMMDD)
-        'field141': 'field141',    // Expiration Date
         'field142': 'field142',    // Review Date
         'field143': 'field143',    // Revision Date
         'field144': 'field144',    // Approval Authority
@@ -92,7 +90,7 @@ const SFAFIntegration = (() => {
         'field803': 'field803',    // Requestor Data POC
         'field804': 'field804',    // Additional Assignment Data
 
-        // Deprecated fields (no longer used per MCEB Pub 7)
+        // Deprecated fields (no longer used per MC4EB Pub 7 CHG 1)
         'field208': null,
         'field407': null,
         'field470': null,
@@ -110,6 +108,7 @@ const SFAFIntegration = (() => {
     async function openSidebar(markerId) {
         try {
             console.log('🔍 Opening sidebar for marker:', markerId);
+            console.log('🔍 About to fetch SFAF data from API...');
 
             const data = await APIClient.fetchSFAFData(markerId);
             console.log('📡 API Response:', data);
@@ -121,11 +120,12 @@ const SFAFIntegration = (() => {
                 UIHelpers.switchTab('object');
                 populateSFAFForm(data);
             } else {
-                console.error('API Error:', data.error);
+                console.error('❌ API returned error:', data.error);
                 UIHelpers.manageObjectTabVisibility(false);
             }
         } catch (error) {
-            console.error('Failed to load SFAF data:', error);
+            console.error('❌ Failed to load SFAF data:', error);
+            console.error('❌ Error details:', error.message, error.stack);
             UIHelpers.manageObjectTabVisibility(false);
         }
     }
@@ -147,7 +147,7 @@ const SFAFIntegration = (() => {
             has_sfaf_data: !!data.sfaf
         });
 
-        // Auto-populate coordinate fields (field 303/403 per MCEB Pub 7)
+        // Auto-populate coordinate fields (field 303/403 per MC4EB Pub 7 CHG 1)
         if (data.coordinates) {
             setFieldValue('field303', data.coordinates.compact);
             setFieldValue('field403', data.coordinates.compact);
@@ -161,7 +161,7 @@ const SFAFIntegration = (() => {
             setFieldValue('field306', field306Value);
         }
 
-        // Populate SFAF fields using official MCEB Pub 7 mapping
+        // Populate SFAF fields using official MC4EB Pub 7 CHG 1 mapping
         // Backend returns "fields" when SFAF exists, "auto_populated_fields" when it doesn't
         const fieldsData = data.fields || data.auto_populated_fields;
 
@@ -176,7 +176,7 @@ const SFAFIntegration = (() => {
 
             Object.entries(fieldsData).forEach(([importedFieldId, value]) => {
 
-                // Handle field500 variants (500/02, 500/03, etc.) per MCEB Pub 7 Annex F
+                // Handle field500 variants (500/02, 500/03, etc.) per MC4EB Pub 7 CHG 1 Annex F
                 if (importedFieldId.startsWith('field500/')) {
                     const parts = importedFieldId.split('/');
                     if (parts.length === 2) {
@@ -189,13 +189,13 @@ const SFAFIntegration = (() => {
                     return;
                 }
 
-                // Handle field103 variants (additional serial numbers per MCEB Pub 7)
+                // Handle field103 variants (additional serial numbers per MC4EB Pub 7 CHG 1)
                 if (importedFieldId.startsWith('field103/')) {
                     skippedCount++;
                     return;
                 }
 
-                // Use official MCEB Pub 7 mapping
+                // Use official MC4EB Pub 7 CHG 1 mapping
                 const actualFieldId = SFAF_FIELD_MAPPING[importedFieldId];
 
                 if (actualFieldId === null) {
@@ -220,13 +220,13 @@ const SFAFIntegration = (() => {
                 }
             });
 
-            // Generate MCEB Pub 7 compliance summary
-            console.log(`📊 MCEB Publication 7 Import Results:`);
+            // Generate MC4EB Pub 7 CHG 1 compliance summary
+            console.log(`📊 MC4EB Publication 7, Change 1 Import Results:`);
             console.log(`  ✅ Successfully populated: ${successCount} fields`);
             console.log(`  ⚠️ Skipped (not in form): ${skippedCount} fields`);
-            console.log(`  🔄 Deprecated (MCEB Pub 7): ${deprecatedCount} fields`);
+            console.log(`  🔄 Deprecated (MC4EB Pub 7 CHG 1): ${deprecatedCount} fields`);
             console.log(`  ❓ Unknown fields: ${unknownCount} fields`);
-            console.log(`  📖 Reference: MCEB Publication 7, June 30, 2005`);
+            console.log(`  📖 Reference: MC4EB Publication 7, Change 1 (08 May 2025)`);
 
             // Show compliance notification
             if (successCount > 0) {
@@ -391,7 +391,7 @@ const SFAFIntegration = (() => {
         const formData = collectSFAFFormData();
         console.log('📋 Form data collected:', formData);
 
-        // Validate required MCEB fields before saving
+        // Validate required MC4EB fields before saving
         const requiredFields = {
             'field005': '005 - Security Classification',
             'field010': '010 - Type of Action',
@@ -408,7 +408,7 @@ const SFAFIntegration = (() => {
         }
 
         if (missingFields.length > 0) {
-            const errorMsg = `Cannot save SFAF record. The following required MCEB fields are missing:\n\n${missingFields.join('\n')}`;
+            const errorMsg = `Cannot save SFAF record. The following required MC4EB fields are missing:\n\n${missingFields.join('\n')}`;
             UIHelpers.showSFAFStatusMessage('❌ ' + errorMsg, 'error');
             alert(errorMsg);
             return;

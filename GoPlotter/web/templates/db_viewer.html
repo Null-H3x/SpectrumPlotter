@@ -4,11 +4,54 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Database Viewer - SFAF Plotter</title>
+    <script>console.log('✅ DB_VIEWER.HTML TEMPLATE LOADED');</script>
     <link rel="stylesheet" href="/css/db_viewer.css">
     <link rel="stylesheet" href="/css/session_mgmt.css">
     <link rel="stylesheet" href="/css/sfaf_records.css">
     <link rel="stylesheet" href="/css/view_manager.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        /* Critical z-index fix for checkbox and actions columns */
+        table.sfaf-records-table thead tr th[data-field="select"],
+        table.sfaf-records-table tbody tr td.checkbox-col {
+            z-index: 999 !important;
+            position: sticky !important;
+            left: 0 !important;
+            background: #f9fafb !important;
+        }
+
+        table.sfaf-records-table thead tr th[data-field="actions"],
+        table.sfaf-records-table tbody tr td.actions-col {
+            z-index: 500 !important;
+            position: sticky !important;
+            right: 0 !important;
+            background: #f9fafb !important;
+        }
+
+        /* Filter row background */
+        table.sfaf-records-table thead tr.filter-row th[data-field="select"] {
+            background: rgba(15, 15, 35, 0.98) !important;
+        }
+
+        table.sfaf-records-table thead tr.filter-row th[data-field="actions"] {
+            background: rgba(15, 15, 35, 0.98) !important;
+        }
+
+        /* Dark mode support */
+        @media (prefers-color-scheme: dark) {
+            table.sfaf-records-table thead tr th[data-field="select"],
+            table.sfaf-records-table tbody tr td.checkbox-col,
+            table.sfaf-records-table thead tr th[data-field="actions"],
+            table.sfaf-records-table tbody tr td.actions-col {
+                background: #111827 !important;
+            }
+
+            table.sfaf-records-table thead tr.filter-row th[data-field="select"],
+            table.sfaf-records-table thead tr.filter-row th[data-field="actions"] {
+                background: rgba(15, 15, 35, 0.98) !important;
+            }
+        }
+    </style>
 </head>
 <body>
 
@@ -19,7 +62,7 @@
             <h1><i class="fas fa-database"></i> SFAF Plotter</h1>
         </div>
         <nav class="topbar-nav">
-            <a href="/" class="nav-link">
+            <a href="/map-viewer" class="nav-link">
                 <i class="fas fa-map-marked-alt"></i>
                 <span>Map Viewer</span>
             </a>
@@ -66,7 +109,8 @@
         <div class="stats-bar">
             <div class="stat">
                 <span class="stat-value" id="totalSFAFRecords">0</span>
-                <span class="stat-label">Total</span>
+                <span class="stat-label">Page Total</span>
+                <span class="stat-sublabel" id="databaseTotalRecords" style="font-size: 11px; color: #6b7280; display: block; margin-top: 2px;">of 0 in DB</span>
             </div>
             <div class="stat">
                 <span class="stat-value" id="completeSFAFRecords">0</span>
@@ -109,8 +153,21 @@
                 <button id="addSFAFRecordBtn" class="btn btn-primary"><i class="fas fa-plus"></i> New</button>
                 <button id="bulkActionsBtn" class="btn" disabled><i class="fas fa-tasks"></i> Bulk</button>
                 <button id="importSFAFBtn" class="btn btn-success"><i class="fas fa-file-import"></i> Import</button>
-                <button id="exportSelectedBtn" class="btn" disabled><i class="fas fa-download"></i> Export</button>
-                <button id="deleteSelectedBtn" class="btn btn-danger" disabled><i class="fas fa-trash-alt"></i> Delete</button>
+                <div class="btn-group" style="position: relative; display: inline-block;">
+                    <button id="exportDropdownBtn" class="btn" onclick="databaseViewer.toggleExportDropdown()">
+                        <i class="fas fa-download"></i> Export <i class="fas fa-caret-down"></i>
+                    </button>
+                    <div id="exportDropdown" class="dropdown-menu" style="display: none; position: absolute; top: 100%; left: 0; background: white; border: 1px solid #ddd; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 10000; min-width: 200px;">
+                        <button class="dropdown-item" onclick="databaseViewer.exportAllToCSV()" style="width: 100%; text-align: left; padding: 8px 16px; border: none; background: none; cursor: pointer;">
+                            <i class="fas fa-file-csv"></i> Export All to CSV
+                        </button>
+                        <button class="dropdown-item" id="exportSelectedToCSVBtn" onclick="databaseViewer.exportSelectedToCSV()" disabled style="width: 100%; text-align: left; padding: 8px 16px; border: none; background: none; cursor: pointer;">
+                            <i class="fas fa-file-csv"></i> Export Selected to CSV
+                        </button>
+                    </div>
+                </div>
+                <button id="deleteSelectedBtn" class="btn btn-danger" disabled><i class="fas fa-trash-alt"></i> Delete Selected</button>
+                <button id="deleteAllBtn" class="btn btn-danger" title="Delete all SFAF records from database"><i class="fas fa-trash"></i> Delete All</button>
                 <button id="refreshSFAFBtn" class="btn"><i class="fas fa-sync"></i></button>
             </div>
         </div>
@@ -140,6 +197,9 @@
             </select>
             <button id="advancedQueryBtn" class="btn btn-sm">
                 <i class="fas fa-filter"></i> Advanced Query
+            </button>
+            <button id="clearFiltersBtn" class="btn btn-sm">
+                <i class="fas fa-times"></i> Clear Filters
             </button>
         </div>
 
@@ -226,7 +286,7 @@
                 <span id="recordsDisplayInfo">0 records</span>
                 <select id="recordsPerPage" class="select-sm">
                     <option value="25">25</option>
-                    <option value="50">50</option>
+                    <option value="50" selected>50</option>
                     <option value="100">100</option>
                 </select>
             </div>
@@ -378,7 +438,7 @@
                 <div id="frequencyChart"></div>
             </div>
             <div class="card">
-                <h3>MCEB Compliance</h3>
+                <h3>MC4EB Compliance</h3>
                 <div id="complianceReport"></div>
             </div>
             <div class="card">
@@ -602,7 +662,7 @@
     </div>
 </div>
 
-<script src="/js/db_viewer.js"></script>
+<script src="/js/db_viewer.js?v=7"></script>
 <script src="/js/view_manager.js"></script>
 </body>
 </html>

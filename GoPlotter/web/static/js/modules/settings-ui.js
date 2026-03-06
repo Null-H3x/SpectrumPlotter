@@ -14,21 +14,9 @@ const SettingsUI = (function() {
      */
     function init() {
         createModal();
-        createSettingsButton();
+        // Settings button is now in the navigation bar, not floating
         attachEventListeners();
         console.log('⚙️ Settings UI initialized');
-    }
-
-    /**
-     * Create settings button
-     */
-    function createSettingsButton() {
-        const btn = document.createElement('button');
-        btn.className = 'settings-btn';
-        btn.id = 'openSettingsBtn';
-        btn.innerHTML = '<i class="fas fa-cog"></i><span>Settings</span>';
-        btn.onclick = openModal;
-        document.body.appendChild(btn);
     }
 
     /**
@@ -476,11 +464,23 @@ const SettingsUI = (function() {
         }, 5000);
     }
 
+    /**
+     * Toggle settings modal (for navigation button)
+     */
+    function toggleSettings() {
+        if (isOpen) {
+            closeModal();
+        } else {
+            openModal();
+        }
+    }
+
     // Public API
     return {
         init,
         openModal,
         closeModal,
+        toggleSettings,
         saveSettings,
         resetToDefaults,
         searchLocation

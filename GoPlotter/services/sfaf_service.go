@@ -46,6 +46,7 @@ type ValidationResult struct {
 type SFAFService struct {
 	sfafRepo          *repositories.SFAFRepository                 // Database operations
 	fieldOccRepo      *repositories.SFAFFieldOccurrenceRepository  // Field occurrences (multi-line fields)
+	markerRepo        *repositories.MarkerRepository               // Marker repository for batch operations
 	coordService      *CoordinateService                           // Coordinate format conversions
 	markerService     *MarkerService                               // Marker creation for imports
 	serialService     *SerialService                               // Serial number generation
@@ -69,6 +70,11 @@ func (ss *SFAFService) SetMarkerService(markerService *MarkerService) {
 	ss.markerService = markerService
 }
 
+// SetMarkerRepo allows setting marker repository after construction for batch operations
+func (ss *SFAFService) SetMarkerRepo(markerRepo *repositories.MarkerRepository) {
+	ss.markerRepo = markerRepo
+}
+
 // SetSerialService allows setting serial service after construction
 func (ss *SFAFService) SetSerialService(serialService *SerialService) {
 	ss.serialService = serialService
@@ -83,7 +89,7 @@ func (ss *SFAFService) CreateSFAFWithoutValidation(req models.CreateSFAFRequest)
 
 	sfaf := &models.SFAF{
 		ID:        uuid.New(),
-		MarkerID:  markerUUID,
+		MarkerID:  &markerUUID, // Use pointer for nullable marker_id
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
@@ -104,7 +110,7 @@ func (ss *SFAFService) GetSFAFByMarkerID(markerID string) (*models.SFAF, error) 
 }
 
 func (ss *SFAFService) CreateSFAF(req models.CreateSFAFRequest) (*models.SFAF, error) {
-	// Validate required MCEB Publication 7 fields
+	// Validate required MC4EB Publication 7, Change 1 fields
 	requiredFields := []string{"field005", "field010", "field102", "field110", "field200"}
 	var missingFields []string
 
@@ -116,7 +122,7 @@ func (ss *SFAFService) CreateSFAF(req models.CreateSFAFRequest) (*models.SFAF, e
 	}
 
 	if len(missingFields) > 0 {
-		return nil, fmt.Errorf("missing required MCEB fields: %v. Required fields are: field005 (Security Classification), field010 (Type of Action), field102 (Agency Serial Number), field110 (Frequency), field200 (Agency Code)", missingFields)
+		return nil, fmt.Errorf("missing required MC4EB fields: %v. Required fields are: field005 (Security Classification), field010 (Type of Action), field102 (Agency Serial Number), field110 (Frequency), field200 (Agency Code)", missingFields)
 	}
 
 	// Convert request to SFAF model
@@ -170,6 +176,10 @@ func (ss *SFAFService) UpdateSFAF(sfafID string, req models.UpdateSFAFRequest) (
 func (ss *SFAFService) DeleteSFAF(id string) error {
 	// REPLACE: ss.storage.DeleteSFAF(id) WITH:
 	return ss.sfafRepo.Delete(id)
+}
+
+func (ss *SFAFService) DeleteAllSFAFs() (int, error) {
+	return ss.sfafRepo.DeleteAll()
 }
 
 func (ss *SFAFService) GetFieldDefinitions() map[string]models.SFAFFormDefinition {
@@ -249,7 +259,8 @@ func (ss *SFAFService) GetFieldDefinitionByNumber(fieldNumber string) (*models.S
 
 // ValidateFieldDefinitionData ensures field definitions are consistent with database schema
 func (ss *SFAFService) ValidateFieldDefinitionData() error {
-	// Critical MCEB Publication 7 compliance fields (Source: handlers.txt)
+	// Critical MC4EB Publication 7, Change 1 compliance fields (Source: handlers.txt)
+	// Note: field303 removed - optional for Pool Assignments
 	requiredFields := []string{
 		"field100", // Agency Code
 		"field101", // Agency Code
@@ -260,7 +271,6 @@ func (ss *SFAFService) ValidateFieldDefinitionData() error {
 		"field203", // Bureau
 		"field300", // State/Country (Transmitter)
 		"field301", // Antenna Location
-		"field303", // Antenna Coordinates
 		"field110", // Frequency(ies)
 	}
 
@@ -271,16 +281,16 @@ func (ss *SFAFService) ValidateFieldDefinitionData() error {
 		}
 	}
 
-	// Validate IRAC compliance fields (Source: handlers.txt shows MCEB compliance)
+	// Validate IRAC compliance fields (Source: handlers.txt shows MC4EB compliance)
 	if field500, exists := ss.fieldDefs["field500"]; exists {
 		if field500.Help == "" {
-			return fmt.Errorf("field500 (IRAC Note references) missing help text for MCEB compliance")
+			return fmt.Errorf("field500 (IRAC Note references) missing help text for MC4EB compliance")
 		}
 	}
 
 	if field501, exists := ss.fieldDefs["field501"]; exists {
 		if field501.Help == "" {
-			return fmt.Errorf("field501 (IRAC Note codes) missing help text for MCEB compliance")
+			return fmt.Errorf("field501 (IRAC Note codes) missing help text for MC4EB compliance")
 		}
 	}
 
@@ -473,7 +483,7 @@ func (ss *SFAFService) initializeFieldDefinitions() {
 			Help: "Reference to previous related assignment",
 		},
 
-		// 200 Series - Organizational Information (MCEB Pub 7)
+		// 200 Series - Organizational Information (MC4EB Pub 7 CHG 1)
 		"field200": {
 			FieldNumber: "field200", Label: "Agency", Required: false, FieldType: "text",
 			Help: "Federal agency designation (6 characters)",
@@ -506,8 +516,8 @@ func (ss *SFAFService) initializeFieldDefinitions() {
 			Help: "Name of the site or facility",
 		},
 		"field303": {
-			FieldNumber: "field303", Label: "Antenna Coordinates", Required: true, FieldType: "text",
-			Help: "Format: DDMMSSXDDDMMSSZ (e.g., 302521N0864150W)",
+			FieldNumber: "field303", Label: "Antenna Coordinates", Required: false, FieldType: "text",
+			Help: "Format: DDMMSSXDDDMMSSZ (e.g., 302521N0864150W). Optional for Pool Assignments.",
 		},
 		"field304": {
 			FieldNumber: "field304", Label: "Ground Elevation (m)", Required: false, FieldType: "number",
@@ -526,7 +536,7 @@ func (ss *SFAFService) initializeFieldDefinitions() {
 			Help: "Geographic description of operational area",
 		},
 
-		// 400 Series - Receiver Location Data (MCEB Pub 7)
+		// 400 Series - Receiver Location Data (MC4EB Pub 7 CHG 1)
 		"field400": {
 			FieldNumber: "field400", Label: "State/Country", Required: false, FieldType: "text",
 			Help: "Receiver state or country (RSC tag, 4 characters)",
@@ -817,77 +827,71 @@ func (ss *SFAFService) ImportSFAFFile(file io.Reader, filename string) (*models.
 	result.TotalRecords = len(records)
 	fmt.Printf("📊 Parsed %d records from file\n", len(records))
 
-	// Debug: show first record's fields
-	if len(records) > 0 {
-		fmt.Printf("🔍 First record field count: %d fields\n", len(records[0].Fields))
-		occurrences := make(map[int]int)
-		for _, field := range records[0].Fields {
-			occurrences[field.Occurrence]++
-		}
-		fmt.Printf("🔍 Occurrence breakdown: %v\n", occurrences)
+	// First pass: validate and prepare all records for batch import
+	fmt.Printf("🔄 Validating and preparing %d records for batch import...\n", len(records))
+
+	type recordData struct {
+		recordNum int
+		serial    string
+		marker    *models.Marker
+		sfaf      *models.SFAF
+		fieldOccs []models.SFAFFieldOccurrence
 	}
 
-	// Process each record
+	validRecords := make([]recordData, 0, len(records))
+
 	for i, record := range records {
 		recordNum := i + 1
+		var rd recordData
+		rd.recordNum = recordNum
 
 		// Extract serial from field 102
 		serial := ss.extractSerialFromRecord(record)
 		if serial == "" {
 			result.ErrorCount++
-			result.Errors = append(result.Errors, fmt.Sprintf("Record %d: missing or invalid serial in field 102", recordNum))
+			result.Errors = append(result.Errors, fmt.Sprintf("Record %d: Missing required Field 102 (Agency Serial Number). This field is required for all SFAF records.", recordNum))
 			continue
 		}
+		rd.serial = serial
 
-		// Extract coordinates from field 303
+		// Extract coordinates from field 303 (OPTIONAL)
 		coordsStr := ss.extractCoordinatesFromRecord(record)
-		if coordsStr == "" {
-			result.ErrorCount++
-			result.Errors = append(result.Errors, fmt.Sprintf("Record %d: missing coordinates in field 303", recordNum))
-			continue
-		}
 
-		// Parse coordinates
-		lat, lng, err := ss.coordService.ParseCompactDMS(coordsStr)
-		if err != nil {
-			result.ErrorCount++
-			result.Errors = append(result.Errors, fmt.Sprintf("Record %d: failed to parse coordinates '%s': %v", recordNum, coordsStr, err))
-			continue
-		}
+		if coordsStr != "" {
+			// Coordinates provided - try to parse and create marker
+			lat, lng, err := ss.coordService.ParseCompactDMS(coordsStr)
+			if err != nil {
+				// Invalid coordinate format - warn but continue without marker
+				fmt.Printf("⚠️ Record %d (%s): Invalid coordinate format in Field 303: '%s' (Error: %v). Importing without marker.\n", recordNum, serial, coordsStr, err)
+			} else {
+				// Extract frequency from field 110
+				frequency := ss.extractFrequencyFromRecord(record)
 
-		// Create marker with coordinates and serial using MarkerService
-		if ss.markerService == nil {
-			result.ErrorCount++
-			result.Errors = append(result.Errors, fmt.Sprintf("Record %d: marker service not available", recordNum))
-			continue
+				// Prepare marker for batch creation
+				rd.marker = &models.Marker{
+					ID:          uuid.New(),
+					Serial:      serial,
+					Latitude:    lat,
+					Longitude:   lng,
+					Frequency:   frequency,
+					MarkerType:  "imported",
+					IsDraggable: false,
+				}
+				fmt.Printf("✓ Record %d (%s): Prepared marker at %s\n", recordNum, serial, coordsStr)
+			}
+		} else {
+			// No coordinates - this is valid for Pool Assignments and area records
+			fmt.Printf("ℹ️ Record %d (%s): No coordinates in Field 303. Importing as Pool Assignment or area record without marker.\n", recordNum, serial)
 		}
-
-		// Create marker request with serial from field 102
-		// SFAF markers are non-draggable by default
-		markerReq := models.CreateMarkerRequest{
-			Serial:      serial,
-			Latitude:    lat,
-			Longitude:   lng,
-			MarkerType:  "imported",
-			IsDraggable: false,
-		}
-
-		// Create marker using service
-		markerResp, err := ss.markerService.CreateMarker(markerReq)
-		if err != nil {
-			result.ErrorCount++
-			result.Errors = append(result.Errors, fmt.Sprintf("Record %d: failed to create marker: %v", recordNum, err))
-			continue
-		}
-
-		markerID := markerResp.Marker.ID
 
 		// Create SFAF record
-		sfaf := &models.SFAF{
-			ID:        uuid.New(),
-			MarkerID:  markerID,
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
+		rd.sfaf = &models.SFAF{
+			ID: uuid.New(),
+		}
+
+		// Link to marker if one was created
+		if rd.marker != nil {
+			rd.sfaf.MarkerID = &rd.marker.ID
 		}
 
 		// Convert first occurrences to field map for main SFAF table
@@ -897,78 +901,117 @@ func (ss *SFAFService) ImportSFAFFile(file io.Reader, filename string) (*models.
 		ss.truncateFieldsToVARCHARLimits(fieldMap)
 
 		// Populate SFAF fields from parsed data (first occurrences only)
-		sfaf.FromFieldMap(fieldMap)
+		rd.sfaf.FromFieldMap(fieldMap)
 
-		// Debug logging
-		fmt.Printf("🔍 Record %d - About to save SFAF:\n", recordNum)
-		fmt.Printf("   MarkerID: %s\n", markerID)
-		fmt.Printf("   Serial (field102 from struct): %s\n", sfaf.Field102)
-		fmt.Printf("   Serial (field102 from map): %s\n", fieldMap["field102"])
-		fmt.Printf("   Frequency (field110 from struct): %s\n", sfaf.Field110)
-		fmt.Printf("   Frequency (field110 from map): %s\n", fieldMap["field110"])
-		fmt.Printf("   Total fields in record: %d\n", len(record.Fields))
-		fmt.Printf("   First occurrence fields in map: %d\n", len(fieldMap))
-
-		// Debug: Check what's actually in the SFAF struct after FromFieldMap
-		fieldCount := 0
-		if sfaf.Field005 != "" {
-			fieldCount++
-		}
-		if sfaf.Field010 != "" {
-			fieldCount++
-		}
-		if sfaf.Field102 != "" {
-			fieldCount++
-		}
-		if sfaf.Field103 != "" {
-			fieldCount++
-		}
-		if sfaf.Field110 != "" {
-			fieldCount++
-		}
-		if sfaf.Field200 != "" {
-			fieldCount++
-		}
-		if sfaf.Field300 != "" {
-			fieldCount++
-		}
-		fmt.Printf("   Non-empty fields in SFAF struct (sample check): %d\n", fieldCount)
-
-		// Save SFAF to database
-		if err := ss.sfafRepo.Create(sfaf); err != nil {
-			result.ErrorCount++
-			result.Errors = append(result.Errors, fmt.Sprintf("Record %d: database error: %v", recordNum, err))
-			fmt.Printf("❌ Failed to save SFAF: %v\n", err)
-			continue
-		}
-
-		// Now save multi-occurrence fields to sfaf_fields table
-		multiOccurrenceCount := 0
+		// Collect multi-occurrence fields
 		for _, field := range record.Fields {
 			if field.Occurrence > 1 {
-				sfafField := &models.SFAFField{
-					ID:               uuid.New(),
-					MarkerID:         markerID,
-					FieldNumber:      field.FieldNumber,
-					FieldValue:       field.Value,
-					OccurrenceNumber: field.Occurrence,
-					CreatedAt:        time.Now(),
-				}
-
-				// Insert into sfaf_fields table using repository method
-				if err := ss.sfafRepo.CreateSFAFField(sfafField); err != nil {
-					fmt.Printf("⚠️ Failed to save multi-occurrence field %s/%d: %v\n", field.FieldNumber, field.Occurrence, err)
-				} else {
-					multiOccurrenceCount++
-				}
+				rd.fieldOccs = append(rd.fieldOccs, models.SFAFFieldOccurrence{
+					ID:          uuid.New(),
+					SFAFID:      rd.sfaf.ID,
+					FieldNumber: field.FieldNumber,
+					Value:       field.Value,
+					Occurrence:  field.Occurrence,
+				})
 			}
 		}
 
-		fmt.Printf("✅ Successfully saved SFAF record %d (%d fields + %d multi-occurrences)\n",
-			recordNum, len(fieldMap), multiOccurrenceCount)
+		validRecords = append(validRecords, rd)
+	}
 
-		result.SuccessfulCount++
-		result.ImportedIDs = append(result.ImportedIDs, sfaf.ID.String())
+	fmt.Printf("✅ Validation complete: %d valid records, %d errors\n", len(validRecords), result.ErrorCount)
+
+	// Batch create markers
+	if len(validRecords) > 0 {
+		markersToCreate := make([]*models.Marker, 0)
+		for _, rd := range validRecords {
+			if rd.marker != nil {
+				markersToCreate = append(markersToCreate, rd.marker)
+			}
+		}
+
+		if len(markersToCreate) > 0 {
+			fmt.Printf("📍 Batch creating %d markers...\n", len(markersToCreate))
+			if err := ss.markerRepo.BatchCreate(markersToCreate); err != nil {
+				return nil, fmt.Errorf("failed to batch create markers: %w", err)
+			}
+			fmt.Printf("✅ Successfully created/updated %d markers\n", len(markersToCreate))
+
+			// CRITICAL: After upsert, query back the actual marker IDs from database
+			// ON CONFLICT keeps original IDs for existing markers, so we need to sync
+			fmt.Printf("🔄 Syncing marker IDs after upsert...\n")
+			serialToMarkerID := make(map[string]uuid.UUID)
+
+			for _, marker := range markersToCreate {
+				// Query the database for the actual marker by serial
+				existingMarker, err := ss.markerRepo.GetBySerial(marker.Serial)
+				if err != nil {
+					return nil, fmt.Errorf("failed to retrieve marker after upsert for serial %s: %w", marker.Serial, err)
+				}
+				if existingMarker != nil {
+					serialToMarkerID[marker.Serial] = existingMarker.ID
+					fmt.Printf("  ✓ Synced %s -> ID %s\n", marker.Serial, existingMarker.ID.String()[:8])
+				}
+			}
+
+			// Update SFAF marker ID references to use actual database IDs
+			for i := range validRecords {
+				if validRecords[i].marker != nil {
+					if actualID, exists := serialToMarkerID[validRecords[i].serial]; exists {
+						validRecords[i].sfaf.MarkerID = &actualID
+					}
+				}
+			}
+			fmt.Printf("✅ Marker ID sync complete\n")
+		}
+	}
+
+	// Batch create SFAFs
+	if len(validRecords) > 0 {
+		sfafsToCreate := make([]*models.SFAF, 0, len(validRecords))
+		for _, rd := range validRecords {
+			sfafsToCreate = append(sfafsToCreate, rd.sfaf)
+		}
+
+		fmt.Printf("📄 Batch creating %d SFAF records...\n", len(sfafsToCreate))
+		if err := ss.sfafRepo.BatchCreate(sfafsToCreate); err != nil {
+			return nil, fmt.Errorf("failed to batch create SFAF records: %w", err)
+		}
+		fmt.Printf("✅ Successfully created %d SFAF records\n", len(sfafsToCreate))
+
+		// Collect imported IDs
+		for _, rd := range validRecords {
+			result.ImportedIDs = append(result.ImportedIDs, rd.sfaf.ID.String())
+		}
+		result.SuccessfulCount = len(validRecords)
+	}
+
+	// Batch create field occurrences
+	allFieldOccs := make([]*models.SFAFFieldOccurrence, 0)
+	for _, rd := range validRecords {
+		for i := range rd.fieldOccs {
+			allFieldOccs = append(allFieldOccs, &rd.fieldOccs[i])
+		}
+	}
+
+	if len(allFieldOccs) > 0 {
+		fmt.Printf("📋 Batch creating %d field occurrences...\n", len(allFieldOccs))
+		if err := ss.fieldOccRepo.BatchCreate(allFieldOccs); err != nil {
+			return nil, fmt.Errorf("failed to batch create field occurrences: %w", err)
+		}
+		fmt.Printf("✅ Successfully created %d field occurrences\n", len(allFieldOccs))
+	}
+
+	// Print summary
+	fmt.Printf("\n📊 Import Summary:\n")
+	fmt.Printf("   Total records parsed: %d\n", result.TotalRecords)
+	fmt.Printf("   Successfully imported: %d\n", result.SuccessfulCount)
+	fmt.Printf("   Errors: %d\n", result.ErrorCount)
+	if result.ErrorCount > 0 {
+		fmt.Printf("\n❌ Error details:\n")
+		for _, errMsg := range result.Errors {
+			fmt.Printf("   - %s\n", errMsg)
+		}
 	}
 
 	return result, nil
@@ -1095,6 +1138,16 @@ func (ss *SFAFService) extractCoordinatesFromRecord(record SFAFRecordData) strin
 	return ""
 }
 
+// extractFrequencyFromRecord extracts frequency from field 110
+func (ss *SFAFService) extractFrequencyFromRecord(record SFAFRecordData) string {
+	for _, field := range record.Fields {
+		if field.FieldNumber == "110" && field.Occurrence == 1 {
+			return strings.TrimSpace(field.Value)
+		}
+	}
+	return ""
+}
+
 // convertRecordToFieldMap converts first occurrences to map for backward compatibility
 func (ss *SFAFService) convertRecordToFieldMap(record SFAFRecordData) map[string]string {
 	fieldMap := make(map[string]string)
@@ -1110,23 +1163,93 @@ func (ss *SFAFService) convertRecordToFieldMap(record SFAFRecordData) map[string
 
 // truncateFieldsToVARCHARLimits truncates field values to match database VARCHAR constraints
 func (ss *SFAFService) truncateFieldsToVARCHARLimits(fields map[string]string) {
-	// Map of field names to their VARCHAR limits
+	// Map of field names to their VARCHAR limits (from 002_create_sfaf_table.sql)
 	varcharLimits := map[string]int{
-		"field110": 15, // Frequency assignments
-		"field303": 15, // Antenna Coordinates
-		"field343": 15, // Model numbers
-		"field403": 15, // Receiver Coordinates
-		"field443": 15, // System specifications
-		"field702": 15, // International Coordination
-		"field986": 15, // System parameters
-		"field995": 15, // Final parameters
-		// Add other VARCHAR fields as needed
+		// 000 Series
+		"field005": 10, "field006": 10, "field007": 1, "field010": 1,
+		"field013": 35, "field014": 60, "field015": 72, "field016": 35,
+		"field017": 8, "field018": 60, "field019": 35, "field020": 64,
+
+		// 100 Series
+		"field102": 10, "field103": 8, "field105": 10, "field106": 18,
+		"field107": 8, "field108": 35, "field110": 15, "field111": 23,
+		"field112": 35, "field113": 4, "field114": 11, "field115": 9,
+		"field116": 1, "field117": 6, "field118": 1, "field130": 4,
+		"field131": 2, "field144": 1, "field145": 20, "field146": 6,
+		"field147": 4, "field151": 1, "field152": 35,
+
+		// 200 Series
+		"field200": 6, "field201": 8, "field202": 8, "field203": 4,
+		"field204": 18, "field205": 18, "field206": 18, "field207": 18,
+		"field208": 6, "field209": 18,
+
+		// 300 Series
+		"field300": 4, "field301": 24, "field302": 18, "field303": 15,
+		"field304": 10, "field305": 10, "field306": 5, "field307": 20,
+		"field318": 7,
+
+		// 340 Series
+		"field340": 18, "field341": 29, "field342": 4, "field343": 15,
+		"field344": 6, "field345": 2, "field346": 9, "field347": 9,
+		"field348": 11, "field349": 1, "field354": 10, "field355": 18,
+		"field362": 3, "field363": 1, "field373": 1, "field374": 1,
+
+		// 400 Series
+		"field400": 4, "field401": 24, "field402": 10, "field403": 15,
+		"field404": 20, "field405": 10, "field406": 4, "field407": 5,
+		"field408": 1, "field409": 20, "field418": 7,
+		"field440": 18, "field442": 4, "field443": 15,
+
+		// 450 Series
+		"field453": 25, "field454": 10, "field455": 18, "field462": 3,
+		"field463": 1, "field473": 1,
+
+		// 500 Series
+		"field500": 4, "field501": 35, "field503": 35, "field504": 72,
+		"field505": 20, "field506": 11, "field507": 20, "field508": 10,
+		"field510": 20, "field511": 30, "field512": 30, "field513": 30,
+		"field521": 21, "field530": 35, "field531": 35,
+
+		// 600 Series
+		"field600": 50, "field601": 50, "field602": 50, "field605": 50,
+		"field606": 3, "field607": 3, "field608": 50, "field609": 100,
+
+		// 700 Series
+		"field700": 20, "field701": 3, "field702": 15, "field703": 20,
+		"field704": 1, "field707": 8, "field709": 50, "field710": 35,
+		"field711": 6, "field712": 50, "field714": 50, "field716": 1,
+
+		// 800 Series
+		"field800": 100, "field801": 60, "field802": 20, "field803": 60,
+		"field804": 60, "field806": 60, "field807": 50, "field808": 50,
+		"field809": 20, "field810": 5, "field811": 10, "field812": 50,
+		"field813": 100, "field814": 100, "field815": 20,
+
+		// 900 Series
+		"field901": 1, "field903": 4, "field905": 14, "field906": 66,
+		"field907": 1, "field908": 50, "field910": 20, "field912": 50,
+		"field913": 100, "field924": 4, "field929": 50,
+
+		// 950 Series
+		"field950": 50, "field951": 50, "field952": 1, "field953": 10,
+		"field955": 50, "field956": 10, "field958": 1, "field959": 40,
+		"field960": 50, "field961": 50, "field962": 50, "field963": 22,
+		"field966": 50, "field969": 50,
+
+		// 980 Series
+		"field980": 50, "field981": 100, "field982": 5, "field983": 16,
+		"field984": 11, "field985": 1, "field986": 15, "field987": 3,
+		"field988": 5, "field989": 16, "field990": 2, "field991": 3,
+		"field992": 3, "field993": 6, "field994": 1, "field995": 15,
+		"field996": 8, "field997": 10, "field998": 3, "field999": 20,
 	}
 
 	for fieldName, limit := range varcharLimits {
 		if value, exists := fields[fieldName]; exists && len(value) > limit {
+			originalLen := len(value)
 			fields[fieldName] = value[:limit]
-			fmt.Printf("⚠️  Truncated %s from %d to %d chars\n", fieldName, len(value), limit)
+			fmt.Printf("⚠️  Truncated %s from %d to %d chars: '%s' -> '%s'\n",
+				fieldName, originalLen, limit, value, fields[fieldName])
 		}
 	}
 }
@@ -1143,11 +1266,12 @@ func (ss *SFAFService) ValidateMCEBCompliance(fields map[string]string) map[stri
 		},
 	}
 
-	// Required fields for MCEB Publication 7 (Source: services.txt)
+	// Required fields for MC4EB Publication 7, Change 1 (Source: services.txt)
+	// Note: field303 removed - optional for Pool Assignments
 	requiredFields := []string{
 		"field005", "field102", "field110", "field200", "field201",
 		"field202", "field204", "field205", "field206", "field207",
-		"field300", "field301", "field303", "field400",
+		"field300", "field301", "field400",
 	}
 
 	missingFields := []string{}
@@ -1301,7 +1425,7 @@ func (ss *SFAFService) exportToXML(sfafs []*models.SFAF, fields []string) ([]byt
 	export := XMLExport{
 		ExportDate:     time.Now().Format("2006-01-02 15:04:05"),
 		RecordCount:    len(records),
-		MCEBCompliance: "MCEB Publication 7", // (Source: handlers.txt shows MCEB compliance)
+		MCEBCompliance: "MC4EB Publication 7, Change 1", // (Source: handlers.txt shows MC4EB compliance)
 		Records:        records,
 	}
 
@@ -1399,7 +1523,7 @@ func (ss *SFAFService) ValidateFieldsWithStorage(fields map[string]string) (*mod
 		result.Errors["database_constraints"] = err.Error()
 	}
 
-	// 2. MCEB Publication 7 compliance with storage validation (Source: handlers.txt)
+	// 2. MC4EB Publication 7, Change 1 compliance with storage validation (Source: handlers.txt)
 	mcebCompliance := ss.ValidateMCEBCompliance(fields)
 	if !mcebCompliance["is_compliant"].(bool) {
 		result.MCEBCompliant = false
@@ -1485,12 +1609,12 @@ func (ss *SFAFService) validateDatabaseConstraints(fields map[string]string) err
 
 // Helper method for IRAC Notes validation with storage
 func (ss *SFAFService) validateIRACNotesWithStorage(fields map[string]string) error {
-	// IRAC Note references validation (Source: handlers.txt shows MCEB compliance)
+	// IRAC Note references validation (Source: handlers.txt shows MC4EB compliance)
 	if field500, exists := fields["field500"]; exists && field500 != "" {
-		// Check against 10 reference limit per MCEB Publication 7
+		// Check against 10 reference limit per MC4EB Publication 7, Change 1
 		references := strings.Split(field500, ",")
 		if len(references) > 10 {
-			return fmt.Errorf("field500 (IRAC Note references) cannot exceed 10 per MCEB Publication 7 (current: %d)", len(references))
+			return fmt.Errorf("field500 (IRAC Note references) cannot exceed 10 per MC4EB Publication 7, Change 1 (current: %d)", len(references))
 		}
 
 		// Validate each reference format
@@ -1502,10 +1626,10 @@ func (ss *SFAFService) validateIRACNotesWithStorage(fields map[string]string) er
 	}
 
 	if field501, exists := fields["field501"]; exists && field501 != "" {
-		// Check against 30 code limit per MCEB Publication 7
+		// Check against 30 code limit per MC4EB Publication 7, Change 1
 		codes := strings.Split(field501, ",")
 		if len(codes) > 30 {
-			return fmt.Errorf("field501 (IRAC Note codes) cannot exceed 30 per MCEB Publication 7 (current: %d)", len(codes))
+			return fmt.Errorf("field501 (IRAC Note codes) cannot exceed 30 per MC4EB Publication 7, Change 1 (current: %d)", len(codes))
 		}
 
 		// Validate each code format

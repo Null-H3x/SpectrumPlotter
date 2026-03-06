@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 
 	_ "github.com/lib/pq"
@@ -33,8 +34,11 @@ func NewDatabaseConfig() *DatabaseConfig {
 }
 
 func (config *DatabaseConfig) GetConnectionString() string {
-	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-		config.Host, config.Port, config.User, config.Password, config.DBName, config.SSLMode)
+	// Use PostgreSQL URL format for proper password encoding
+	// URL-encode the password to handle special characters like $, *, !, %, &
+	encodedPassword := url.QueryEscape(config.Password)
+	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
+		config.User, encodedPassword, config.Host, config.Port, config.DBName, config.SSLMode)
 }
 
 func ConnectDatabase() (*sql.DB, error) {

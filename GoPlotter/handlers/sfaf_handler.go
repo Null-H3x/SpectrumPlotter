@@ -179,6 +179,7 @@ func (sh *SFAFHandler) GetAllSFAFs(c *gin.Context) {
 	// Get paginated results (Source: repositories.txt shows GetPaginated)
 	sfafs, err := sh.sfafService.GetPaginated(offset, limit)
 	if err != nil {
+		fmt.Printf("❌ GetPaginated failed: %v\n", err)
 		c.JSON(http.StatusInternalServerError, NewErrorResponse("Failed to retrieve SFAFs: "+err.Error()))
 		return
 	}
@@ -186,6 +187,7 @@ func (sh *SFAFHandler) GetAllSFAFs(c *gin.Context) {
 	// Get total count for pagination (Source: repositories.txt shows GetCount)
 	total, err := sh.sfafService.GetCount()
 	if err != nil {
+		fmt.Printf("❌ GetCount failed: %v\n", err)
 		c.JSON(http.StatusInternalServerError, NewErrorResponse("Failed to get total count: "+err.Error()))
 		return
 	}
@@ -253,6 +255,25 @@ func (sh *SFAFHandler) DeleteSFAF(c *gin.Context) {
 	})
 }
 
+// DeleteAllSFAFs deletes all SFAF records from the database
+func (sh *SFAFHandler) DeleteAllSFAFs(c *gin.Context) {
+	// Delete all SFAFs
+	count, err := sh.sfafService.DeleteAllSFAFs()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to delete all SFAFs: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":       true,
+		"message":       "All SFAF records deleted successfully",
+		"deleted_count": count,
+	})
+}
+
 // ===== COMPREHENSIVE OBJECT DATA HANDLER =====
 
 // GetObjectData provides comprehensive marker and SFAF data for display (Source: handlers.txt)
@@ -303,12 +324,15 @@ func (sh *SFAFHandler) GetObjectData(c *gin.Context) {
 
 	// Include SFAF data if it exists
 	if sfaf != nil {
+		fields := sfaf.ToFieldMap()
 		response["sfaf"] = sfaf
-		response["fields"] = sfaf.ToFieldMap()
+		response["fields"] = fields
+		fmt.Printf("🔍 GetObjectData returning %d fields for marker %s (SFAF exists)\n", len(fields), markerID)
 	} else {
 		// Auto-populate fields from marker data (Source: services.txt shows AutoPopulateFromMarker)
 		autoFields := sh.sfafService.AutoPopulateFromMarker(marker)
 		response["auto_populated_fields"] = autoFields
+		fmt.Printf("🔍 GetObjectData returning %d auto-populated fields for marker %s (no SFAF)\n", len(autoFields), markerID)
 	}
 
 	c.JSON(http.StatusOK, response)
@@ -316,7 +340,7 @@ func (sh *SFAFHandler) GetObjectData(c *gin.Context) {
 
 // ===== VALIDATION AND FIELD DEFINITIONS =====
 
-// ValidateFields validates SFAF fields according to MCEB Publication 7 (Source: handlers.txt)
+// ValidateFields validates SFAF fields according to MC4EB Publication 7, Change 1 (Source: handlers.txt)
 func (sh *SFAFHandler) ValidateFields(c *gin.Context) {
 	var req struct {
 		Fields map[string]string `json:"fields" binding:"required"`
@@ -552,7 +576,7 @@ func (sh *SFAFHandler) exportCSV(c *gin.Context, sfafs []*models.SFAF, filename 
 			fieldMap["field301"], // Antenna Location
 			fieldMap["field303"], // Antenna Coordinates
 			fieldMap["field110"], // Frequency(ies)
-			fieldMap["field500"], // IRAC Notes (Source: handlers.txt shows MCEB compliance)
+			fieldMap["field500"], // IRAC Notes (Source: handlers.txt shows MC4EB compliance)
 		}
 		writer.Write(row)
 	}
@@ -569,7 +593,7 @@ func (sh *SFAFHandler) exportJSON(c *gin.Context, sfafs []*models.SFAF, filename
 			"export_date":     time.Now().Format("2006-01-02 15:04:05"),
 			"record_count":    len(sfafs),
 			"export_format":   "json",
-			"mceb_compliance": "Publication 7", // (Source: handlers.txt shows MCEB compliance)
+			"mceb_compliance": "MC4EB Publication 7, Change 1", // (Source: handlers.txt shows MC4EB compliance)
 		},
 		"sfaf_records": sfafs,
 	}
@@ -594,7 +618,7 @@ func (sh *SFAFHandler) exportXML(c *gin.Context, sfafs []*models.SFAF, filename 
 	xmlData := XMLExport{
 		ExportDate:     time.Now().Format("2006-01-02 15:04:05"),
 		RecordCount:    len(sfafs),
-		MCEBCompliance: "Publication 7",
+		MCEBCompliance: "MC4EB Publication 7, Change 1",
 		SFAFRecords:    sfafs,
 	}
 
@@ -679,13 +703,14 @@ func (sh *SFAFHandler) getSFAFStatsByAgency() (map[string]interface{}, error) {
 		})
 	}
 
-	// Calculate MCEB Publication 7 compliance by agency (Source: handlers.txt shows MCEB compliance)
+	// Calculate MC4EB Publication 7, Change 1 compliance by agency (Source: handlers.txt shows MC4EB compliance)
 	agencyCompliance := make(map[string]map[string]interface{})
 
-	// Required fields for MCEB compliance (Source: services.txt shows required fields)
+	// Required fields for MC4EB compliance (Source: services.txt shows required fields)
+	// Note: field303 removed - optional for Pool Assignments
 	requiredFields := []string{
 		"field100", "field101", "field102", "field200", "field201",
-		"field202", "field203", "field300", "field301", "field303", "field400",
+		"field202", "field203", "field300", "field301", "field400",
 	}
 
 	for _, agency := range agencyTypes {
@@ -854,7 +879,7 @@ func (sh *SFAFHandler) getSFAFStatsBySystemType() (map[string]interface{}, error
 		return nil, err
 	}
 
-	// System types from MCEB Publication 7 (Source: services.txt shows system categories)
+	// System types from MC4EB Publication 7, Change 1 (Source: services.txt shows system categories)
 	systemTypes := []string{"Fixed", "Mobile", "Portable", "Aeronautical", "Maritime", "Satellite"}
 	systemCounts := make(map[string]int)
 
@@ -962,8 +987,8 @@ func (sh *SFAFHandler) getSFAFIRACNotesStats() (map[string]interface{}, error) {
 		return nil, err
 	}
 
-	field500Count := 0 // IRAC Note references (max 10 per MCEB Pub 7)
-	field501Count := 0 // IRAC Note codes (max 30 per MCEB Pub 7)
+	field500Count := 0 // IRAC Note references (max 10 per MC4EB Pub 7 CHG 1)
+	field501Count := 0 // IRAC Note codes (max 30 per MC4EB Pub 7 CHG 1)
 	recordsWithIRAC := 0
 
 	// Analyze IRAC Notes usage (Source: handlers.txt shows field 500/501 limits)
@@ -998,7 +1023,7 @@ func (sh *SFAFHandler) getSFAFIRACNotesStats() (map[string]interface{}, error) {
 		"mceb_compliance": gin.H{
 			"field_500_limit": 10, // Source: handlers.txt
 			"field_501_limit": 30, // Source: handlers.txt
-			"publication":     "MCEB Publication 7",
+			"publication":     "MC4EB Publication 7, Change 1",
 		},
 	}, nil
 }
@@ -1087,18 +1112,18 @@ func (sh *SFAFHandler) getSFAFFieldCompletionStats() (map[string]interface{}, er
 	}
 
 	// Critical fields for completion (Source: services.txt shows required fields)
+	// Note: field303 removed - optional for Pool Assignments
 	criticalFields := []string{
 		"field100", // Agency Code - Required (Source: services.txt)
 		"field101", // Agency Code - Required (Source: services.txt)
-		"field102", // Agency Serial Number - Required (Source: MCEB Pub 7)
-		"field200", // Agency - Required (Source: MCEB Pub 7)
-		"field201", // Unified Command - Required (Source: MCEB Pub 7)
-		"field202", // Unified Command Service - Required (Source: MCEB Pub 7)
-		"field203", // Bureau - Required (Source: MCEB Pub 7)
-		"field300", // State/Country - Required (Source: MCEB Pub 7)
-		"field301", // Antenna Location - Required (Source: MCEB Pub 7)
-		"field303", // Antenna Coordinates - Required (Source: MCEB Pub 7)
-		"field110", // Frequency(ies) - Required (Source: MCEB Pub 7)
+		"field102", // Agency Serial Number - Required (Source: MC4EB Pub 7 CHG 1)
+		"field200", // Agency - Required (Source: MC4EB Pub 7 CHG 1)
+		"field201", // Unified Command - Required (Source: MC4EB Pub 7 CHG 1)
+		"field202", // Unified Command Service - Required (Source: MC4EB Pub 7 CHG 1)
+		"field203", // Bureau - Required (Source: MC4EB Pub 7 CHG 1)
+		"field300", // State/Country - Required (Source: MC4EB Pub 7 CHG 1)
+		"field301", // Antenna Location - Required (Source: MC4EB Pub 7 CHG 1)
+		"field110", // Frequency(ies) - Required (Source: MC4EB Pub 7 CHG 1)
 	}
 
 	// All monitored fields for usage statistics
@@ -1110,7 +1135,7 @@ func (sh *SFAFHandler) getSFAFFieldCompletionStats() (map[string]interface{}, er
 		"field103": "Expiration Date",
 		"field104": "Previous Assignment",
 
-		// 200 Series - Organizational Information (Source: MCEB Pub 7)
+		// 200 Series - Organizational Information (Source: MC4EB Pub 7 CHG 1)
 		"field200": "Agency",
 		"field201": "Unified Command",
 		"field202": "Unified Command Service",
@@ -1133,8 +1158,8 @@ func (sh *SFAFHandler) getSFAFFieldCompletionStats() (map[string]interface{}, er
 		"field321": "Extended Precision",
 
 		// 500 Series - Equipment Information (Source: table_info.txt)
-		"field500": "Transmitter Make",  // IRAC Note references (Source: handlers.txt shows MCEB compliance)
-		"field501": "Transmitter Model", // IRAC Note codes (Source: handlers.txt shows MCEB compliance)
+		"field500": "Transmitter Make",  // IRAC Note references (Source: handlers.txt shows MC4EB compliance)
+		"field501": "Transmitter Model", // IRAC Note codes (Source: handlers.txt shows MC4EB compliance)
 		"field502": "Transmitter S/N",
 		"field503": "Receiver Make",
 		"field504": "Receiver Model",
@@ -1318,13 +1343,13 @@ func (sh *SFAFHandler) getSFAFFieldCompletionStats() (map[string]interface{}, er
 		leastUsed = append(leastUsed, usageStats[i])
 	}
 
-	// MCEB Publication 7 compliance analysis (Source: handlers.txt shows MCEB compliance)
+	// MC4EB Publication 7, Change 1 compliance analysis (Source: handlers.txt shows MC4EB compliance)
 	mcebCompliance := map[string]interface{}{
 		"field_500_usage":     fieldUsage["field500"], // IRAC Note references
 		"field_501_usage":     fieldUsage["field501"], // IRAC Note codes
 		"field_500_max_limit": 10,                     // Source: handlers.txt
 		"field_501_max_limit": 30,                     // Source: handlers.txt
-		"compliance_standard": "MCEB Publication 7",
+		"compliance_standard": "MC4EB Publication 7, Change 1",
 		"critical_fields_completion": gin.H{
 			"total_critical_fields":    len(criticalFields),
 			"avg_critical_completion":  criticalCompletionRate,
@@ -1383,8 +1408,8 @@ func (sh *SFAFHandler) ExportAllSFAF(c *gin.Context) {
 		format = "sfaf" // Default to SFAF format
 	}
 
-	// ✅ FIXED: Correct method call with proper return type
-	sfafRecords, err := sh.sfafService.GetAllSFAFsWithMarkers()
+	// Get ALL SFAF records including Pool Assignments (marker_id can be NULL)
+	sfafRecords, err := sh.sfafService.GetAllSFAFs()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
@@ -1486,6 +1511,90 @@ func (sh *SFAFHandler) ExportSingleSFAF(c *gin.Context) {
 	}
 }
 
+// ExportSelectedSFAFs exports multiple selected SFAF records in specified format
+// POST /api/sfaf/export-selected
+func (sh *SFAFHandler) ExportSelectedSFAFs(c *gin.Context) {
+	var req struct {
+		IDs    []string `json:"ids" binding:"required"`
+		Format string   `json:"format"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Invalid request: " + err.Error(),
+		})
+		return
+	}
+
+	if len(req.IDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "No record IDs provided",
+		})
+		return
+	}
+
+	format := req.Format
+	if format == "" {
+		format = "csv" // Default to CSV
+	}
+
+	// Fetch selected SFAF records
+	var sfafs []*models.SFAF
+	for _, id := range req.IDs {
+		sfaf, err := sh.sfafService.GetSFAFByID(id)
+		if err != nil {
+			continue // Skip records that can't be found
+		}
+		if sfaf != nil {
+			sfafs = append(sfafs, sfaf)
+		}
+	}
+
+	if len(sfafs) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{
+			"success": false,
+			"error":   "No valid records found for export",
+		})
+		return
+	}
+
+	// Generate export based on format
+	switch format {
+	case "csv":
+		csvContent := sh.generateCSVContent(sfafs)
+		filename := fmt.Sprintf("SFAF_Selected_%s.csv", time.Now().Format("20060102"))
+
+		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+		c.Header("Content-Type", "text/csv")
+		c.String(http.StatusOK, csvContent)
+
+	case "json":
+		c.JSON(http.StatusOK, gin.H{
+			"success":      true,
+			"export_type":  "json",
+			"exported_at":  time.Now().Format(time.RFC3339),
+			"total_count":  len(sfafs),
+			"sfaf_records": sfafs,
+		})
+
+	case "sfaf":
+		content := sh.generateSFAFContent(sfafs)
+		filename := fmt.Sprintf("SFAF_Selected_%s.txt", time.Now().Format("20060102"))
+
+		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+		c.Header("Content-Type", "text/plain")
+		c.String(http.StatusOK, content)
+
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Unsupported export format. Use: csv, json, or sfaf",
+		})
+	}
+}
+
 // Helper method to generate SFAF format content (Source: sfaf_example.txt format)
 func (sh *SFAFHandler) generateSingleSFAFContent(sfafs []*models.SFAF) string {
 	var content strings.Builder
@@ -1531,21 +1640,38 @@ func (sh *SFAFHandler) generateCSVContent(sfafRecords []*models.SFAF) string {
 	// CSV header
 	content.WriteString("ID,MarkerID,Serial,Frequency,Location,Coordinates,Agency,Equipment,Notes\n")
 
-	for _, record := range sfafRecords { // ✅ FIXED: Use correct variable name
+	for _, record := range sfafRecords {
 		fieldMap := record.ToFieldMap()
+
+		// Handle nullable MarkerID
+		markerIDStr := ""
+		if record.MarkerID != nil {
+			markerIDStr = record.MarkerID.String()
+		}
+
+		// Escape CSV values to handle commas, quotes, and newlines
 		content.WriteString(fmt.Sprintf("%s,%s,%s,%s,%s,%s,%s,%s,%s\n",
-			record.ID.String(),
-			record.MarkerID.String(),
-			fieldMap["field101"],  // Serial
-			fieldMap["field400"],  // Frequency
-			fieldMap["field301"],  // Location
-			fieldMap["field303"],  // Coordinates
-			fieldMap["field102"],  // Agency
-			fieldMap["field340"],  // Equipment
-			fieldMap["field901"])) // Notes
+			sh.escapeCSV(record.ID.String()),
+			sh.escapeCSV(markerIDStr),
+			sh.escapeCSV(fieldMap["field102"]),  // Serial
+			sh.escapeCSV(fieldMap["field110"]),  // Frequency
+			sh.escapeCSV(fieldMap["field301"]),  // Location
+			sh.escapeCSV(fieldMap["field303"]),  // Coordinates
+			sh.escapeCSV(fieldMap["field100"]),  // Agency
+			sh.escapeCSV(fieldMap["field340"]),  // Equipment
+			sh.escapeCSV(fieldMap["field901"]))) // Notes
 	}
 
 	return content.String()
+}
+
+// escapeCSV escapes a string for CSV format
+func (sh *SFAFHandler) escapeCSV(value string) string {
+	// If value contains comma, quote, or newline, wrap in quotes and escape quotes
+	if strings.ContainsAny(value, ",\"\n\r") {
+		return `"` + strings.ReplaceAll(value, `"`, `""`) + `"`
+	}
+	return value
 }
 
 func (sh *SFAFHandler) getFieldValue(sfaf *models.SFAF, fieldName string) string {
@@ -1560,14 +1686,20 @@ func (sh *SFAFHandler) generateSFAFContent(sfafs []*models.SFAF) string {
 	var content strings.Builder
 
 	// Header for SFAF export
-	content.WriteString("SFAF Export - MCEB Publication 7 Compliant\n")
+	content.WriteString("SFAF Export - MC4EB Publication 7, Change 1 Compliant\n")
 	content.WriteString("Generated: " + time.Now().Format("2006-01-02 15:04:05") + "\n\n")
 
 	// Process each SFAF record
 	for i, sfaf := range sfafs {
 		content.WriteString(fmt.Sprintf("Record %d:\n", i+1))
 		content.WriteString(fmt.Sprintf("ID: %s\n", sfaf.ID.String()))
-		content.WriteString(fmt.Sprintf("Marker ID: %s\n", sfaf.MarkerID.String()))
+
+		// Handle nullable MarkerID
+		markerIDStr := "N/A (Pool Assignment)"
+		if sfaf.MarkerID != nil {
+			markerIDStr = sfaf.MarkerID.String()
+		}
+		content.WriteString(fmt.Sprintf("Marker ID: %s\n", markerIDStr))
 
 		// Convert SFAF to field map for export (Source: models.txt shows ToFieldMap method)
 		fieldMap := sfaf.ToFieldMap()
