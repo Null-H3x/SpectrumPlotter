@@ -1,5 +1,6 @@
 # Environment variables (contains sensitive credentials)
 .env
+.env.*
 
 # Build artifacts
 sfaf-plotter
@@ -57,7 +58,6 @@ docs/AWS_DEPLOYMENT_GUIDE.md
 
 # Documentation .txt files (replaced with .md files)
 *.txt
-!go.sum
 
 # Personal/sensitive files
 *.pem
@@ -67,6 +67,3 @@ docs/AWS_DEPLOYMENT_GUIDE.md
 
 # Claude workspace
 .claude/
-
-# Parent directory files (shouldn't be in GoPlotter repo)
-../

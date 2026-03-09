@@ -1,0 +1,30 @@
+# Credentials and keys
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Documents and data files (anchored to root only, won't affect GoPlotter subdirs)
+/*.txt
+/*.pdf
+/*.docx
+/*.xlsx
+/*.xlsm
+/*.csv
+/*.json
+/*.html
+
+# Backup directory
+/.backup/
+
+# Specific sensitive/data files (belt-and-suspenders)
+/aws-sfaf-plotter-key.pem
+/ACC-618AOC-AFSOC HF-VHF-UHF Pool.txt
+/Frequency Nomination
+/Frequency Nomination.xlsm
+/PlotterWorksFeb26.html
+/SFAF Pool.pdf
+/SFAF_Selected_2026-01-03.json
+/Visio Flows v2.docx
+/plotter.txt
+/ua_sfafs_cao_2024-10-25.txt
