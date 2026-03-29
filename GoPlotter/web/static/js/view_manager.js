@@ -256,16 +256,20 @@ class ViewManager {
         const container = document.getElementById('fieldSelector');
         const groups = this.getFieldGroups();
 
-        container.innerHTML = groups.map(group => `
+        container.innerHTML = groups.map((group, idx) => `
             <div class="field-group">
                 <div class="field-group-header" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
                     <div class="field-group-title">
                         <i class="${group.icon}"></i>
                         ${group.title}
                     </div>
-                    <div class="field-count">${group.fields.length} fields</div>
+                    <div class="field-group-actions" onclick="event.stopPropagation()">
+                        <button type="button" class="btn-group-select" onclick="viewManager.selectGroupFields(${idx})">Select All</button>
+                        <button type="button" class="btn-group-clear" onclick="viewManager.clearGroupFields(${idx})">Clear</button>
+                        <div class="field-count">${group.fields.length} fields</div>
+                    </div>
                 </div>
-                <div class="field-group-items">
+                <div class="field-group-items" data-group-idx="${idx}">
                     ${group.fields.map(field => `
                         <label class="field-checkbox">
                             <input type="checkbox" value="${field.key}" data-label="${field.label}">
@@ -275,6 +279,16 @@ class ViewManager {
                 </div>
             </div>
         `).join('');
+    }
+
+    selectGroupFields(idx) {
+        document.querySelectorAll(`#fieldSelector .field-group-items[data-group-idx="${idx}"] input[type="checkbox"]`)
+            .forEach(cb => cb.checked = true);
+    }
+
+    clearGroupFields(idx) {
+        document.querySelectorAll(`#fieldSelector .field-group-items[data-group-idx="${idx}"] input[type="checkbox"]`)
+            .forEach(cb => cb.checked = false);
     }
 
     getFieldGroups() {

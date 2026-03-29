@@ -44,7 +44,7 @@ func (s *AuthService) VerifyPassword(password, hash string) bool {
 func (s *AuthService) AuthenticatePassword(username, password, ipAddress, userAgent string) (*models.User, string, error) {
 	// Get user by username
 	user, err := s.userRepo.GetByUsername(username)
-	if err != nil {
+	if err != nil || user == nil {
 		return nil, "", fmt.Errorf("invalid username or password")
 	}
 
@@ -54,7 +54,10 @@ func (s *AuthService) AuthenticatePassword(username, password, ipAddress, userAg
 	}
 
 	// Verify password
-	if !s.VerifyPassword(password, user.PasswordHash) {
+	if user.PasswordHash == nil {
+		return nil, "", fmt.Errorf("invalid username or password")
+	}
+	if !s.VerifyPassword(password, *user.PasswordHash) {
 		return nil, "", fmt.Errorf("invalid username or password")
 	}
 
@@ -97,7 +100,7 @@ func (s *AuthService) AuthenticatePassword(username, password, ipAddress, userAg
 // ValidateSession validates a session token and returns the user
 func (s *AuthService) ValidateSession(token string) (*models.User, error) {
 	session, err := s.sessionRepo.GetByToken(token)
-	if err != nil {
+	if err != nil || session == nil {
 		return nil, fmt.Errorf("invalid session")
 	}
 
@@ -109,7 +112,7 @@ func (s *AuthService) ValidateSession(token string) (*models.User, error) {
 
 	// Get user
 	user, err := s.userRepo.GetByID(session.UserID)
-	if err != nil {
+	if err != nil || user == nil {
 		return nil, fmt.Errorf("user not found")
 	}
 
@@ -154,7 +157,7 @@ func (s *AuthService) CreateSuperuser(username, password, email, fullName string
 		ID:           uuid.New(),
 		Username:     username,
 		Email:        email,
-		PasswordHash: passwordHash,
+		PasswordHash: &passwordHash,
 		FullName:     fullName,
 		Organization: "System",
 		Role:         "admin",
@@ -165,6 +168,36 @@ func (s *AuthService) CreateSuperuser(username, password, email, fullName string
 
 	err = s.userRepo.CreateUser(user)
 	if err != nil {
+		return nil, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	return user, nil
+}
+
+// CreateUser creates a new user with the specified role (admin-controlled)
+func (s *AuthService) CreateUser(username, password, email, fullName, organization, role string, installationID *uuid.UUID) (*models.User, error) {
+	existing, _ := s.userRepo.GetByUsername(username)
+	if existing != nil {
+		return nil, fmt.Errorf("username already taken")
+	}
+
+	passwordHash, err := s.HashPassword(password)
+	if err != nil {
+		return nil, err
+	}
+
+	user := &models.User{
+		Username:       username,
+		Email:          email,
+		PasswordHash:   &passwordHash,
+		FullName:       fullName,
+		Organization:   organization,
+		Role:           role,
+		IsActive:       true,
+		InstallationID: installationID,
+	}
+
+	if err = s.userRepo.CreateUser(user); err != nil {
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 

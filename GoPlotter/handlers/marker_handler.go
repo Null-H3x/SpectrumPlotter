@@ -237,3 +237,46 @@ func (mh *MarkerHandler) RemoveIRACNoteFromMarker(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "IRAC note removed from marker successfully"})
 }
+
+func (mh *MarkerHandler) CreateIRACNote(c *gin.Context) {
+	var note models.IRACNote
+	if err := c.ShouldBindJSON(&note); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := mh.markerService.CreateIRACNote(&note); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"success": true, "note": note})
+}
+
+func (mh *MarkerHandler) UpdateIRACNote(c *gin.Context) {
+	code := c.Param("code")
+	var note models.IRACNote
+	if err := c.ShouldBindJSON(&note); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	note.Code = code
+
+	if err := mh.markerService.UpdateIRACNote(&note); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "note": note})
+}
+
+func (mh *MarkerHandler) DeleteIRACNote(c *gin.Context) {
+	code := c.Param("code")
+
+	if err := mh.markerService.DeleteIRACNote(code); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "IRAC note deleted"})
+}

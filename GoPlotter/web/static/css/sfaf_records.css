@@ -127,6 +127,12 @@
     color: #721c24;
 }
 
+.status-pool {
+    background: rgba(139, 92, 246, 0.15);
+    color: #7c3aed;
+    border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
 /* Action buttons in table */
 .table-actions-group {
     display: flex;

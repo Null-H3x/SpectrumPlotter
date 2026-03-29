@@ -139,6 +139,10 @@ body {
     color: var(--text-primary) !important;
 }
 
+select.form-control { background: #0d1117 !important; color: var(--text-primary) !important; }
+select.form-control option { background: #0d1117; color: var(--text-primary); }
+select.form-control option:checked { background: #1e3a5f; color: #90caf9; }
+
 .form-control:focus {
     border-color: var(--accent-color) !important;
 }

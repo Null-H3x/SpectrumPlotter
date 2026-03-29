@@ -434,8 +434,6 @@ body {
 
 .table-container {
     overflow-x: auto;
-    overflow-y: auto;
-    max-height: 650px;
     position: relative;
 }
 
@@ -470,7 +468,7 @@ body {
 
 .data-table thead {
     position: sticky;
-    top: 0;
+    top: 72px;
     z-index: 10;
 }
 
@@ -491,8 +489,6 @@ body {
     text-transform: uppercase;
     letter-spacing: 0.8px;
     border-bottom: 2px solid rgba(102, 126, 234, 0.3);
-    position: sticky;
-    top: 0;
 }
 
 .data-table tbody tr {
@@ -589,7 +585,7 @@ body {
     background: rgba(15, 15, 35, 0.98);
     border-bottom: 1px solid rgba(102, 126, 234, 0.2);
     position: sticky;
-    top: 53px;
+    top: 125px;
     z-index: 9;
 }
 
@@ -968,6 +964,36 @@ body {
     color: white;
 }
 
+/* ==================== Top Scrollbar Mirror ==================== */
+.table-scroll-top {
+    overflow-x: auto;
+    overflow-y: hidden;
+    height: 12px;
+}
+
+.table-scroll-top-inner {
+    height: 1px;
+}
+
+.table-scroll-top::-webkit-scrollbar {
+    height: 12px;
+}
+
+.table-scroll-top::-webkit-scrollbar-track {
+    background: rgba(15, 15, 35, 0.5);
+    border-radius: 6px;
+}
+
+.table-scroll-top::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.4) 0%, rgba(118, 75, 162, 0.4) 100%);
+    border-radius: 6px;
+    border: 2px solid rgba(15, 15, 35, 0.5);
+}
+
+.table-scroll-top::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.6) 0%, rgba(118, 75, 162, 0.6) 100%);
+}
+
 /* ==================== Spreadsheet View with Frozen Column ==================== */
 .table-container {
     overflow-x: auto;
@@ -977,7 +1003,7 @@ body {
 /* Sticky/Frozen column styles */
 .sticky-col {
     position: sticky;
-    background: white;
+    background: rgba(26, 26, 46, 0.98);
     z-index: 10;
 }
 
@@ -1024,17 +1050,17 @@ body {
 
 .sfaf-records-table th,
 .sfaf-records-table td {
-    border-right: 1px solid #e5e7eb;
-    border-bottom: 1px solid #e5e7eb;
+    border-right: 1px solid rgba(102, 126, 234, 0.15);
+    border-bottom: 1px solid rgba(102, 126, 234, 0.1);
 }
 
 .sfaf-records-table th:first-child,
 .sfaf-records-table td:first-child {
-    border-left: 1px solid #e5e7eb;
+    border-left: 1px solid rgba(102, 126, 234, 0.15);
 }
 
 .sfaf-records-table thead th {
-    background: #f9fafb;
+    background: rgba(15, 15, 35, 0.98);
     position: sticky;
     top: 0;
     z-index: 12;
@@ -1048,7 +1074,7 @@ body {
 table.sfaf-records-table thead tr th.checkbox-col.sticky-col,
 table.sfaf-records-table tbody tr td.checkbox-col.sticky-col {
     z-index: 50 !important;
-    background: #f9fafb !important;
+    background: rgba(15, 15, 35, 0.98) !important;
     position: sticky !important;
     left: 0 !important;
 }
@@ -1057,7 +1083,7 @@ table.sfaf-records-table tbody tr td.checkbox-col.sticky-col {
 table.sfaf-records-table thead tr th.actions-col.sticky-col,
 table.sfaf-records-table tbody tr td.actions-col.sticky-col {
     z-index: 30 !important;
-    background: #f9fafb !important;
+    background: rgba(26, 26, 46, 0.98) !important;
     position: sticky !important;
     right: 0 !important;
 }
@@ -1089,18 +1115,18 @@ table.sfaf-records-table thead tr.filter-row th.actions-col.sticky-col {
 /* Dark mode support for frozen columns */
 @media (prefers-color-scheme: dark) {
     .sticky-col {
-        background: #1f2937;
+        background: rgba(26, 26, 46, 0.98);
     }
 
     .sfaf-records-table thead th {
-        background: #111827;
+        background: rgba(15, 15, 35, 0.98);
     }
 
     .sfaf-records-table thead th.checkbox-col.sticky-col,
     .sfaf-records-table tbody td.checkbox-col.sticky-col,
     .sfaf-records-table thead th.actions-col.sticky-col,
     .sfaf-records-table tbody td.actions-col.sticky-col {
-        background: #111827 !important;
+        background: rgba(15, 15, 35, 0.98) !important;
     }
 }
 
@@ -1173,34 +1199,64 @@ table.sfaf-records-table thead tr.filter-row th.actions-col.sticky-col {
 
 .btn-edit,
 .btn-edit-sfaf {
-    color: #60a5fa;
+    background: #2563eb;
+    color: white;
+    border-color: #2563eb;
+}
+
+.btn-edit:hover,
+.btn-edit-sfaf:hover {
+    background: #1d4ed8;
+    border-color: #1d4ed8;
 }
 
 .btn-view-on-map {
-    color: #3b82f6;
-    border-color: rgba(59, 130, 246, 0.2);
+    background: #0891b2;
+    color: white;
+    border-color: #0891b2;
 }
 
 .btn-view-on-map:hover {
-    background: rgba(59, 130, 246, 0.2);
-    border-color: rgba(59, 130, 246, 0.4);
+    background: #0e7490;
+    border-color: #0e7490;
 }
 
 .btn-view,
 .btn-view-details {
-    color: #a78bfa;
+    background: #16a34a;
+    color: white;
+    border-color: #16a34a;
+}
+
+.btn-view:hover,
+.btn-view-details:hover {
+    background: #15803d;
+    border-color: #15803d;
+}
+
+.btn-export-record {
+    background: #4b5563;
+    color: white;
+    border-color: #4b5563;
+}
+
+.btn-export-record:hover {
+    background: #374151;
+    border-color: #374151;
 }
 
 .btn-delete,
 .btn-delete-record {
+    background: rgba(239, 68, 68, 0.15);
     color: #ef4444;
-    border-color: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.3);
 }
 
 .btn-delete:hover,
 .btn-delete-record:hover {
-    background: rgba(239, 68, 68, 0.2);
-    border-color: rgba(239, 68, 68, 0.4);
+    background: #dc2626;
+    color: white;
+    border-color: #dc2626;
 }
 
 /* ==================== View Management Modal ==================== */
@@ -1405,12 +1461,51 @@ table.sfaf-records-table thead tr.filter-row th.actions-col.sticky-col {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 15px;
+    padding: 8px 15px;
     background: #f9fafb;
     border-top: 1px solid #e5e7eb;
     position: sticky;
     top: 0;
     z-index: 1;
+}
+
+.field-group-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-group-select,
+.btn-group-clear {
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid;
+    transition: all 0.15s ease;
+}
+
+.btn-group-select {
+    background: rgba(59, 130, 246, 0.1);
+    color: #3b82f6;
+    border-color: rgba(59, 130, 246, 0.3);
+}
+
+.btn-group-select:hover {
+    background: rgba(59, 130, 246, 0.2);
+    border-color: #3b82f6;
+}
+
+.btn-group-clear {
+    background: rgba(107, 114, 128, 0.1);
+    color: #6b7280;
+    border-color: rgba(107, 114, 128, 0.3);
+}
+
+.btn-group-clear:hover {
+    background: rgba(107, 114, 128, 0.2);
+    border-color: #6b7280;
 }
 
 .field-group:first-child .field-group-header {

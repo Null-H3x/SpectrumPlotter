@@ -20,6 +20,7 @@
                 <a href="/map-viewer" class="nav-link"><i class="fas fa-map"></i> Map Viewer</a>
                 <a href="/database" class="nav-link"><i class="fas fa-database"></i> Database</a>
                 <a href="/frequency/assignments" class="nav-link"><i class="fas fa-broadcast-tower"></i> Frequencies</a>
+                <a href="/workbox" class="nav-link ism-nav-link" style="display:none"><i class="fas fa-inbox"></i> Workbox</a>
                 <a href="/view-manager" class="nav-link"><i class="fas fa-cog"></i> Table Manager</a>
                 <a href="/profile" class="nav-link active"><i class="fas fa-user-circle"></i> Profile</a>
                 <button class="nav-btn-logout" onclick="handleLogout()">
@@ -73,6 +74,7 @@
                 </div>
 
                 <div class="profile-form">
+                    <!-- Identity -->
                     <div class="form-row">
                         <div class="form-group">
                             <label><i class="fas fa-user"></i> Username</label>
@@ -91,18 +93,117 @@
                             <input type="text" id="accountFullName" class="form-input" placeholder="John Doe">
                         </div>
                         <div class="form-group">
-                            <label><i class="fas fa-building"></i> Organization</label>
-                            <input type="text" id="accountOrganization" class="form-input" placeholder="U.S. Department of Defense">
+                            <label><i class="fas fa-sitemap"></i> Service / Organization</label>
+                            <select id="accountOrganization" class="form-input">
+                                <option value="">— Select service branch —</option>
+                                <option value="USAF">USAF — United States Air Force</option>
+                                <option value="USSF">USSF — United States Space Force</option>
+                                <option value="USA">USA — United States Army</option>
+                                <option value="USN">USN — United States Navy</option>
+                                <option value="USMC">USMC — United States Marine Corps</option>
+                                <option value="USCG">USCG — United States Coast Guard</option>
+                                <option value="Joint/DoD">Joint / DoD</option>
+                                <option value="Other">Other / Civilian</option>
+                            </select>
                         </div>
                     </div>
 
+                    <!-- Contact -->
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label><i class="fas fa-phone"></i> Commercial Phone <span style="color:var(--danger)">*</span></label>
+                            <input type="tel" id="accountPhone" class="form-input" placeholder="e.g. (555) 123-4567" required>
+                        </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-phone"></i> DSN Phone <span class="muted">(optional)</span></label>
+                            <input type="tel" id="accountPhoneDSN" class="form-input" placeholder="e.g. 312-123-4567">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label><i class="fas fa-globe"></i> Unified Command</label>
+                            <select id="accountUnifiedCommand" class="form-input">
+                                <option value="">— Select unified command —</option>
+                                <option value="USCENTCOM">CENTCOM — Central Command</option>
+                                <option value="USCYBERCOM">CYBERCOM — Cyber Command</option>
+                                <option value="USEUCOM">EUCOM — European Command</option>
+                                <option value="USINDOPACOM">INDOPACOM — Indo-Pacific Command</option>
+                                <option value="USNORTHCOM">NORTHCOM — Northern Command</option>
+                                <option value="USSOCOM">SOCOM — Special Operations Command</option>
+                                <option value="USSOUTHCOM">SOUTHCOM — Southern Command</option>
+                                <option value="USSPACECOM">SPACECOM — Space Command</option>
+                                <option value="USSTRATCOM">STRATCOM — Strategic Command</option>
+                                <option value="USTRANSCOM">TRANSCOM — Transportation Command</option>
+                                <option value="USAFRICOM">AFRICOM — Africa Command</option>
+                                <option value="N/A">N/A — Not Applicable</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Unit Assignment -->
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label><i class="fas fa-map-marker-alt"></i> Installation</label>
+                            <select id="accountInstallation" class="form-input" onchange="onProfileInstallationChange()">
+                                <option value="">Loading installations...</option>
+                            </select>
+                            <small>Used for frequency request routing</small>
+                        </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-flag"></i> Unit</label>
+                            <select id="accountUnit" class="form-input">
+                                <option value="">Loading...</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Service Branch / Pay Grade -->
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label><i class="fas fa-shield-alt"></i> Service Branch</label>
+                            <select id="accountServiceBranch" class="form-input" onchange="onProfileBranchChange()">
+                                <option value="">— Select Branch —</option>
+                                <option value="Air Force">Air Force</option>
+                                <option value="Space Force">Space Force</option>
+                                <option value="Army">Army</option>
+                                <option value="Navy">Navy</option>
+                                <option value="Marines">Marine Corps</option>
+                                <option value="Coast Guard">Coast Guard</option>
+                                <option value="Civilian">Civilian (DoD)</option>
+                                <option value="Contractor">Contractor</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-medal"></i> Pay Grade</label>
+                            <select id="accountPayGrade" class="form-input">
+                                <option value="">— Select Branch First —</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Default ISM Office -->
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label><i class="fas fa-paper-plane"></i> Default ISM Office</label>
+                            <select id="accountDefaultISM" class="form-input">
+                                <option value="">— None / Ask each time —</option>
+                            </select>
+                            <small>Which installation's ISM will receive your frequency requests (Field 206)</small>
+                        </div>
+                    </div>
+
+                    <!-- Role / Dates (read-only) -->
                     <div class="form-row">
                         <div class="form-group">
                             <label><i class="fas fa-user-tag"></i> Role</label>
                             <select id="accountRole" class="form-select" disabled>
-                                <option value="viewer">Viewer</option>
                                 <option value="operator">Operator</option>
-                                <option value="admin">Administrator</option>
+                                <option value="ism">ISM</option>
+                                <option value="command">Command</option>
+                                <option value="combatant_command">Combatant Command</option>
+                                <option value="agency">Agency</option>
+                                <option value="ntia">NTIA</option>
+                                <option value="admin">Admin</option>
                             </select>
                             <small>Contact administrator to change role</small>
                         </div>

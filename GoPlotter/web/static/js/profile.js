@@ -1,179 +1,502 @@
 /**
  * User Profile Page JavaScript
- * Handles section switching, form submissions, and API interactions
  */
 
 (function() {
     'use strict';
 
-    // Profile data cache
     let profileData = null;
+    let allInstallations = [];
 
-    /**
-     * Initialize profile page
-     */
+    // Pay grade options keyed by service branch
+    const PAY_GRADE_OPTIONS = {
+        'Air Force': [
+            { value: '',    label: '── Enlisted ──', disabled: true },
+            { value: 'E-1', label: 'E-1 — Airman Basic' },
+            { value: 'E-2', label: 'E-2 — Airman' },
+            { value: 'E-3', label: 'E-3 — Airman First Class' },
+            { value: 'E-4', label: 'E-4 — Senior Airman' },
+            { value: 'E-5', label: 'E-5 — Staff Sergeant' },
+            { value: 'E-6', label: 'E-6 — Technical Sergeant' },
+            { value: 'E-7', label: 'E-7 — Master Sergeant' },
+            { value: 'E-8', label: 'E-8 — Senior Master Sergeant' },
+            { value: 'E-9', label: 'E-9 — Chief Master Sergeant' },
+            { value: '',    label: '── Officer ──', disabled: true },
+            { value: 'O-1', label: 'O-1 — Second Lieutenant' },
+            { value: 'O-2', label: 'O-2 — First Lieutenant' },
+            { value: 'O-3', label: 'O-3 — Captain' },
+            { value: 'O-4', label: 'O-4 — Major' },
+            { value: 'O-5', label: 'O-5 — Lieutenant Colonel' },
+            { value: 'O-6', label: 'O-6 — Colonel' },
+            { value: 'O-7', label: 'O-7 — Brigadier General' },
+            { value: 'O-8', label: 'O-8 — Major General' },
+            { value: 'O-9', label: 'O-9 — Lieutenant General' },
+            { value: 'O-10',label: 'O-10 — General' },
+        ],
+        'Space Force': [
+            { value: '',    label: '── Enlisted ──', disabled: true },
+            { value: 'E-1', label: 'E-1 — Specialist 1' },
+            { value: 'E-2', label: 'E-2 — Specialist 2' },
+            { value: 'E-3', label: 'E-3 — Specialist 3' },
+            { value: 'E-4', label: 'E-4 — Specialist 4' },
+            { value: 'E-5', label: 'E-5 — Sergeant' },
+            { value: 'E-6', label: 'E-6 — Technical Sergeant' },
+            { value: 'E-7', label: 'E-7 — Master Sergeant' },
+            { value: 'E-8', label: 'E-8 — Senior Master Sergeant' },
+            { value: 'E-9', label: 'E-9 — Chief Master Sergeant' },
+            { value: '',    label: '── Officer ──', disabled: true },
+            { value: 'O-1', label: 'O-1 — Second Lieutenant' },
+            { value: 'O-2', label: 'O-2 — First Lieutenant' },
+            { value: 'O-3', label: 'O-3 — Captain' },
+            { value: 'O-4', label: 'O-4 — Major' },
+            { value: 'O-5', label: 'O-5 — Lieutenant Colonel' },
+            { value: 'O-6', label: 'O-6 — Colonel' },
+            { value: 'O-7', label: 'O-7 — Brigadier General' },
+            { value: 'O-8', label: 'O-8 — Major General' },
+            { value: 'O-9', label: 'O-9 — Lieutenant General' },
+            { value: 'O-10',label: 'O-10 — General of the Space Force' },
+        ],
+        'Army': [
+            { value: '',    label: '── Enlisted ──', disabled: true },
+            { value: 'E-1', label: 'E-1 — Private' },
+            { value: 'E-2', label: 'E-2 — Private Second Class' },
+            { value: 'E-3', label: 'E-3 — Private First Class' },
+            { value: 'E-4', label: 'E-4 — Specialist / Corporal' },
+            { value: 'E-5', label: 'E-5 — Sergeant' },
+            { value: 'E-6', label: 'E-6 — Staff Sergeant' },
+            { value: 'E-7', label: 'E-7 — Sergeant First Class' },
+            { value: 'E-8', label: 'E-8 — Master Sergeant / First Sergeant' },
+            { value: 'E-9', label: 'E-9 — Sergeant Major' },
+            { value: '',    label: '── Warrant Officer ──', disabled: true },
+            { value: 'W-1', label: 'W-1 — Warrant Officer 1' },
+            { value: 'W-2', label: 'W-2 — Chief Warrant Officer 2' },
+            { value: 'W-3', label: 'W-3 — Chief Warrant Officer 3' },
+            { value: 'W-4', label: 'W-4 — Chief Warrant Officer 4' },
+            { value: 'W-5', label: 'W-5 — Chief Warrant Officer 5' },
+            { value: '',    label: '── Officer ──', disabled: true },
+            { value: 'O-1', label: 'O-1 — Second Lieutenant' },
+            { value: 'O-2', label: 'O-2 — First Lieutenant' },
+            { value: 'O-3', label: 'O-3 — Captain' },
+            { value: 'O-4', label: 'O-4 — Major' },
+            { value: 'O-5', label: 'O-5 — Lieutenant Colonel' },
+            { value: 'O-6', label: 'O-6 — Colonel' },
+            { value: 'O-7', label: 'O-7 — Brigadier General' },
+            { value: 'O-8', label: 'O-8 — Major General' },
+            { value: 'O-9', label: 'O-9 — Lieutenant General' },
+            { value: 'O-10',label: 'O-10 — General' },
+        ],
+        'Navy': [
+            { value: '',    label: '── Enlisted ──', disabled: true },
+            { value: 'E-1', label: 'E-1 — Seaman Recruit' },
+            { value: 'E-2', label: 'E-2 — Seaman Apprentice' },
+            { value: 'E-3', label: 'E-3 — Seaman' },
+            { value: 'E-4', label: 'E-4 — Petty Officer Third Class' },
+            { value: 'E-5', label: 'E-5 — Petty Officer Second Class' },
+            { value: 'E-6', label: 'E-6 — Petty Officer First Class' },
+            { value: 'E-7', label: 'E-7 — Chief Petty Officer' },
+            { value: 'E-8', label: 'E-8 — Senior Chief Petty Officer' },
+            { value: 'E-9', label: 'E-9 — Master Chief Petty Officer' },
+            { value: '',    label: '── Warrant Officer ──', disabled: true },
+            { value: 'W-1', label: 'W-1 — Warrant Officer' },
+            { value: 'W-2', label: 'W-2 — Chief Warrant Officer 2' },
+            { value: 'W-3', label: 'W-3 — Chief Warrant Officer 3' },
+            { value: 'W-4', label: 'W-4 — Chief Warrant Officer 4' },
+            { value: 'W-5', label: 'W-5 — Chief Warrant Officer 5' },
+            { value: '',    label: '── Officer ──', disabled: true },
+            { value: 'O-1', label: 'O-1 — Ensign' },
+            { value: 'O-2', label: 'O-2 — Lieutenant Junior Grade' },
+            { value: 'O-3', label: 'O-3 — Lieutenant' },
+            { value: 'O-4', label: 'O-4 — Lieutenant Commander' },
+            { value: 'O-5', label: 'O-5 — Commander' },
+            { value: 'O-6', label: 'O-6 — Captain' },
+            { value: 'O-7', label: 'O-7 — Rear Admiral (Lower Half)' },
+            { value: 'O-8', label: 'O-8 — Rear Admiral (Upper Half)' },
+            { value: 'O-9', label: 'O-9 — Vice Admiral' },
+            { value: 'O-10',label: 'O-10 — Admiral' },
+        ],
+        'Marines': [
+            { value: '',    label: '── Enlisted ──', disabled: true },
+            { value: 'E-1', label: 'E-1 — Private' },
+            { value: 'E-2', label: 'E-2 — Private First Class' },
+            { value: 'E-3', label: 'E-3 — Lance Corporal' },
+            { value: 'E-4', label: 'E-4 — Corporal' },
+            { value: 'E-5', label: 'E-5 — Sergeant' },
+            { value: 'E-6', label: 'E-6 — Staff Sergeant' },
+            { value: 'E-7', label: 'E-7 — Gunnery Sergeant' },
+            { value: 'E-8', label: 'E-8 — Master Sergeant / First Sergeant' },
+            { value: 'E-9', label: 'E-9 — Master Gunnery Sergeant / Sergeant Major' },
+            { value: '',    label: '── Warrant Officer ──', disabled: true },
+            { value: 'W-1', label: 'W-1 — Warrant Officer 1' },
+            { value: 'W-2', label: 'W-2 — Chief Warrant Officer 2' },
+            { value: 'W-3', label: 'W-3 — Chief Warrant Officer 3' },
+            { value: 'W-4', label: 'W-4 — Chief Warrant Officer 4' },
+            { value: 'W-5', label: 'W-5 — Chief Warrant Officer 5' },
+            { value: '',    label: '── Officer ──', disabled: true },
+            { value: 'O-1', label: 'O-1 — Second Lieutenant' },
+            { value: 'O-2', label: 'O-2 — First Lieutenant' },
+            { value: 'O-3', label: 'O-3 — Captain' },
+            { value: 'O-4', label: 'O-4 — Major' },
+            { value: 'O-5', label: 'O-5 — Lieutenant Colonel' },
+            { value: 'O-6', label: 'O-6 — Colonel' },
+            { value: 'O-7', label: 'O-7 — Brigadier General' },
+            { value: 'O-8', label: 'O-8 — Major General' },
+            { value: 'O-9', label: 'O-9 — Lieutenant General' },
+            { value: 'O-10',label: 'O-10 — General' },
+        ],
+        'Coast Guard': [
+            { value: '',    label: '── Enlisted ──', disabled: true },
+            { value: 'E-1', label: 'E-1 — Seaman Recruit' },
+            { value: 'E-2', label: 'E-2 — Seaman Apprentice' },
+            { value: 'E-3', label: 'E-3 — Seaman' },
+            { value: 'E-4', label: 'E-4 — Petty Officer Third Class' },
+            { value: 'E-5', label: 'E-5 — Petty Officer Second Class' },
+            { value: 'E-6', label: 'E-6 — Petty Officer First Class' },
+            { value: 'E-7', label: 'E-7 — Chief Petty Officer' },
+            { value: 'E-8', label: 'E-8 — Senior Chief Petty Officer' },
+            { value: 'E-9', label: 'E-9 — Master Chief Petty Officer' },
+            { value: '',    label: '── Officer ──', disabled: true },
+            { value: 'O-1', label: 'O-1 — Ensign' },
+            { value: 'O-2', label: 'O-2 — Lieutenant Junior Grade' },
+            { value: 'O-3', label: 'O-3 — Lieutenant' },
+            { value: 'O-4', label: 'O-4 — Lieutenant Commander' },
+            { value: 'O-5', label: 'O-5 — Commander' },
+            { value: 'O-6', label: 'O-6 — Captain' },
+            { value: 'O-7', label: 'O-7 — Rear Admiral (Lower Half)' },
+            { value: 'O-8', label: 'O-8 — Rear Admiral (Upper Half)' },
+            { value: 'O-9', label: 'O-9 — Vice Admiral' },
+            { value: 'O-10',label: 'O-10 — Admiral' },
+        ],
+        'Civilian': [
+            { value: '',      label: '── General Schedule ──', disabled: true },
+            { value: 'GS-1',  label: 'GS-1' },
+            { value: 'GS-2',  label: 'GS-2' },
+            { value: 'GS-3',  label: 'GS-3' },
+            { value: 'GS-4',  label: 'GS-4' },
+            { value: 'GS-5',  label: 'GS-5' },
+            { value: 'GS-6',  label: 'GS-6' },
+            { value: 'GS-7',  label: 'GS-7' },
+            { value: 'GS-8',  label: 'GS-8' },
+            { value: 'GS-9',  label: 'GS-9' },
+            { value: 'GS-10', label: 'GS-10' },
+            { value: 'GS-11', label: 'GS-11' },
+            { value: 'GS-12', label: 'GS-12' },
+            { value: 'GS-13', label: 'GS-13' },
+            { value: 'GS-14', label: 'GS-14' },
+            { value: 'GS-15', label: 'GS-15' },
+            { value: '',      label: '── Senior Executive Service ──', disabled: true },
+            { value: 'SES',   label: 'SES — Senior Executive Service' },
+        ],
+        'Contractor': [
+            { value: 'CTR', label: 'CTR — Contractor' },
+        ],
+    };
+
+    function updatePayGradeDropdown(selectEl, branch, savedValue) {
+        if (!selectEl) return;
+        const opts = PAY_GRADE_OPTIONS[branch];
+        if (!opts) {
+            selectEl.innerHTML = '<option value="">— Select Branch First —</option>';
+            return;
+        }
+        selectEl.innerHTML = '<option value="">— Select Pay Grade —</option>' +
+            opts.map(o => o.disabled
+                ? `<option value="" disabled>${o.label}</option>`
+                : `<option value="${o.value}">${o.label}</option>`
+            ).join('');
+        if (savedValue) {
+            selectEl.value = savedValue;
+            if (selectEl.value !== savedValue) {
+                const opt = document.createElement('option');
+                opt.value = savedValue;
+                opt.textContent = savedValue;
+                selectEl.appendChild(opt);
+                selectEl.value = savedValue;
+            }
+        }
+    }
+
+    // Populate ISM office dropdown from the installations list
+    function updateISMDropdown(selectEl, _branch, savedValue) {
+        if (!selectEl) return;
+        selectEl.innerHTML = '<option value="">— None / Ask each time —</option>' +
+            allInstallations.map(i =>
+                `<option value="${i.id}">${i.name}${i.code ? ' (' + i.code + ')' : ''}</option>`
+            ).join('');
+        if (savedValue) {
+            selectEl.value = savedValue;
+            // Stored value not found in list (e.g. legacy label) — show it anyway
+            if (selectEl.value !== savedValue) {
+                const opt = document.createElement('option');
+                opt.value = savedValue;
+                opt.textContent = savedValue;
+                selectEl.appendChild(opt);
+                selectEl.value = savedValue;
+            }
+        }
+    }
+
     function init() {
-        console.log('🚀 Profile page initialized');
         loadProfileData();
         setupEventListeners();
     }
 
-    /**
-     * Setup event listeners
-     */
     function setupEventListeners() {
-        // Section navigation
         document.querySelectorAll('.profile-nav-item').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const section = btn.getAttribute('data-section');
-                switchSection(section);
-            });
+            btn.addEventListener('click', () => switchSection(btn.getAttribute('data-section')));
         });
-
-        // Form submissions
-        const accountForm = document.querySelector('#account-section .profile-form');
-        if (accountForm) {
-            accountForm.addEventListener('submit', (e) => {
-                e.preventDefault();
-                saveAccountInfo();
-            });
-        }
     }
 
-    /**
-     * Switch between profile sections
-     */
     window.switchSection = function(sectionName) {
-        // Update navigation
         document.querySelectorAll('.profile-nav-item').forEach(btn => {
-            btn.classList.remove('active');
-            if (btn.getAttribute('data-section') === sectionName) {
-                btn.classList.add('active');
-            }
+            btn.classList.toggle('active', btn.getAttribute('data-section') === sectionName);
         });
-
-        // Update content sections
-        document.querySelectorAll('.content-section').forEach(section => {
-            section.classList.remove('active');
-        });
-
-        const targetSection = document.getElementById(`${sectionName}-section`);
-        if (targetSection) {
-            targetSection.classList.add('active');
-        }
+        document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
+        const target = document.getElementById(`${sectionName}-section`);
+        if (target) target.classList.add('active');
     };
 
-    /**
-     * Load profile data from server
-     */
     async function loadProfileData() {
         try {
-            // Demo mode: Use localStorage data
-            const username = localStorage.getItem('sfaf_username') || 'admin';
-            const authMethod = localStorage.getItem('sfaf_auth_method') || 'password';
+            const [profileRes, installRes] = await Promise.all([
+                fetch('/api/user/profile'),
+                fetch('/api/auth/public-installations')
+            ]);
 
-            // In production, fetch from API:
-            // const response = await fetch('/api/user/profile', {
-            //     headers: {
-            //         'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-            //     }
-            // });
-            // profileData = await response.json();
+            if (!profileRes.ok) {
+                // Fall back to session for basic info
+                const sessionRes = await fetch('/api/auth/session');
+                const sessionData = await sessionRes.json();
+                if (sessionData.valid) {
+                    profileData = { user: sessionData.user };
+                    updateProfileUI();
+                }
+                return;
+            }
 
-            // Demo data
-            profileData = {
-                username: username,
-                email: `${username}@mail.mil`,
-                fullName: username.replace('.', ' ').toUpperCase(),
-                organization: 'U.S. Department of Defense',
-                role: 'operator',
-                authMethod: authMethod,
-                createdAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString() // 90 days ago
-            };
+            const data = await profileRes.json();
+            profileData = data;
 
-            updateProfileUI(profileData);
+            const installData = await installRes.json();
+            allInstallations = installData.installations || [];
+
+            updateProfileUI();
         } catch (error) {
             console.error('Failed to load profile data:', error);
             showNotification('Failed to load profile data', 'error');
         }
     }
 
-    /**
-     * Update UI with profile data
-     */
-    function updateProfileUI(data) {
+    function updateProfileUI() {
+        const user = profileData?.user || profileData || {};
+
         // Sidebar
-        const profileUsername = document.getElementById('profileUsername');
-        const profileRole = document.getElementById('profileRole');
-        const authMethod = document.getElementById('authMethod');
+        const elUsername = document.getElementById('profileUsername');
+        const elRole = document.getElementById('profileRole');
+        const elAuth = document.getElementById('authMethod');
 
-        if (profileUsername) {
-            profileUsername.textContent = data.username;
+        if (elUsername) elUsername.textContent = user.username || '';
+        if (elRole) {
+            const roleLabels = {
+                admin: 'Admin', ntia: 'NTIA', agency: 'Agency',
+                combatant_command: 'Combatant Command', command: 'Command',
+                ism: 'ISM', operator: 'Operator'
+            };
+            elRole.textContent = roleLabels[user.role] || user.role || 'User';
         }
-
-        if (profileRole) {
-            profileRole.textContent = data.role.charAt(0).toUpperCase() + data.role.slice(1);
-        }
-
-        if (authMethod) {
-            if (data.authMethod === 'pki') {
-                authMethod.innerHTML = '<i class="fas fa-certificate"></i> PKI Certificate';
-                authMethod.style.background = 'rgba(16, 185, 129, 0.1)';
-                authMethod.style.color = '#10b981';
-                authMethod.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+        if (elAuth) {
+            const method = user.auth_method || localStorage.getItem('sfaf_auth_method') || 'password';
+            if (method === 'pki') {
+                elAuth.innerHTML = '<i class="fas fa-certificate"></i> PKI Certificate';
+                elAuth.style.cssText = 'background:rgba(16,185,129,0.1);color:#10b981;border-color:rgba(16,185,129,0.3)';
             } else {
-                authMethod.innerHTML = '<i class="fas fa-key"></i> Password Auth';
+                elAuth.innerHTML = '<i class="fas fa-key"></i> Password Auth';
+                elAuth.style.cssText = '';
             }
         }
 
-        // Account section
-        document.getElementById('accountUsername').value = data.username;
-        document.getElementById('accountEmail').value = data.email;
-        document.getElementById('accountFullName').value = data.fullName;
-        document.getElementById('accountOrganization').value = data.organization;
-        document.getElementById('accountRole').value = data.role;
+        // Account fields
+        setValue('accountUsername', user.username);
+        setValue('accountEmail', user.email);
+        setValue('accountFullName', user.full_name);
+        setValue('accountPhone', user.phone);
+        setValue('accountPhoneDSN', user.phone_dsn);
+        setSelectValue('accountOrganization', user.organization);
+        setSelectValue('accountUnifiedCommand', user.unified_command);
+        setSelectValue('accountRole', user.role);
 
-        // Format created date
-        const createdDate = new Date(data.createdAt);
-        document.getElementById('accountCreatedAt').value = createdDate.toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        });
+        // Service branch + pay grade
+        if (user.service_branch) {
+            setSelectValue('accountServiceBranch', user.service_branch);
+            updatePayGradeDropdown(
+                document.getElementById('accountPayGrade'),
+                user.service_branch,
+                user.pay_grade
+            );
+            // ISM dropdown populated in populateInstallationDropdown (uses allInstallations)
+        }
+
+        const createdDate = user.created_at ? new Date(user.created_at) : null;
+        setValue('accountCreatedAt', createdDate
+            ? createdDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+            : '');
+
+        // Populate installation dropdown, then unit dropdown
+        // ISM options will also be refreshed here if no service_branch set
+        populateInstallationDropdown(user.installation_id, profileData?.primary_unit_id);
     }
 
-    /**
-     * Save account information
-     */
+    function setValue(id, val) {
+        const el = document.getElementById(id);
+        if (el) el.value = val || '';
+    }
+
+    function setSelectValue(id, val) {
+        const el = document.getElementById(id);
+        if (!el || !val) return;
+        // Try to set; if no matching option, add one
+        el.value = val;
+        if (el.value !== val) {
+            const opt = document.createElement('option');
+            opt.value = val;
+            opt.textContent = val;
+            el.appendChild(opt);
+            el.value = val;
+        }
+    }
+
+    function populateInstallationDropdown(currentInstallationID, currentUnitID) {
+        const select = document.getElementById('accountInstallation');
+        if (!select) return;
+
+        select.innerHTML = '<option value="">— No Installation —</option>' +
+            allInstallations.map(i =>
+                `<option value="${i.id}">${i.name}${i.code ? ' (' + i.code + ')' : ''}</option>`
+            ).join('');
+
+        if (currentInstallationID) {
+            select.value = currentInstallationID;
+        }
+
+        // ISM dropdown is always the full installations list
+        const user = profileData?.user || profileData || {};
+        updateISMDropdown(document.getElementById('accountDefaultISM'), '', user.default_ism_office);
+
+        // Always load ALL units on page load so the pre-selected unit always appears,
+        // regardless of whether it matches the installation filter.
+        loadUnitsForInstallation(null, currentUnitID);
+    }
+
+    async function loadUnitsForInstallation(installationID, selectedUnitID) {
+        const unitSelect = document.getElementById('accountUnit');
+        if (!unitSelect) return;
+
+        // Only restore a unit that was explicitly passed in (e.g. on initial page load).
+        // Do NOT fall back to unitSelect.value — that would re-inject a unit from a
+        // different installation into the freshly-filtered list.
+        const previousValue = selectedUnitID || null;
+
+        unitSelect.innerHTML = '<option value="">Loading...</option>';
+
+        try {
+            const url = installationID
+                ? `/api/auth/public-units?installation_id=${encodeURIComponent(installationID)}`
+                : '/api/auth/public-units';
+            const res = await fetch(url);
+            const data = await res.json();
+            const units = data.units || [];
+
+            unitSelect.innerHTML = '<option value="">— No Unit —</option>' +
+                units.map(u => `<option value="${u.id}">${u.name}${u.unit_code ? ' (' + u.unit_code + ')' : ''}</option>`).join('');
+
+            if (previousValue) {
+                unitSelect.value = previousValue;
+
+                // If the unit isn't in the filtered list, fetch it by name and add it
+                if (unitSelect.value !== previousValue) {
+                    await appendMissingUnit(unitSelect, previousValue);
+                }
+            }
+
+            unitSelect.disabled = false;
+        } catch {
+            unitSelect.innerHTML = '<option value="">Error loading units</option>';
+            unitSelect.disabled = false;
+        }
+    }
+
+    // If the currently-assigned unit isn't in the filtered list, look it up and add it.
+    async function appendMissingUnit(unitSelect, unitID) {
+        try {
+            const res = await fetch('/api/auth/public-units');
+            const data = await res.json();
+            const unit = (data.units || []).find(u => u.id === unitID);
+            if (unit) {
+                const opt = document.createElement('option');
+                opt.value = unit.id;
+                opt.textContent = `${unit.name}${unit.unit_code ? ' (' + unit.unit_code + ')' : ''} ✦`;
+                opt.title = 'From a different installation';
+                unitSelect.appendChild(opt);
+                unitSelect.value = unitID;
+            }
+        } catch { /* ignore */ }
+    }
+
+    window.onProfileInstallationChange = function() {
+        const installID = document.getElementById('accountInstallation').value;
+        loadUnitsForInstallation(installID || null, null);
+    };
+
+    window.onProfileBranchChange = function() {
+        const branch = document.getElementById('accountServiceBranch').value;
+        updatePayGradeDropdown(document.getElementById('accountPayGrade'), branch, null);
+    };
+
     window.saveAccountInfo = async function() {
         const email = document.getElementById('accountEmail').value.trim();
         const fullName = document.getElementById('accountFullName').value.trim();
-        const organization = document.getElementById('accountOrganization').value.trim();
 
         if (!email || !fullName) {
             showNotification('Email and full name are required', 'error');
             return;
         }
 
+        const installationID = document.getElementById('accountInstallation').value || null;
+        const unitID = document.getElementById('accountUnit').value || null;
+
+        const phone = document.getElementById('accountPhone').value.trim();
+        if (!phone) {
+            showNotification('Commercial phone is required', 'error');
+            return;
+        }
+
+        const payload = {
+            email,
+            full_name: fullName,
+            organization: document.getElementById('accountOrganization').value,
+            phone,
+            phone_dsn: document.getElementById('accountPhoneDSN').value.trim(),
+            unified_command: document.getElementById('accountUnifiedCommand').value,
+            installation_id: installationID,
+            unit_id: unitID,
+            default_ism_office: document.getElementById('accountDefaultISM').value || '',
+            service_branch: document.getElementById('accountServiceBranch').value || '',
+            pay_grade: document.getElementById('accountPayGrade').value || '',
+        };
+
         try {
-            // In production, send to API:
-            // const response = await fetch('/api/user/profile', {
-            //     method: 'PUT',
-            //     headers: {
-            //         'Content-Type': 'application/json',
-            //         'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-            //     },
-            //     body: JSON.stringify({ email, fullName, organization })
-            // });
+            const res = await fetch('/api/user/profile', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
 
-            // Demo: Simulate API call
-            await new Promise(resolve => setTimeout(resolve, 500));
+            const data = await res.json();
+            if (!res.ok) {
+                showNotification(data.error || 'Failed to save', 'error');
+                return;
+            }
 
-            // Update local data
-            profileData.email = email;
-            profileData.fullName = fullName;
-            profileData.organization = organization;
-
+            if (profileData) profileData.user = data.user;
             showNotification('Account information updated successfully', 'success');
         } catch (error) {
             console.error('Failed to save account info:', error);
@@ -181,9 +504,6 @@
         }
     };
 
-    /**
-     * Change password
-     */
     window.changePassword = async function(event) {
         event.preventDefault();
 
@@ -191,90 +511,57 @@
         const newPassword = document.getElementById('newPassword').value;
         const confirmPassword = document.getElementById('confirmPassword').value;
 
-        // Validation
         if (!currentPassword || !newPassword || !confirmPassword) {
             showNotification('All password fields are required', 'error');
             return;
         }
-
         if (newPassword.length < 8) {
             showNotification('New password must be at least 8 characters', 'error');
             return;
         }
-
         if (newPassword !== confirmPassword) {
             showNotification('New passwords do not match', 'error');
             return;
         }
 
         try {
-            // In production, send to API:
-            // const response = await fetch('/api/user/change-password', {
-            //     method: 'POST',
-            //     headers: {
-            //         'Content-Type': 'application/json',
-            //         'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-            //     },
-            //     body: JSON.stringify({ currentPassword, newPassword })
-            // });
+            const res = await fetch('/api/auth/change-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
+            });
 
-            // Demo: Simulate API call
-            await new Promise(resolve => setTimeout(resolve, 800));
-
-            // Clear form
-            document.getElementById('currentPassword').value = '';
-            document.getElementById('newPassword').value = '';
-            document.getElementById('confirmPassword').value = '';
-
-            showNotification('Password changed successfully', 'success');
+            if (res.ok) {
+                document.getElementById('currentPassword').value = '';
+                document.getElementById('newPassword').value = '';
+                document.getElementById('confirmPassword').value = '';
+                showNotification('Password changed successfully', 'success');
+            } else {
+                const data = await res.json();
+                showNotification(data.error || 'Failed to change password', 'error');
+            }
         } catch (error) {
             console.error('Failed to change password:', error);
             showNotification('Failed to change password', 'error');
         }
     };
 
-    /**
-     * Revoke all other sessions
-     */
     window.revokeAllSessions = async function() {
-        if (!confirm('Are you sure you want to revoke all other sessions? This will log you out from all other devices.')) {
-            return;
-        }
+        if (!confirm('Are you sure you want to revoke all other sessions? This will log you out from all other devices.')) return;
 
         try {
-            // In production, send to API:
-            // const response = await fetch('/api/user/revoke-sessions', {
-            //     method: 'POST',
-            //     headers: {
-            //         'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-            //     }
-            // });
-
-            // Demo: Simulate API call
-            await new Promise(resolve => setTimeout(resolve, 500));
-
+            await fetch('/api/auth/revoke-sessions', { method: 'POST' });
             showNotification('All other sessions have been revoked', 'success');
         } catch (error) {
-            console.error('Failed to revoke sessions:', error);
             showNotification('Failed to revoke sessions', 'error');
         }
     };
 
-    /**
-     * Enable two-factor authentication
-     */
-    window.enableTwoFactor = async function() {
-        // In production, this would open a modal with QR code and setup instructions
-        showNotification('Two-factor authentication setup (demo mode)', 'info');
-
-        // Demo: Show what would happen
-        alert('In production, this would:\n\n1. Generate a QR code for authenticator app\n2. Ask you to scan and verify\n3. Provide backup codes\n4. Enable 2FA on your account');
+    window.enableTwoFactor = function() {
+        showNotification('Two-factor authentication is not yet available', 'info');
     };
 
-    /**
-     * Save user preferences
-     */
-    window.savePreferences = async function() {
+    window.savePreferences = function() {
         const preferences = {
             darkMode: document.getElementById('prefDarkMode').checked,
             compactView: document.getElementById('prefCompactView').checked,
@@ -283,132 +570,56 @@
             defaultRegion: document.getElementById('prefDefaultRegion').value,
             markerClustering: document.getElementById('prefMarkerClustering').checked
         };
-
-        try {
-            // In production, send to API:
-            // const response = await fetch('/api/user/preferences', {
-            //     method: 'PUT',
-            //     headers: {
-            //         'Content-Type': 'application/json',
-            //         'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-            //     },
-            //     body: JSON.stringify(preferences)
-            // });
-
-            // Demo: Save to localStorage
-            localStorage.setItem('user_preferences', JSON.stringify(preferences));
-            await new Promise(resolve => setTimeout(resolve, 400));
-
-            showNotification('Preferences saved successfully', 'success');
-        } catch (error) {
-            console.error('Failed to save preferences:', error);
-            showNotification('Failed to save preferences', 'error');
-        }
+        localStorage.setItem('user_preferences', JSON.stringify(preferences));
+        showNotification('Preferences saved', 'success');
     };
 
-    /**
-     * Upload certificate
-     */
     window.uploadCertificate = function() {
-        // In production, this would open a file picker and upload to API
-        showNotification('Certificate upload (demo mode)', 'info');
-
-        // Demo: Show what would happen
-        alert('In production, this would:\n\n1. Open file picker for .pem/.crt file\n2. Parse certificate information\n3. Upload to server\n4. Validate and register certificate\n5. Enable PKI authentication');
+        showNotification('Certificate upload coming soon', 'info');
     };
 
-    /**
-     * Handle logout
-     */
-    window.handleLogout = function() {
-        if (confirm('Are you sure you want to logout?')) {
-            // Clear local storage
-            localStorage.removeItem('sfaf_logged_in');
-            localStorage.removeItem('sfaf_username');
-            localStorage.removeItem('sfaf_auth_method');
-            localStorage.removeItem('auth_token');
-
-            // In production, call logout API:
-            // fetch('/api/auth/logout', {
-            //     method: 'POST',
-            //     headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
-            // });
-
-            // Redirect to landing page
-            window.location.href = '/';
-        }
+    window.handleLogout = async function() {
+        if (!confirm('Are you sure you want to logout?')) return;
+        try {
+            await fetch('/api/auth/logout', { method: 'POST' });
+        } catch {}
+        localStorage.removeItem('sfaf_logged_in');
+        localStorage.removeItem('sfaf_username');
+        localStorage.removeItem('sfaf_auth_method');
+        localStorage.removeItem('sfaf_token');
+        window.location.href = '/';
     };
 
-    /**
-     * Show notification
-     */
+    window.loadProfileData = loadProfileData;
+
     function showNotification(message, type = 'info') {
-        const notification = document.createElement('div');
-        notification.style.cssText = `
-            position: fixed;
-            top: 80px;
-            right: 20px;
-            z-index: 10001;
-            padding: 16px 24px;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-            animation: slideInRight 0.3s ease-out;
-            max-width: 400px;
-        `;
+        const colors = {
+            success: 'linear-gradient(135deg,#10b981 0%,#059669 100%)',
+            error:   'linear-gradient(135deg,#ef4444 0%,#dc2626 100%)',
+            info:    'linear-gradient(135deg,#3b82f6 0%,#2563eb 100%)'
+        };
+        const icons = { success: 'fa-check-circle', error: 'fa-exclamation-circle', info: 'fa-info-circle' };
 
-        if (type === 'success') {
-            notification.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
-            notification.style.color = 'white';
-            notification.innerHTML = `<i class="fas fa-check-circle"></i> ${message}`;
-        } else if (type === 'error') {
-            notification.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
-            notification.style.color = 'white';
-            notification.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${message}`;
-        } else {
-            notification.style.background = 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)';
-            notification.style.color = 'white';
-            notification.innerHTML = `<i class="fas fa-info-circle"></i> ${message}`;
-        }
-
-        document.body.appendChild(notification);
-
-        // Remove after 4 seconds
+        const n = document.createElement('div');
+        n.style.cssText = `position:fixed;top:80px;right:20px;z-index:10001;padding:16px 24px;
+            border-radius:8px;font-size:14px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.4);
+            animation:slideInRight .3s ease-out;max-width:400px;color:white;
+            background:${colors[type] || colors.info}`;
+        n.innerHTML = `<i class="fas ${icons[type] || icons.info}"></i> ${message}`;
+        document.body.appendChild(n);
         setTimeout(() => {
-            notification.style.animation = 'slideOutRight 0.3s ease-out';
-            setTimeout(() => notification.remove(), 300);
+            n.style.animation = 'slideOutRight .3s ease-out';
+            setTimeout(() => n.remove(), 300);
         }, 4000);
     }
 
-    // Add CSS animations
     const style = document.createElement('style');
     style.textContent = `
-        @keyframes slideInRight {
-            from {
-                transform: translateX(400px);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
-        }
-
-        @keyframes slideOutRight {
-            from {
-                transform: translateX(0);
-                opacity: 1;
-            }
-            to {
-                transform: translateX(400px);
-                opacity: 0;
-            }
-        }
+        @keyframes slideInRight { from { transform:translateX(400px); opacity:0 } to { transform:translateX(0); opacity:1 } }
+        @keyframes slideOutRight { from { transform:translateX(0); opacity:1 } to { transform:translateX(400px); opacity:0 } }
     `;
     document.head.appendChild(style);
 
-    // Initialize on DOM ready
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {

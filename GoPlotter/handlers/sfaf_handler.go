@@ -205,6 +205,74 @@ func (sh *SFAFHandler) GetAllSFAFs(c *gin.Context) {
 	})
 }
 
+// GetPoolAssignments returns SFAF records that are pool assignments.
+// Pool assignments lack geographic constraints: fields 306, 406, 530, and 531 are all empty.
+// GET /api/sfaf/pool-assignments
+func (sh *SFAFHandler) GetPoolAssignments(c *gin.Context) {
+	all, err := sh.sfafService.GetAllSFAFs()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, NewErrorResponse("Failed to retrieve SFAF records: "+err.Error()))
+		return
+	}
+
+	type PoolRecord struct {
+		ID                  string  `json:"id"`
+		Serial              string  `json:"serial"`
+		FrequencyMHz        float64 `json:"frequency_mhz"`
+		Field110            string  `json:"field110"`
+		Field114            string  `json:"field114"`
+		Field115            string  `json:"field115"`
+		EmissionBandwidthKHz float64 `json:"emission_bandwidth_khz"`
+		EmissionType        string  `json:"emission_type"`
+		PowerWatts          float64 `json:"power_watts"`
+		CoverageArea        string  `json:"coverage_area"`
+	}
+
+	pools := make([]PoolRecord, 0)
+	for _, sfaf := range all {
+		// Pool assignments have no geographic constraints
+		if strings.TrimSpace(sfaf.Field306) != "" ||
+			strings.TrimSpace(sfaf.Field406) != "" ||
+			strings.TrimSpace(sfaf.Field530) != "" ||
+			strings.TrimSpace(sfaf.Field531) != "" {
+			continue
+		}
+
+		pa, err := models.NewPoolAssignment(*sfaf)
+		if err != nil {
+			// Record is a pool candidate but failed to parse — include with zero values
+			pools = append(pools, PoolRecord{
+				ID:           sfaf.ID.String(),
+				Serial:       sfaf.Field102,
+				Field110:     sfaf.Field110,
+				Field114:     sfaf.Field114,
+				Field115:     sfaf.Field115,
+				CoverageArea: string(models.CoverageUSA),
+			})
+			continue
+		}
+
+		pools = append(pools, PoolRecord{
+			ID:                   sfaf.ID.String(),
+			Serial:               sfaf.Field102,
+			FrequencyMHz:         pa.FrequencyMHz,
+			Field110:             sfaf.Field110,
+			Field114:             sfaf.Field114,
+			Field115:             sfaf.Field115,
+			EmissionBandwidthKHz: pa.EmissionBandwidth,
+			EmissionType:         pa.EmissionType,
+			PowerWatts:           pa.PowerWatts,
+			CoverageArea:         string(pa.CoverageArea),
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":          true,
+		"pool_assignments": pools,
+		"count":            len(pools),
+	})
+}
+
 // UpdateSFAF handles SFAF record updates (Source: handlers.txt)
 func (sh *SFAFHandler) UpdateSFAF(c *gin.Context) {
 	id := c.Param("id")
@@ -298,11 +366,25 @@ func (sh *SFAFHandler) GetObjectData(c *gin.Context) {
 
 	marker := markerResponse.Marker
 
-	// Get SFAF data if it exists (Source: services.txt shows GetSFAFByMarkerID)
+	// Get SFAF data — first try by marker_id, then fall back to serial (field102)
 	sfaf, err := sh.sfafService.GetSFAFByMarkerID(markerID)
 	if err != nil {
-		// Log error but don't fail - SFAF might not exist yet
+		fmt.Printf("⚠️ GetSFAFByMarkerID error for marker %s: %v\n", markerID, err)
 		sfaf = nil
+	}
+
+	// Fallback: look up by marker serial if marker_id linkage is missing.
+	// Only repair linkage if the SFAF has field303 coordinates — records
+	// without coordinates are pool assignments and should stay unlinked.
+	if sfaf == nil && marker.Serial != "" {
+		candidate, serErr := sh.sfafService.GetSFAFBySerial(marker.Serial)
+		if serErr != nil {
+			fmt.Printf("⚠️ GetSFAFBySerial error for serial %s: %v\n", marker.Serial, serErr)
+		} else if candidate != nil && candidate.Field303 != "" {
+			sfaf = candidate
+			_ = sh.sfafService.LinkSFAFToMarker(sfaf.ID.String(), markerID)
+			fmt.Printf("🔧 Repaired marker_id linkage for serial %s\n", marker.Serial)
+		}
 	}
 
 	// Get coordinate formats (Source: services.txt shows coordinate conversion)

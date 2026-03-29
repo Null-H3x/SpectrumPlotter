@@ -514,6 +514,15 @@ class DatabaseViewer {
             });
         }
 
+        const poolAssignmentFilter = document.getElementById('poolAssignmentFilter');
+        if (poolAssignmentFilter) {
+            poolAssignmentFilter.addEventListener('change', (e) => {
+                this.activeFilters.poolAssignment = e.target.value;
+                this.currentPage = 1;
+                this.loadData();
+            });
+        }
+
         // Clear Filters button
         const clearFiltersBtn = document.getElementById('clearFiltersBtn');
         if (clearFiltersBtn) {
@@ -1778,6 +1787,7 @@ class DatabaseViewer {
                         location: 'No Coordinates',
                         agency: sfafFields.field200 || 'TBD',
                         markerType: marker ? (marker.type || marker.marker_type || 'imported') : 'pool_assignment',
+                        isPool: this.detectPoolAssignment(sfafFields),
                         coordinates: {
                             lat: marker?.lat || null,
                             lng: marker?.lng || null
@@ -1851,6 +1861,14 @@ class DatabaseViewer {
                         (record.sfafFields && record.sfafFields.field200 && record.sfafFields.field200.toLowerCase().includes(filterLower))
                     );
                 });
+            }
+
+            // ✅ Apply pool assignment filter
+            const poolFilter = this.activeFilters?.poolAssignment;
+            if (poolFilter === 'pool') {
+                filteredRecords = filteredRecords.filter(r => r.isPool);
+            } else if (poolFilter === 'assigned') {
+                filteredRecords = filteredRecords.filter(r => !r.isPool);
             }
 
             // ✅ Display filtered results
@@ -5406,6 +5424,9 @@ class DatabaseViewer {
         const frequencyBandFilter = document.getElementById('frequencyBandFilter');
         if (frequencyBandFilter) frequencyBandFilter.value = '';
 
+        const poolAssignmentFilter = document.getElementById('poolAssignmentFilter');
+        if (poolAssignmentFilter) poolAssignmentFilter.value = '';
+
         // Clear search input
         const searchInput = document.getElementById('sfafRecordsSearch');
         if (searchInput) searchInput.value = '';
@@ -6050,7 +6071,12 @@ class DatabaseViewer {
         const status = record.sfafComplete ? 'complete' : 'partial';
         const config = statusConfig[status];
 
+        const poolBadge = record.isPool
+            ? `<span class="sfaf-status-badge status-pool" title="Pool Assignment — no geographic constraints (306/406/530/531 absent)">🏊 Pool</span>`
+            : '';
+
         return `
+        ${poolBadge}
         <span class="sfaf-status-badge ${config.class}" title="${config.text}">
             ${config.icon} ${config.text}
         </span>
@@ -6065,6 +6091,16 @@ class DatabaseViewer {
             ${isCompliant ? '✅ Compliant' : '⚠️ Issues'}
         </span>
     `;
+    }
+
+    // Detect pool assignments: records lacking fields 306, 406, 530, and 531
+    // These fields define geographic constraints; their absence indicates a pool record
+    detectPoolAssignment(sfafFields) {
+        const f306 = (sfafFields.field306 || '').trim();
+        const f406 = (sfafFields.field406 || '').trim();
+        const f530 = (sfafFields.field530 || '').trim();
+        const f531 = (sfafFields.field531 || '').trim();
+        return !f306 && !f406 && !f530 && !f531;
     }
 
     generateActionButtons(record) {
@@ -6107,7 +6143,8 @@ class DatabaseViewer {
             complete: 0,
             incomplete: 0,
             empty: 0,
-            compliant: 0
+            compliant: 0,
+            pool: 0
         };
 
         records.forEach(record => {
@@ -6122,6 +6159,10 @@ class DatabaseViewer {
             if (record.completionPercentage >= 90) {
                 stats.compliant++;
             }
+
+            if (record.isPool) {
+                stats.pool++;
+            }
         });
 
         // Update DOM elements safely
@@ -6129,6 +6170,7 @@ class DatabaseViewer {
         this.safeUpdateElement('completeSFAFRecords', stats.complete);
         this.safeUpdateElement('incompleteSFAFRecords', stats.incomplete);
         this.safeUpdateElement('compliantRecords', stats.compliant);
+        this.safeUpdateElement('poolAssignmentRecords', stats.pool);
 
         // Update database total count
         const dbTotal = this.totalDatabaseRecords || stats.total;
@@ -11671,13 +11713,17 @@ class DatabaseViewer {
         // Get organized field groups
         const fieldGroups = this.getOrganizedFieldGroups();
 
-        container.innerHTML = fieldGroups.map(group => `
+        container.innerHTML = fieldGroups.map((group, idx) => `
             <div class="field-group">
                 <div class="field-group-header">
                     <h6><i class="${group.icon}"></i> ${group.title}</h6>
-                    <span class="field-count">${group.fields.length} fields</span>
+                    <div class="field-group-actions">
+                        <button type="button" class="btn-group-select" onclick="databaseViewer.selectAllInGroup(${idx})">Select All</button>
+                        <button type="button" class="btn-group-clear" onclick="databaseViewer.clearAllInGroup(${idx})">Clear</button>
+                        <span class="field-count">${group.fields.length} fields</span>
+                    </div>
                 </div>
-                <div class="field-group-items">
+                <div class="field-group-items" data-group-idx="${idx}">
                     ${group.fields.map(field => `
                         <label class="field-checkbox">
                             <input type="checkbox" value="${field.key}" data-label="${field.label}">
@@ -11687,6 +11733,18 @@ class DatabaseViewer {
                 </div>
             </div>
         `).join('');
+    }
+
+    selectAllInGroup(groupIdx) {
+        const group = document.querySelector(`.field-group-items[data-group-idx="${groupIdx}"]`);
+        if (!group) return;
+        group.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
+    }
+
+    clearAllInGroup(groupIdx) {
+        const group = document.querySelector(`.field-group-items[data-group-idx="${groupIdx}"]`);
+        if (!group) return;
+        group.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
     }
 
     getOrganizedFieldGroups() {
@@ -12361,7 +12419,7 @@ class DatabaseViewer {
         // Update the display
         this.currentData = filteredData;
         this.currentPage = 1;
-        this.renderSFAFTable();
+        this.renderEnhancedSFAFTable(filteredData);
         this.updatePagination();
         this.updateDBQueryStats();
 
@@ -13042,6 +13100,37 @@ document.addEventListener('DOMContentLoaded', () => {
         const viewSelector = document.getElementById('sfafViewMode');
         if (viewSelector && savedPrefs.sessionCount > 0) {
             viewSelector.classList.add('session-active');
+        }
+
+        // Sync top scrollbar with table container
+        const topScroll = document.getElementById('tableScrollTop');
+        const topScrollInner = document.getElementById('tableScrollTopInner');
+        const tableContainer = document.getElementById('tableContainer');
+
+        if (topScroll && tableContainer) {
+            // Update inner width to match table scroll width
+            const syncScrollWidth = () => {
+                topScrollInner.style.width = tableContainer.scrollWidth + 'px';
+            };
+            syncScrollWidth();
+
+            // Observe table content changes to keep width in sync
+            const resizeObserver = new ResizeObserver(syncScrollWidth);
+            resizeObserver.observe(tableContainer);
+
+            let syncing = false;
+            topScroll.addEventListener('scroll', () => {
+                if (syncing) return;
+                syncing = true;
+                tableContainer.scrollLeft = topScroll.scrollLeft;
+                syncing = false;
+            });
+            tableContainer.addEventListener('scroll', () => {
+                if (syncing) return;
+                syncing = true;
+                topScroll.scrollLeft = tableContainer.scrollLeft;
+                syncing = false;
+            });
         }
 
         console.log('✅ SFAF Plotter Database Viewer fully initialized');

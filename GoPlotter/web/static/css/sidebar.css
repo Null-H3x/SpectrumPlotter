@@ -368,6 +368,10 @@
     opacity: 0.6;
 }
 
+select.form-control { background: #0d1117; color: var(--sidebar-text-primary); }
+select.form-control option { background: #0d1117; color: var(--sidebar-text-primary); }
+select.form-control option:checked { background: #1e3a5f; color: #90caf9; }
+
 textarea.form-control {
     resize: vertical;
     min-height: 80px;

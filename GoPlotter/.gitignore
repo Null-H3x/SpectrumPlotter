@@ -50,11 +50,13 @@ temp/
 .backup/
 Backup/
 
+# Documentation folder (may contain sensitive deployment notes/credentials)
+docs/
+
 # AWS deployment files (not ready for commit yet)
 scripts/Dockerfile
 scripts/docker-compose.yml
 scripts/deploy-to-ec2.sh
-docs/AWS_DEPLOYMENT_GUIDE.md
 
 # Documentation .txt files (replaced with .md files)
 *.txt

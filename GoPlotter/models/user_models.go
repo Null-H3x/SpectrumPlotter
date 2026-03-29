@@ -12,13 +12,20 @@ type User struct {
 	ID                uuid.UUID  `json:"id" db:"id"`
 	Username          string     `json:"username" db:"username"`
 	Email             string     `json:"email" db:"email"`
-	PasswordHash      string     `json:"-" db:"password_hash"` // Never expose in JSON
+	PasswordHash      *string    `json:"-" db:"password_hash"` // Never expose in JSON
 	FullName          string     `json:"full_name" db:"full_name"`
 	Organization      string     `json:"organization" db:"organization"`
 	Role              string     `json:"role" db:"role"` // admin, operator, viewer
 	IsActive          bool       `json:"is_active" db:"is_active"`
+	InstallationID    *uuid.UUID `json:"installation_id,omitempty" db:"installation_id"`
+	Phone             *string    `json:"phone,omitempty" db:"phone"`
+	PhoneDSN          *string    `json:"phone_dsn,omitempty" db:"phone_dsn"`
+	UnifiedCommand    *string    `json:"unified_command,omitempty" db:"unified_command"`
 	LastLogin         *time.Time `json:"last_login" db:"last_login"`
-	CertificateSerial string     `json:"certificate_serial,omitempty" db:"certificate_serial"`
+	DefaultISMOffice  *string    `json:"default_ism_office,omitempty" db:"default_ism_office"`
+	ServiceBranch     *string    `json:"service_branch,omitempty" db:"service_branch"`
+	PayGrade          *string    `json:"pay_grade,omitempty" db:"pay_grade"`
+	CertificateSerial *string    `json:"certificate_serial,omitempty" db:"certificate_serial"`
 	CreatedAt         time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt         time.Time  `json:"updated_at" db:"updated_at"`
 }
@@ -67,6 +74,28 @@ type AuditLog struct {
 	UserAgent   string                 `json:"user_agent" db:"user_agent"`
 	Details     map[string]interface{} `json:"details,omitempty"`
 	CreatedAt   time.Time              `json:"created_at" db:"created_at"`
+}
+
+// AccountRequest represents a self-service account registration request
+type AccountRequest struct {
+	ID            uuid.UUID  `json:"id" db:"id"`
+	Username      string     `json:"username" db:"username"`
+	Email         string     `json:"email" db:"email"`
+	FullName      string     `json:"full_name" db:"full_name"`
+	Organization     string     `json:"organization" db:"organization"`
+	UnifiedCommand   string     `json:"unified_command" db:"unified_command"`
+	Unit             string     `json:"unit" db:"unit"`
+	Phone         string     `json:"phone" db:"phone"`
+	Justification string     `json:"justification" db:"justification"`
+	RequestedRole     string     `json:"requested_role" db:"requested_role"`
+	UnitID            *uuid.UUID `json:"unit_id,omitempty" db:"unit_id"`
+	RequestedUnitName *string    `json:"requested_unit_name,omitempty" db:"requested_unit_name"`
+	InstallationID    *uuid.UUID `json:"installation_id,omitempty" db:"installation_id"`
+	Status            string     `json:"status" db:"status"` // pending, approved, denied
+	ReviewedBy        *uuid.UUID `json:"reviewed_by,omitempty" db:"reviewed_by"`
+	ReviewNotes   *string    `json:"review_notes,omitempty" db:"review_notes"`
+	CreatedAt     time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at" db:"updated_at"`
 }
 
 // Request/Response models

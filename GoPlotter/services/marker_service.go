@@ -200,6 +200,18 @@ func (ms *MarkerService) RemoveIRACNoteFromMarker(markerID, noteCode string, fie
 	return ms.markerRepo.RemoveIRACNote(id, noteCode, fieldNumber, occurrenceNumber)
 }
 
+func (ms *MarkerService) CreateIRACNote(note *models.IRACNote) error {
+	return ms.iracNotesRepo.Create(note)
+}
+
+func (ms *MarkerService) UpdateIRACNote(note *models.IRACNote) error {
+	return ms.iracNotesRepo.Update(note)
+}
+
+func (ms *MarkerService) DeleteIRACNote(code string) error {
+	return ms.iracNotesRepo.Delete(code)
+}
+
 func (ms *MarkerService) GetMarkersByBounds(minLat, maxLat, minLng, maxLng float64) (*models.MarkersResponse, error) {
 	markers, err := ms.markerRepo.GetByBounds(minLat, maxLat, minLng, maxLng)
 	if err != nil {

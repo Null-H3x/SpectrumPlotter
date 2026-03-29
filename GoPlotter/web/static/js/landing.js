@@ -18,39 +18,70 @@
     /**
      * Initialize landing page
      */
-    function init() {
-        checkLoginStatus();
+    async function init() {
+        await checkLoginStatus();
         setupEventListeners();
         console.log('🚀 Landing page initialized');
     }
 
     /**
-     * Check if user is logged in
+     * Check if user is logged in by verifying session with the server
      */
-    function checkLoginStatus() {
-        const loggedIn = localStorage.getItem('sfaf_logged_in');
-        const username = localStorage.getItem('sfaf_username');
-
-        if (loggedIn === 'true' && username) {
-            isLoggedIn = true;
-            updateUIForLoggedInUser(username);
+    async function checkLoginStatus() {
+        try {
+            const res = await fetch('/api/auth/session');
+            if (!res.ok) {
+                clearLocalAuth();
+                return;
+            }
+            const data = await res.json();
+            if (data.valid && data.user) {
+                isLoggedIn = true;
+                localStorage.setItem('sfaf_logged_in', 'true');
+                localStorage.setItem('sfaf_username', data.user.username);
+                localStorage.setItem('sfaf_role', data.user.role);
+                updateUIForLoggedInUser(data.user.username, data.user.role);
+            } else {
+                clearLocalAuth();
+            }
+        } catch {
+            // Server unreachable — fall back to cached state
+            const loggedIn = localStorage.getItem('sfaf_logged_in');
+            const username = localStorage.getItem('sfaf_username');
+            const role = localStorage.getItem('sfaf_role');
+            if (loggedIn === 'true' && username) {
+                isLoggedIn = true;
+                updateUIForLoggedInUser(username, role);
+            }
         }
+    }
+
+    function clearLocalAuth() {
+        localStorage.removeItem('sfaf_logged_in');
+        localStorage.removeItem('sfaf_username');
+        localStorage.removeItem('sfaf_role');
+        isLoggedIn = false;
     }
 
     /**
      * Update UI for logged in user
      */
-    function updateUIForLoggedInUser(username) {
+    function updateUIForLoggedInUser(username, role) {
         const loginBtn = document.getElementById('loginBtn');
         if (loginBtn) {
-            loginBtn.innerHTML = `<i class="fas fa-user"></i> ${username}`;
-            loginBtn.onclick = logout;
+            loginBtn.innerHTML = `<i class="fas fa-user-circle"></i> ${username}`;
+            loginBtn.onclick = () => { window.location.href = '/profile'; };
         }
 
-        // Show modules section
-        const modulesSection = document.getElementById('modulesSection');
-        if (modulesSection) {
-            modulesSection.scrollIntoView({ behavior: 'smooth' });
+        const requestAccountBtn = document.getElementById('requestAccountBtn');
+        if (requestAccountBtn) requestAccountBtn.style.display = 'none';
+
+        const logoutBtn = document.getElementById('logoutBtn');
+        if (logoutBtn) logoutBtn.style.display = 'inline-flex';
+
+        const adminBtn = document.getElementById('adminBtn');
+        if (adminBtn) {
+            adminBtn.style.display = role === 'admin' ? 'inline-flex' : 'none';
         }
     }
 
@@ -123,78 +154,83 @@
             return;
         }
 
-        // Demo login - in production, this would be an API call
-        performLogin(username, rememberMe);
+        performLogin(username, password, rememberMe);
     };
 
     /**
-     * Perform login
+     * Perform login via API
      */
-    function performLogin(username, rememberMe) {
-        // Simulate API call delay
-        const submitBtn = document.querySelector('.btn-primary');
+    async function performLogin(username, password, rememberMe) {
+        const submitBtn = document.querySelector('#passwordLoginForm .btn-primary');
         const originalText = submitBtn.innerHTML;
         submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
         submitBtn.disabled = true;
 
-        setTimeout(() => {
-            // Save login state
+        try {
+            const res = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password }),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok || !data.success) {
+                showNotification(data.message || 'Login failed', 'error');
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
+                return;
+            }
+
+            const role = data.user?.role || '';
             localStorage.setItem('sfaf_logged_in', 'true');
             localStorage.setItem('sfaf_username', username);
-
+            localStorage.setItem('sfaf_role', role);
+            if (data.token) localStorage.setItem('sfaf_token', data.token);
             if (rememberMe) {
                 localStorage.setItem('sfaf_remember_me', 'true');
             }
 
             isLoggedIn = true;
-
-            // Show success notification
             showNotification(`Welcome, ${username}!`, 'success');
-
-            // Update UI
-            updateUIForLoggedInUser(username);
-
-            // Close modal
+            updateUIForLoggedInUser(username, role);
             closeLoginModal();
-
-            // Reset form
-            document.getElementById('loginForm').reset();
+            document.getElementById('passwordLoginForm').reset();
             submitBtn.innerHTML = originalText;
             submitBtn.disabled = false;
 
-            // Scroll to modules
             setTimeout(() => {
-                const modulesSection = document.getElementById('modulesSection');
-                if (modulesSection) {
-                    modulesSection.scrollIntoView({ behavior: 'smooth' });
-                }
+                window.location.href = '/frequency/assignments';
             }, 500);
-        }, 1000);
+        } catch (err) {
+            showNotification('Login error: ' + err.message, 'error');
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+        }
     }
 
     /**
      * Logout user
      */
-    function logout() {
-        if (confirm('Are you sure you want to logout?')) {
-            const rememberMe = localStorage.getItem('sfaf_remember_me');
+    async function logout() {
+        if (!confirm('Are you sure you want to logout?')) return;
 
-            if (rememberMe !== 'true') {
-                localStorage.removeItem('sfaf_logged_in');
-                localStorage.removeItem('sfaf_username');
-            }
+        try {
+            await fetch('/api/auth/logout', { method: 'POST' });
+        } catch { /* ignore network errors */ }
 
-            isLoggedIn = false;
+        clearLocalAuth();
 
-            // Update UI
-            const loginBtn = document.getElementById('loginBtn');
-            if (loginBtn) {
-                loginBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Login';
-                loginBtn.onclick = openLoginModal;
-            }
-
-            showNotification('Logged out successfully', 'success');
+        const loginBtn = document.getElementById('loginBtn');
+        if (loginBtn) {
+            loginBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Login';
+            loginBtn.onclick = openLoginModal;
         }
+
+        const adminBtn = document.getElementById('adminBtn');
+        if (adminBtn) adminBtn.style.display = 'none';
+
+        showNotification('Logged out successfully', 'success');
     }
 
     /**
@@ -389,12 +425,8 @@
             submitBtn.disabled = true;
             window._certificatePEM = null;
 
-            // Scroll to modules
             setTimeout(() => {
-                const modulesSection = document.getElementById('modulesSection');
-                if (modulesSection) {
-                    modulesSection.scrollIntoView({ behavior: 'smooth' });
-                }
+                window.location.href = '/frequency/assignments';
             }, 500);
         } catch (error) {
             showNotification('PKI authentication failed: ' + error.message, 'error');
@@ -406,6 +438,18 @@
     /**
      * Handle password login form submission
      */
+    window.togglePasswordVisibility = function() {
+        const input = document.getElementById('password');
+        const icon = document.getElementById('passwordToggleIcon');
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.classList.replace('fa-eye', 'fa-eye-slash');
+        } else {
+            input.type = 'password';
+            icon.classList.replace('fa-eye-slash', 'fa-eye');
+        }
+    };
+
     window.handlePasswordLogin = function(event) {
         event.preventDefault();
 
@@ -418,8 +462,7 @@
             return;
         }
 
-        // Demo login - in production, this would be an API call
-        performLogin(username, rememberMe);
+        performLogin(username, password, rememberMe);
     };
 
     // Initialize on DOM ready
@@ -428,4 +471,222 @@
     } else {
         init();
     }
+
 })();
+
+// ─── Request Account Modal (global scope for onclick handlers) ────────────────
+
+async function openRequestModal() {
+    document.getElementById('requestModal').style.display = 'flex';
+    document.getElementById('requestAccountForm').reset();
+    document.getElementById('requestResult').style.display = 'none';
+    document.getElementById('newUnitSection').style.display = 'none';
+    await loadInstallationsForDropdown();
+    loadUnitsForDropdown(null); // reset units — user must pick installation first
+}
+
+async function loadUnitsForDropdown(installationId) {
+    const sel = document.getElementById('reqUnitSelect');
+    if (!sel) return;
+
+    if (!installationId) {
+        sel.innerHTML = '<option value="">— Select an installation first —</option>';
+        sel.disabled = true;
+        return;
+    }
+
+    sel.innerHTML = '<option value="" disabled selected>Loading units...</option>';
+    sel.disabled = true;
+
+    try {
+        const res = await fetch('/api/auth/public-units?installation_id=' + encodeURIComponent(installationId));
+        if (!res.ok) throw new Error('Server returned ' + res.status);
+        const data = await res.json();
+        const units = data.units || [];
+
+        sel.innerHTML = '<option value="">— Select your unit —</option>';
+        units.forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u.id;
+            opt.textContent = u.unit_code + (u.organization ? ' — ' + u.organization : '');
+            sel.appendChild(opt);
+        });
+
+        if (units.length === 0) {
+            const noneOpt = document.createElement('option');
+            noneOpt.value = '';
+            noneOpt.disabled = true;
+            noneOpt.textContent = '— No units at this installation yet —';
+            sel.appendChild(noneOpt);
+        }
+
+        const requestOpt = document.createElement('option');
+        requestOpt.value = '__new__';
+        requestOpt.textContent = '+ Request New Unit (not listed above)';
+        sel.appendChild(requestOpt);
+
+        sel.disabled = false;
+    } catch (err) {
+        console.error('Failed to load units:', err);
+        sel.innerHTML = '<option value="__new__">⚠ Could not load units — enter unit name below</option>';
+        sel.disabled = false;
+        document.getElementById('newUnitSection').style.display = 'block';
+        document.getElementById('reqNewUnitName').required = true;
+    }
+}
+
+function handleInstallationSelectChange() {
+    const instId = document.getElementById('reqInstallationSelect').value;
+    // Reset unit when installation changes
+    document.getElementById('reqUnitSelect').value = '';
+    document.getElementById('newUnitSection').style.display = 'none';
+    document.getElementById('reqNewUnitName').required = false;
+    loadUnitsForDropdown(instId);
+}
+
+async function loadInstallationsForDropdown() {
+    const sel = document.getElementById('reqInstallationSelect');
+    if (!sel) return;
+
+    sel.innerHTML = '<option value="" disabled selected>Loading installations...</option>';
+    sel.disabled = true;
+
+    try {
+        const res = await fetch('/api/auth/public-installations');
+        if (!res.ok) throw new Error('Server returned ' + res.status);
+        const data = await res.json();
+        const list = data.installations || [];
+
+        sel.innerHTML = '<option value="">— Select your installation —</option>';
+        list.forEach(inst => {
+            const opt = document.createElement('option');
+            opt.value = inst.id;
+            opt.textContent = inst.name + (inst.code ? ' (' + inst.code + ')' : '');
+            sel.appendChild(opt);
+        });
+
+        if (list.length === 0) {
+            const noneOpt = document.createElement('option');
+            noneOpt.value = '';
+            noneOpt.disabled = true;
+            noneOpt.textContent = '— No installations configured yet —';
+            sel.appendChild(noneOpt);
+        }
+
+        sel.disabled = false;
+    } catch (err) {
+        console.error('Failed to load installations:', err);
+        sel.innerHTML = '<option value="">⚠ Could not load installations</option>';
+        sel.disabled = false;
+    }
+}
+
+function handleUnitSelectChange() {
+    const val = document.getElementById('reqUnitSelect').value;
+    const newUnitSection = document.getElementById('newUnitSection');
+    const newUnitNameInput = document.getElementById('reqNewUnitName');
+    if (val === '__new__') {
+        newUnitSection.style.display = 'block';
+        newUnitNameInput.required = true;
+    } else {
+        newUnitSection.style.display = 'none';
+        newUnitNameInput.required = false;
+    }
+}
+
+function closeRequestModal() {
+    document.getElementById('requestModal').style.display = 'none';
+}
+
+async function handleRequestAccount(e) {
+    e.preventDefault();
+    const btn = document.getElementById('requestSubmitBtn');
+    const result = document.getElementById('requestResult');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+
+    const unitSelectVal = document.getElementById('reqUnitSelect').value;
+    const isNewUnit = unitSelectVal === '__new__';
+
+    if (isNewUnit) {
+        const newUnitName = document.getElementById('reqNewUnitName').value.trim();
+        if (!newUnitName) {
+            const result = document.getElementById('requestResult');
+            result.className = 'request-result request-error';
+            result.innerHTML = '<i class="fas fa-exclamation-circle"></i> Please enter the name of the unit you are requesting.';
+            result.style.display = 'block';
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit Request';
+            return;
+        }
+    } else if (!unitSelectVal) {
+        const result = document.getElementById('requestResult');
+        result.className = 'request-result request-error';
+        result.innerHTML = '<i class="fas fa-exclamation-circle"></i> Please select a unit.';
+        result.style.display = 'block';
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit Request';
+        return;
+    }
+
+    const newUnitName = isNewUnit ? document.getElementById('reqNewUnitName').value.trim() : '';
+    const newUnitCode = isNewUnit ? document.getElementById('reqNewUnitCode').value.trim() : '';
+
+    const firstName = document.getElementById('reqFirstName').value.trim();
+    const mi        = document.getElementById('reqMiddleInitial').value.trim().toUpperCase();
+    const lastName  = document.getElementById('reqLastName').value.trim();
+    const fullName  = [firstName, mi ? mi + '.' : '', lastName].filter(Boolean).join(' ');
+
+    const dsnPhone  = document.getElementById('reqPhoneDSN').value.trim();
+    const commPhone = document.getElementById('reqPhoneComm').value.trim();
+    const phone     = [dsnPhone ? 'DSN: ' + dsnPhone : '', commPhone ? 'Comm: ' + commPhone : ''].filter(Boolean).join(' | ');
+
+    const payload = {
+        username:         document.getElementById('reqUsername').value.trim(),
+        full_name:        fullName,
+        email:            document.getElementById('reqEmail').value.trim(),
+        phone:            phone,
+        organization:     document.getElementById('reqOrganization').value,
+        unified_command:  document.getElementById('reqUnifiedCommand').value,
+        unit:             isNewUnit ? (newUnitCode || newUnitName) : '',
+        requested_role:   document.getElementById('reqRole').value,
+        justification:    document.getElementById('reqJustification').value.trim(),
+    };
+
+    if (isNewUnit) {
+        const fullNewUnitName = newUnitCode ? `${newUnitName} (${newUnitCode})` : newUnitName;
+        payload.requested_unit_name = fullNewUnitName;
+    } else {
+        payload.unit_id = unitSelectVal;
+    }
+
+    const installationId = document.getElementById('reqInstallationSelect').value;
+    if (installationId) {
+        payload.installation_id = installationId;
+    }
+
+    try {
+        const res = await fetch('/api/auth/request-account', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+            result.className = 'request-result request-success';
+            result.innerHTML = '<i class="fas fa-check-circle"></i> ' + data.message;
+            result.style.display = 'block';
+            document.getElementById('requestAccountForm').reset();
+            btn.innerHTML = '<i class="fas fa-check"></i> Submitted';
+        } else {
+            throw new Error(data.error || 'Submission failed');
+        }
+    } catch (err) {
+        result.className = 'request-result request-error';
+        result.innerHTML = '<i class="fas fa-exclamation-circle"></i> ' + err.message;
+        result.style.display = 'block';
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit Request';
+    }
+}

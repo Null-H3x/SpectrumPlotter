@@ -32,12 +32,11 @@ func (h *FrequencyHandler) GetUserUnits(c *gin.Context) {
 		return
 	}
 
-	// Check if user is admin - admins see all units
-	role, _ := c.Get("role")
+	// Admins see all units
 	var units []models.UnitWithAssignments
 	var err error
 
-	if role == "admin" {
+	if atLeast(c, "admin") {
 		units, err = h.service.GetAllUnitsWithAssignments()
 	} else {
 		units, err = h.service.GetUserUnitsWithAssignments(userID.(uuid.UUID))
@@ -63,9 +62,7 @@ func (h *FrequencyHandler) CreateUnit(c *gin.Context) {
 		return
 	}
 
-	// Check if user is admin
-	role, _ := c.Get("role")
-	if role != "admin" {
+	if !atLeast(c, "admin") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "admin access required"})
 		return
 	}
@@ -97,9 +94,7 @@ func (h *FrequencyHandler) UpdateUnit(c *gin.Context) {
 		return
 	}
 
-	// Check if user is admin
-	role, _ := c.Get("role")
-	if role != "admin" {
+	if !atLeast(c, "admin") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "admin access required"})
 		return
 	}
@@ -140,9 +135,7 @@ func (h *FrequencyHandler) DeleteUnit(c *gin.Context) {
 		return
 	}
 
-	// Check if user is admin
-	role, _ := c.Get("role")
-	if role != "admin" {
+	if !atLeast(c, "admin") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "admin access required"})
 		return
 	}
@@ -293,6 +286,47 @@ func (h *FrequencyHandler) CheckFrequencyConflicts(c *gin.Context) {
 	})
 }
 
+// GetAssignmentsInRange returns all active assignments in a frequency band.
+// Used by the ISM deconfliction panel in the approval modal.
+// GET /api/frequency/assignments/in-range?min=30.000&max=88.000
+func (h *FrequencyHandler) GetAssignmentsInRange(c *gin.Context) {
+	if !atLeast(c, "ism") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "ISM-level access or higher required"})
+		return
+	}
+	minStr := c.Query("min")
+	maxStr := c.Query("max")
+	if minStr == "" || maxStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "min and max (MHz) are required"})
+		return
+	}
+	minMhz, err := strconv.ParseFloat(minStr, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid min value"})
+		return
+	}
+	maxMhz, err := strconv.ParseFloat(maxStr, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid max value"})
+		return
+	}
+	if minMhz >= maxMhz {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "min must be less than max"})
+		return
+	}
+	assignments, err := h.service.GetAssignmentsInRange(minMhz, maxMhz)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"assignments": assignments,
+		"count":       len(assignments),
+		"band_min":    minMhz,
+		"band_max":    maxMhz,
+	})
+}
+
 // ============================================
 // Frequency Request Endpoints
 // ============================================
@@ -321,9 +355,8 @@ func (h *FrequencyHandler) GetUserRequests(c *gin.Context) {
 // GetPendingRequests returns all pending/under review requests (s6/admin only)
 // GET /api/frequency/requests/pending
 func (h *FrequencyHandler) GetPendingRequests(c *gin.Context) {
-	role, exists := c.Get("role")
-	if !exists || (role != "admin" && role != "s6") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "s6 or admin access required"})
+	if !atLeast(c, "ism") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "ISM-level access or higher required"})
 		return
 	}
 
@@ -360,6 +393,11 @@ func (h *FrequencyHandler) SubmitFrequencyRequest(c *gin.Context) {
 		return
 	}
 
+	if input.EndDate == nil && input.RequestType != "permanent" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "end_date is required for non-permanent requests"})
+		return
+	}
+
 	if input.Justification == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "justification is required"})
 		return
@@ -377,6 +415,74 @@ func (h *FrequencyHandler) SubmitFrequencyRequest(c *gin.Context) {
 	})
 }
 
+// DeleteFrequencyRequest permanently deletes a cancelled or denied request.
+// DELETE /api/frequency/requests/:id
+func (h *FrequencyHandler) DeleteFrequencyRequest(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+	requestID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request id"})
+		return
+	}
+	isAdmin := atLeast(c, "admin")
+	if err := h.service.DeleteFrequencyRequest(requestID, userID.(uuid.UUID), isAdmin); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "request deleted"})
+}
+
+// ResubmitFrequencyRequest updates a denied request and resets it to pending.
+// PUT /api/frequency/requests/:id/resubmit
+func (h *FrequencyHandler) ResubmitFrequencyRequest(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+	requestID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request id"})
+		return
+	}
+	var input models.CreateFrequencyRequestInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	request, err := h.service.ResubmitFrequencyRequest(requestID, userID.(uuid.UUID), input)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "request resubmitted", "request": request})
+}
+
+// RetractFrequencyRequest cancels the caller's own pending/under-review request.
+// PUT /api/frequency/requests/:id/retract
+func (h *FrequencyHandler) RetractFrequencyRequest(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+	requestID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request id"})
+		return
+	}
+	request, err := h.service.RetractFrequencyRequest(requestID, userID.(uuid.UUID))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "request retracted", "request": request})
+}
+
 // ReviewFrequencyRequest updates the status of a frequency request (s6/admin only)
 // PUT /api/frequency/requests/:id/review
 func (h *FrequencyHandler) ReviewFrequencyRequest(c *gin.Context) {
@@ -386,9 +492,8 @@ func (h *FrequencyHandler) ReviewFrequencyRequest(c *gin.Context) {
 		return
 	}
 
-	role, _ := c.Get("role")
-	if role != "admin" && role != "s6" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "s6 or admin access required"})
+	if !atLeast(c, "ism") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "ISM-level access or higher required"})
 		return
 	}
 
@@ -428,9 +533,8 @@ func (h *FrequencyHandler) ApproveFrequencyRequest(c *gin.Context) {
 		return
 	}
 
-	role, _ := c.Get("role")
-	if role != "admin" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "admin access required"})
+	if !atLeast(c, "ism") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "ISM-level access or higher required"})
 		return
 	}
 
@@ -446,12 +550,28 @@ func (h *FrequencyHandler) ApproveFrequencyRequest(c *gin.Context) {
 		return
 	}
 
+	// A and T are final assignments — only Agency, NTIA, or Admin may create them.
+	// P and S are proposals — ISM and above may create them.
+	recordType := assignmentInput.SFAFRecordType
+	if recordType == "" {
+		recordType = "A"
+	}
+	if recordType == "A" || recordType == "T" {
+		if !atLeast(c, "agency") {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Only Agency, NTIA, or Admin may create final assignments (A/T). Use record type P or S to submit a proposal.",
+			})
+			return
+		}
+	}
+
 	request, assignment, err := h.service.ApproveAndCreateAssignment(
 		requestID,
 		userID.(uuid.UUID),
 		&assignmentInput,
 	)
 	if err != nil {
+		_ = c.Error(err) // surfaces in middleware log
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -461,6 +581,301 @@ func (h *FrequencyHandler) ApproveFrequencyRequest(c *gin.Context) {
 		"request":    request,
 		"assignment": assignment,
 	})
+}
+
+// GetSubmittedAssignments returns all assignments created by the current user.
+// GET /api/frequency/assignments/submitted
+func (h *FrequencyHandler) GetSubmittedAssignments(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+	result, err := h.service.GetSubmittedAssignments(userID.(uuid.UUID))
+	if err != nil {
+		_ = c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"assignments": result})
+}
+
+// GetProposalAssignments returns active P/S proposals visible to the requesting user.
+// command/combatant_command: only proposals routed to them (or unrouted).
+// agency/ntia/admin: all proposals.
+// GET /api/frequency/assignments/proposals
+func (h *FrequencyHandler) GetProposalAssignments(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+	if !atLeast(c, "command") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "command-level access or higher required"})
+		return
+	}
+
+	role, _ := c.Get("role")
+	roleStr, _ := role.(string)
+
+	proposals, err := h.service.GetProposalAssignments(userID.(uuid.UUID), roleStr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"proposals": proposals})
+}
+
+// RetractAssignment deactivates a P/S proposal created by the caller (ISM+).
+// PUT /api/frequency/assignments/:id/retract
+func (h *FrequencyHandler) RetractAssignment(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+	if !atLeast(c, "ism") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "ism-level access or higher required"})
+		return
+	}
+	assignmentID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid assignment id"})
+		return
+	}
+	resetCount, err := h.service.RetractProposalAssignment(assignmentID, userID.(uuid.UUID))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "proposal retracted", "requests_returned": resetCount})
+}
+
+// GetFiveYearReviews returns permanent assignments due for 5-year review scoped
+// to the requesting ISM's installation (admins see all).
+// GET /api/frequency/assignments/five-year-review
+func (h *FrequencyHandler) GetFiveYearReviews(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+	if !atLeast(c, "ism") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "ism-level access or higher required"})
+		return
+	}
+	role, _ := c.Get("role")
+	roleStr, _ := role.(string)
+	result, err := h.service.GetFiveYearReviews(userID.(uuid.UUID), roleStr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"assignments": result})
+}
+
+// GetWorkboxes returns the static list of named workboxes available as routing destinations.
+// GET /api/frequency/reviewers  (path kept for backward compatibility)
+func (h *FrequencyHandler) GetWorkboxes(c *gin.Context) {
+	if !atLeast(c, "ism") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "ism-level access or higher required"})
+		return
+	}
+	workboxes := []string{
+		"GAFC",
+		"NAFC",
+		"AFSOC ISM",
+		"ACC ISM",
+		"AMC ISM",
+		"AFGSC ISM",
+		"AFMC ISM",
+		"AFRC ISM",
+		"ANG ISM",
+		"PACAF ISM",
+		"USAFE ISM",
+		"CENTCOM AFC",
+		"INDOPACOM AFC",
+		"EUCOM AFC",
+		"SOCOM AFC",
+		"NORTHCOM AFC",
+		"FORSCOM AFC",
+		"USAREUR AFC",
+		"NAVEUR AFC",
+		"NAVPAC AFC",
+	}
+	c.JSON(http.StatusOK, gin.H{"workboxes": workboxes})
+}
+
+// ElevateAssignment promotes a P→A or S→T final assignment (agency-level and above)
+// PUT /api/frequency/assignments/:id/elevate
+func (h *FrequencyHandler) ElevateAssignment(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+
+	if !atLeast(c, "agency") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "agency-level access or higher required to finalize assignments"})
+		return
+	}
+
+	assignmentID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid assignment id"})
+		return
+	}
+
+	var body struct {
+		Notes string `json:"notes"`
+	}
+	_ = c.ShouldBindJSON(&body)
+
+	assignment, err := h.service.ElevateAssignment(assignmentID, userID.(uuid.UUID), body.Notes)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	finalType := map[string]string{"A": "Permanent Assignment", "T": "Temporary Assignment"}[assignment.SFAFRecordType]
+	c.JSON(http.StatusOK, gin.H{
+		"message":    "proposal elevated to " + finalType,
+		"assignment": assignment,
+	})
+}
+
+// BulkRouteAssignments sets routed_to on multiple P/S proposals at once.
+// ISMs may only route proposals they own; admins bypass the ownership check.
+// PUT /api/frequency/assignments/bulk-route
+func (h *FrequencyHandler) BulkRouteAssignments(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+	if !atLeast(c, "ism") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "ISM-level access or higher required"})
+		return
+	}
+
+	var body struct {
+		AssignmentIDs []string `json:"assignment_ids" binding:"required"`
+		RoutedTo      *string  `json:"routed_to"` // workbox name, null = unroute
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if len(body.AssignmentIDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no assignment_ids provided"})
+		return
+	}
+
+	ids := make([]uuid.UUID, 0, len(body.AssignmentIDs))
+	for _, s := range body.AssignmentIDs {
+		id, err := uuid.Parse(s)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid assignment id: " + s})
+			return
+		}
+		ids = append(ids, id)
+	}
+
+	var workbox *string
+	if body.RoutedTo != nil && *body.RoutedTo != "" {
+		workbox = body.RoutedTo
+	}
+
+	isAdmin := atLeast(c, "admin")
+	count, err := h.service.BulkRouteAssignments(ids, workbox, userID.(uuid.UUID), isAdmin)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"updated": count})
+}
+
+// SetCoordinations replaces the lateral coordination workboxes for a proposal.
+// PUT /api/frequency/assignments/:id/coordinations
+func (h *FrequencyHandler) SetCoordinations(c *gin.Context) {
+	if !atLeast(c, "ism") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "ism-level access required"})
+		return
+	}
+	assignmentID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid assignment id"})
+		return
+	}
+	var body struct {
+		Workboxes []string `json:"workboxes"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if body.Workboxes == nil {
+		body.Workboxes = []string{}
+	}
+	if err := h.service.SetCoordinations(assignmentID, body.Workboxes); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"workboxes": body.Workboxes})
+}
+
+// AddComment adds a comment to a proposal's comment log.
+// POST /api/frequency/assignments/:id/comments
+func (h *FrequencyHandler) AddComment(c *gin.Context) {
+	if !atLeast(c, "ism") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "ism-level access required"})
+		return
+	}
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+	assignmentID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid assignment id"})
+		return
+	}
+	var body struct {
+		Workbox string `json:"workbox" binding:"required"`
+		Body    string `json:"body"    binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	comment, err := h.service.AddComment(assignmentID, userID.(uuid.UUID), body.Workbox, body.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, comment)
+}
+
+// GetComments returns the comment log for a proposal.
+// GET /api/frequency/assignments/:id/comments
+func (h *FrequencyHandler) GetComments(c *gin.Context) {
+	if !atLeast(c, "ism") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "ism-level access required"})
+		return
+	}
+	assignmentID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid assignment id"})
+		return
+	}
+	comments, err := h.service.GetComments(assignmentID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"comments": comments})
 }
 
 // ============================================
@@ -511,9 +926,7 @@ func RequireRole(allowedRoles ...string) gin.HandlerFunc {
 // CleanupOrphanedAssignments removes frequency assignments that don't have corresponding SFAF records
 // POST /api/frequency/cleanup-orphaned (admin only)
 func (h *FrequencyHandler) CleanupOrphanedAssignments(c *gin.Context) {
-	// Check if user is admin
-	role, _ := c.Get("role")
-	if role != "admin" {
+	if !atLeast(c, "admin") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "admin access required"})
 		return
 	}

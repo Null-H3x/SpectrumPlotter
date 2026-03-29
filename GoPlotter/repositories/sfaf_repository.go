@@ -126,23 +126,23 @@ func (r *SFAFRepository) GetByID(id string) (*models.SFAF, error) {
 	// ✅ CORRECT: Use individual field columns from sfafs table (Source: table_info.txt)
 	query := `
         SELECT id, marker_id, created_at, updated_at,
-               field005, field006, field007, field010, field013, field014, field015, field016, field017, field018, field019, field020,
-               field102, field103, field105, field106, field107, field108, field110, field111, field112, field113, field114, field115, field116, field117, field118,
-               field130, field131, field140, field141, field142, field143, field144, field145, field146, field147, field151, field152,
-               field200, field201, field202, field203, field204, field205, field206, field207, field208, field209,
-               field300, field301, field302, field303, field304, field306,
-               field315, field316, field317, field318, field319, field321,
-               field340, field341, field342, field343, field344, field345, field346, field347, field348, field349,
-               field354, field355, field356, field357, field358, field359, field360, field361, field362, field363, field364, field365, field373, field374,
-               field400, field401, field403, field406, field407, field408, field415, field416, field417, field418, field419,
-               field440, field442, field443,
-               field453, field454, field455, field456, field457, field458, field459, field460, field461, field462, field463, field470, field471, field472, field473,
-               field500, field501, field502, field503, field504, field506, field511, field512, field513, field520, field521, field530, field531,
-               field701, field702, field704, field707, field710, field711, field716,
-               field801, field803, field804, field805, field806,
-               field901, field903, field904, field905, field906, field907, field910, field911, field924, field926, field927, field928,
-               field952, field953, field956, field957, field958, field959, field963, field964, field965,
-               field982, field983, field984, field985, field986, field987, field988, field989, field990, field991, field992, field993, field994, field995, field996, field997, field998, field999
+               COALESCE(field005, ''), COALESCE(field006, ''), COALESCE(field007, ''), COALESCE(field010, ''), COALESCE(field013, ''), COALESCE(field014, ''), COALESCE(field015, ''), COALESCE(field016, ''), COALESCE(field017, ''), COALESCE(field018, ''), COALESCE(field019, ''), COALESCE(field020, ''),
+               COALESCE(field102, ''), COALESCE(field103, ''), COALESCE(field105, ''), COALESCE(field106, ''), COALESCE(field107, ''), COALESCE(field108, ''), COALESCE(field110, ''), COALESCE(field111, ''), COALESCE(field112, ''), COALESCE(field113, ''), COALESCE(field114, ''), COALESCE(field115, ''), COALESCE(field116, ''), COALESCE(field117, ''), COALESCE(field118, ''),
+               COALESCE(field130, ''), COALESCE(field131, ''), field140, field141, field142, field143, COALESCE(field144, ''), COALESCE(field145, ''), COALESCE(field146, ''), COALESCE(field147, ''), COALESCE(field151, ''), COALESCE(field152, ''),
+               COALESCE(field200, ''), COALESCE(field201, ''), COALESCE(field202, ''), COALESCE(field203, ''), COALESCE(field204, ''), COALESCE(field205, ''), COALESCE(field206, ''), COALESCE(field207, ''), COALESCE(field208, ''), COALESCE(field209, ''),
+               COALESCE(field300, ''), COALESCE(field301, ''), COALESCE(field302, ''), COALESCE(field303, ''), COALESCE(field304, ''), COALESCE(field306, ''),
+               field315, field316, field317, COALESCE(field318, ''), field319, field321,
+               COALESCE(field340, ''), COALESCE(field341, ''), COALESCE(field342, ''), COALESCE(field343, ''), COALESCE(field344, ''), COALESCE(field345, ''), COALESCE(field346, ''), COALESCE(field347, ''), COALESCE(field348, ''), COALESCE(field349, ''),
+               COALESCE(field354, ''), COALESCE(field355, ''), field356, field357, field358, field359, field360, field361, COALESCE(field362, ''), COALESCE(field363, ''), field364, field365, COALESCE(field373, ''), COALESCE(field374, ''),
+               COALESCE(field400, ''), COALESCE(field401, ''), COALESCE(field403, ''), COALESCE(field406, ''), COALESCE(field407, ''), COALESCE(field408, ''), field415, field416, field417, COALESCE(field418, ''), field419,
+               COALESCE(field440, ''), COALESCE(field442, ''), COALESCE(field443, ''),
+               COALESCE(field453, ''), COALESCE(field454, ''), COALESCE(field455, ''), field456, field457, field458, field459, field460, field461, COALESCE(field462, ''), COALESCE(field463, ''), field470, field471, field472, COALESCE(field473, ''),
+               COALESCE(field500, ''), COALESCE(field501, ''), COALESCE(field502, ''), COALESCE(field503, ''), COALESCE(field504, ''), COALESCE(field506, ''), COALESCE(field511, ''), COALESCE(field512, ''), COALESCE(field513, ''), COALESCE(field520, ''), COALESCE(field521, ''), COALESCE(field530, ''), COALESCE(field531, ''),
+               COALESCE(field701, ''), COALESCE(field702, ''), COALESCE(field704, ''), COALESCE(field707, ''), COALESCE(field710, ''), COALESCE(field711, ''), COALESCE(field716, ''),
+               COALESCE(field801, ''), COALESCE(field803, ''), COALESCE(field804, ''), field805, COALESCE(field806, ''),
+               COALESCE(field901, ''), COALESCE(field903, ''), field904, COALESCE(field905, ''), COALESCE(field906, ''), COALESCE(field907, ''), COALESCE(field910, ''), field911, COALESCE(field924, ''), field926, field927, field928,
+               COALESCE(field952, ''), COALESCE(field953, ''), COALESCE(field956, ''), field957, COALESCE(field958, ''), COALESCE(field959, ''), COALESCE(field963, ''), field964, field965,
+               COALESCE(field982, ''), COALESCE(field983, ''), COALESCE(field984, ''), COALESCE(field985, ''), COALESCE(field986, ''), COALESCE(field987, ''), COALESCE(field988, ''), COALESCE(field989, ''), COALESCE(field990, ''), COALESCE(field991, ''), COALESCE(field992, ''), COALESCE(field993, ''), COALESCE(field994, ''), COALESCE(field995, ''), COALESCE(field996, ''), COALESCE(field997, ''), COALESCE(field998, ''), COALESCE(field999, '')
         FROM sfafs 
         WHERE id = $1`
 
@@ -188,23 +188,23 @@ func (r *SFAFRepository) GetByMarkerID(markerID string) (*models.SFAF, error) {
 	// ✅ CORRECT: Use individual field columns from sfafs table (Source: table_info.txt)
 	query := `
         SELECT id, marker_id, created_at, updated_at,
-               field005, field006, field007, field010, field013, field014, field015, field016, field017, field018, field019, field020,
-               field102, field103, field105, field106, field107, field108, field110, field111, field112, field113, field114, field115, field116, field117, field118,
-               field130, field131, field140, field141, field142, field143, field144, field145, field146, field147, field151, field152,
-               field200, field201, field202, field203, field204, field205, field206, field207, field208, field209,
-               field300, field301, field302, field303, field304, field306,
-               field315, field316, field317, field318, field319, field321,
-               field340, field341, field342, field343, field344, field345, field346, field347, field348, field349,
-               field354, field355, field356, field357, field358, field359, field360, field361, field362, field363, field364, field365, field373, field374,
-               field400, field401, field403, field406, field407, field408, field415, field416, field417, field418, field419,
-               field440, field442, field443,
-               field453, field454, field455, field456, field457, field458, field459, field460, field461, field462, field463, field470, field471, field472, field473,
-               field500, field501, field502, field503, field504, field506, field511, field512, field513, field520, field521, field530, field531,
-               field701, field702, field704, field707, field710, field711, field716,
-               field801, field803, field804, field805, field806,
-               field901, field903, field904, field905, field906, field907, field910, field911, field924, field926, field927, field928,
-               field952, field953, field956, field957, field958, field959, field963, field964, field965,
-               field982, field983, field984, field985, field986, field987, field988, field989, field990, field991, field992, field993, field994, field995, field996, field997, field998, field999
+               COALESCE(field005, ''), COALESCE(field006, ''), COALESCE(field007, ''), COALESCE(field010, ''), COALESCE(field013, ''), COALESCE(field014, ''), COALESCE(field015, ''), COALESCE(field016, ''), COALESCE(field017, ''), COALESCE(field018, ''), COALESCE(field019, ''), COALESCE(field020, ''),
+               COALESCE(field102, ''), COALESCE(field103, ''), COALESCE(field105, ''), COALESCE(field106, ''), COALESCE(field107, ''), COALESCE(field108, ''), COALESCE(field110, ''), COALESCE(field111, ''), COALESCE(field112, ''), COALESCE(field113, ''), COALESCE(field114, ''), COALESCE(field115, ''), COALESCE(field116, ''), COALESCE(field117, ''), COALESCE(field118, ''),
+               COALESCE(field130, ''), COALESCE(field131, ''), field140, field141, field142, field143, COALESCE(field144, ''), COALESCE(field145, ''), COALESCE(field146, ''), COALESCE(field147, ''), COALESCE(field151, ''), COALESCE(field152, ''),
+               COALESCE(field200, ''), COALESCE(field201, ''), COALESCE(field202, ''), COALESCE(field203, ''), COALESCE(field204, ''), COALESCE(field205, ''), COALESCE(field206, ''), COALESCE(field207, ''), COALESCE(field208, ''), COALESCE(field209, ''),
+               COALESCE(field300, ''), COALESCE(field301, ''), COALESCE(field302, ''), COALESCE(field303, ''), COALESCE(field304, ''), COALESCE(field306, ''),
+               field315, field316, field317, COALESCE(field318, ''), field319, field321,
+               COALESCE(field340, ''), COALESCE(field341, ''), COALESCE(field342, ''), COALESCE(field343, ''), COALESCE(field344, ''), COALESCE(field345, ''), COALESCE(field346, ''), COALESCE(field347, ''), COALESCE(field348, ''), COALESCE(field349, ''),
+               COALESCE(field354, ''), COALESCE(field355, ''), field356, field357, field358, field359, field360, field361, COALESCE(field362, ''), COALESCE(field363, ''), field364, field365, COALESCE(field373, ''), COALESCE(field374, ''),
+               COALESCE(field400, ''), COALESCE(field401, ''), COALESCE(field403, ''), COALESCE(field406, ''), COALESCE(field407, ''), COALESCE(field408, ''), field415, field416, field417, COALESCE(field418, ''), field419,
+               COALESCE(field440, ''), COALESCE(field442, ''), COALESCE(field443, ''),
+               COALESCE(field453, ''), COALESCE(field454, ''), COALESCE(field455, ''), field456, field457, field458, field459, field460, field461, COALESCE(field462, ''), COALESCE(field463, ''), field470, field471, field472, COALESCE(field473, ''),
+               COALESCE(field500, ''), COALESCE(field501, ''), COALESCE(field502, ''), COALESCE(field503, ''), COALESCE(field504, ''), COALESCE(field506, ''), COALESCE(field511, ''), COALESCE(field512, ''), COALESCE(field513, ''), COALESCE(field520, ''), COALESCE(field521, ''), COALESCE(field530, ''), COALESCE(field531, ''),
+               COALESCE(field701, ''), COALESCE(field702, ''), COALESCE(field704, ''), COALESCE(field707, ''), COALESCE(field710, ''), COALESCE(field711, ''), COALESCE(field716, ''),
+               COALESCE(field801, ''), COALESCE(field803, ''), COALESCE(field804, ''), field805, COALESCE(field806, ''),
+               COALESCE(field901, ''), COALESCE(field903, ''), field904, COALESCE(field905, ''), COALESCE(field906, ''), COALESCE(field907, ''), COALESCE(field910, ''), field911, COALESCE(field924, ''), field926, field927, field928,
+               COALESCE(field952, ''), COALESCE(field953, ''), COALESCE(field956, ''), field957, COALESCE(field958, ''), COALESCE(field959, ''), COALESCE(field963, ''), field964, field965,
+               COALESCE(field982, ''), COALESCE(field983, ''), COALESCE(field984, ''), COALESCE(field985, ''), COALESCE(field986, ''), COALESCE(field987, ''), COALESCE(field988, ''), COALESCE(field989, ''), COALESCE(field990, ''), COALESCE(field991, ''), COALESCE(field992, ''), COALESCE(field993, ''), COALESCE(field994, ''), COALESCE(field995, ''), COALESCE(field996, ''), COALESCE(field997, ''), COALESCE(field998, ''), COALESCE(field999, '')
         FROM sfafs 
         WHERE marker_id = $1`
 
@@ -237,6 +237,67 @@ func (r *SFAFRepository) GetByMarkerID(markerID string) (*models.SFAF, error) {
 	}
 
 	return &sfaf, nil
+}
+
+func (r *SFAFRepository) GetBySerial(serial string) (*models.SFAF, error) {
+	var sfaf models.SFAF
+
+	query := `
+        SELECT id, marker_id, created_at, updated_at,
+               COALESCE(field005, ''), COALESCE(field006, ''), COALESCE(field007, ''), COALESCE(field010, ''), COALESCE(field013, ''), COALESCE(field014, ''), COALESCE(field015, ''), COALESCE(field016, ''), COALESCE(field017, ''), COALESCE(field018, ''), COALESCE(field019, ''), COALESCE(field020, ''),
+               COALESCE(field102, ''), COALESCE(field103, ''), COALESCE(field105, ''), COALESCE(field106, ''), COALESCE(field107, ''), COALESCE(field108, ''), COALESCE(field110, ''), COALESCE(field111, ''), COALESCE(field112, ''), COALESCE(field113, ''), COALESCE(field114, ''), COALESCE(field115, ''), COALESCE(field116, ''), COALESCE(field117, ''), COALESCE(field118, ''),
+               COALESCE(field130, ''), COALESCE(field131, ''), field140, field141, field142, field143, COALESCE(field144, ''), COALESCE(field145, ''), COALESCE(field146, ''), COALESCE(field147, ''), COALESCE(field151, ''), COALESCE(field152, ''),
+               COALESCE(field200, ''), COALESCE(field201, ''), COALESCE(field202, ''), COALESCE(field203, ''), COALESCE(field204, ''), COALESCE(field205, ''), COALESCE(field206, ''), COALESCE(field207, ''), COALESCE(field208, ''), COALESCE(field209, ''),
+               COALESCE(field300, ''), COALESCE(field301, ''), COALESCE(field302, ''), COALESCE(field303, ''), COALESCE(field304, ''), COALESCE(field306, ''),
+               field315, field316, field317, COALESCE(field318, ''), field319, field321,
+               COALESCE(field340, ''), COALESCE(field341, ''), COALESCE(field342, ''), COALESCE(field343, ''), COALESCE(field344, ''), COALESCE(field345, ''), COALESCE(field346, ''), COALESCE(field347, ''), COALESCE(field348, ''), COALESCE(field349, ''),
+               COALESCE(field354, ''), COALESCE(field355, ''), field356, field357, field358, field359, field360, field361, COALESCE(field362, ''), COALESCE(field363, ''), field364, field365, COALESCE(field373, ''), COALESCE(field374, ''),
+               COALESCE(field400, ''), COALESCE(field401, ''), COALESCE(field403, ''), COALESCE(field406, ''), COALESCE(field407, ''), COALESCE(field408, ''), field415, field416, field417, COALESCE(field418, ''), field419,
+               COALESCE(field440, ''), COALESCE(field442, ''), COALESCE(field443, ''),
+               COALESCE(field453, ''), COALESCE(field454, ''), COALESCE(field455, ''), field456, field457, field458, field459, field460, field461, COALESCE(field462, ''), COALESCE(field463, ''), field470, field471, field472, COALESCE(field473, ''),
+               COALESCE(field500, ''), COALESCE(field501, ''), COALESCE(field502, ''), COALESCE(field503, ''), COALESCE(field504, ''), COALESCE(field506, ''), COALESCE(field511, ''), COALESCE(field512, ''), COALESCE(field513, ''), COALESCE(field520, ''), COALESCE(field521, ''), COALESCE(field530, ''), COALESCE(field531, ''),
+               COALESCE(field701, ''), COALESCE(field702, ''), COALESCE(field704, ''), COALESCE(field707, ''), COALESCE(field710, ''), COALESCE(field711, ''), COALESCE(field716, ''),
+               COALESCE(field801, ''), COALESCE(field803, ''), COALESCE(field804, ''), field805, COALESCE(field806, ''),
+               COALESCE(field901, ''), COALESCE(field903, ''), field904, COALESCE(field905, ''), COALESCE(field906, ''), COALESCE(field907, ''), COALESCE(field910, ''), field911, COALESCE(field924, ''), field926, field927, field928,
+               COALESCE(field952, ''), COALESCE(field953, ''), COALESCE(field956, ''), field957, COALESCE(field958, ''), COALESCE(field959, ''), COALESCE(field963, ''), field964, field965,
+               COALESCE(field982, ''), COALESCE(field983, ''), COALESCE(field984, ''), COALESCE(field985, ''), COALESCE(field986, ''), COALESCE(field987, ''), COALESCE(field988, ''), COALESCE(field989, ''), COALESCE(field990, ''), COALESCE(field991, ''), COALESCE(field992, ''), COALESCE(field993, ''), COALESCE(field994, ''), COALESCE(field995, ''), COALESCE(field996, ''), COALESCE(field997, ''), COALESCE(field998, ''), COALESCE(field999, '')
+        FROM sfafs
+        WHERE field102 = $1
+        LIMIT 1`
+
+	err := r.db.QueryRow(query, serial).Scan(
+		&sfaf.ID, &sfaf.MarkerID, &sfaf.CreatedAt, &sfaf.UpdatedAt,
+		&sfaf.Field005, &sfaf.Field006, &sfaf.Field007, &sfaf.Field010, &sfaf.Field013, &sfaf.Field014, &sfaf.Field015, &sfaf.Field016, &sfaf.Field017, &sfaf.Field018, &sfaf.Field019, &sfaf.Field020,
+		&sfaf.Field102, &sfaf.Field103, &sfaf.Field105, &sfaf.Field106, &sfaf.Field107, &sfaf.Field108, &sfaf.Field110, &sfaf.Field111, &sfaf.Field112, &sfaf.Field113, &sfaf.Field114, &sfaf.Field115, &sfaf.Field116, &sfaf.Field117, &sfaf.Field118,
+		&sfaf.Field130, &sfaf.Field131, &sfaf.Field140, &sfaf.Field141, &sfaf.Field142, &sfaf.Field143, &sfaf.Field144, &sfaf.Field145, &sfaf.Field146, &sfaf.Field147, &sfaf.Field151, &sfaf.Field152,
+		&sfaf.Field200, &sfaf.Field201, &sfaf.Field202, &sfaf.Field203, &sfaf.Field204, &sfaf.Field205, &sfaf.Field206, &sfaf.Field207, &sfaf.Field208, &sfaf.Field209,
+		&sfaf.Field300, &sfaf.Field301, &sfaf.Field302, &sfaf.Field303, &sfaf.Field304, &sfaf.Field306,
+		&sfaf.Field315, &sfaf.Field316, &sfaf.Field317, &sfaf.Field318, &sfaf.Field319, &sfaf.Field321,
+		&sfaf.Field340, &sfaf.Field341, &sfaf.Field342, &sfaf.Field343, &sfaf.Field344, &sfaf.Field345, &sfaf.Field346, &sfaf.Field347, &sfaf.Field348, &sfaf.Field349,
+		&sfaf.Field354, &sfaf.Field355, &sfaf.Field356, &sfaf.Field357, &sfaf.Field358, &sfaf.Field359, &sfaf.Field360, &sfaf.Field361, &sfaf.Field362, &sfaf.Field363, &sfaf.Field364, &sfaf.Field365, &sfaf.Field373, &sfaf.Field374,
+		&sfaf.Field400, &sfaf.Field401, &sfaf.Field403, &sfaf.Field406, &sfaf.Field407, &sfaf.Field408, &sfaf.Field415, &sfaf.Field416, &sfaf.Field417, &sfaf.Field418, &sfaf.Field419,
+		&sfaf.Field440, &sfaf.Field442, &sfaf.Field443,
+		&sfaf.Field453, &sfaf.Field454, &sfaf.Field455, &sfaf.Field456, &sfaf.Field457, &sfaf.Field458, &sfaf.Field459, &sfaf.Field460, &sfaf.Field461, &sfaf.Field462, &sfaf.Field463, &sfaf.Field470, &sfaf.Field471, &sfaf.Field472, &sfaf.Field473,
+		&sfaf.Field500, &sfaf.Field501, &sfaf.Field502, &sfaf.Field503, &sfaf.Field504, &sfaf.Field506, &sfaf.Field511, &sfaf.Field512, &sfaf.Field513, &sfaf.Field520, &sfaf.Field521, &sfaf.Field530, &sfaf.Field531,
+		&sfaf.Field701, &sfaf.Field702, &sfaf.Field704, &sfaf.Field707, &sfaf.Field710, &sfaf.Field711, &sfaf.Field716,
+		&sfaf.Field801, &sfaf.Field803, &sfaf.Field804, &sfaf.Field805, &sfaf.Field806,
+		&sfaf.Field901, &sfaf.Field903, &sfaf.Field904, &sfaf.Field905, &sfaf.Field906, &sfaf.Field907, &sfaf.Field910, &sfaf.Field911, &sfaf.Field924, &sfaf.Field926, &sfaf.Field927, &sfaf.Field928,
+		&sfaf.Field952, &sfaf.Field953, &sfaf.Field956, &sfaf.Field957, &sfaf.Field958, &sfaf.Field959, &sfaf.Field963, &sfaf.Field964, &sfaf.Field965,
+		&sfaf.Field982, &sfaf.Field983, &sfaf.Field984, &sfaf.Field985, &sfaf.Field986, &sfaf.Field987, &sfaf.Field988, &sfaf.Field989, &sfaf.Field990, &sfaf.Field991, &sfaf.Field992, &sfaf.Field993, &sfaf.Field994, &sfaf.Field995, &sfaf.Field996, &sfaf.Field997, &sfaf.Field998, &sfaf.Field999)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get SFAF by serial: %w", err)
+	}
+
+	return &sfaf, nil
+}
+
+func (r *SFAFRepository) LinkMarker(sfafID uuid.UUID, markerID uuid.UUID) error {
+	_, err := r.db.Exec(`UPDATE sfafs SET marker_id = $1 WHERE id = $2`, markerID, sfafID)
+	return err
 }
 
 func (r *SFAFRepository) Update(sfaf *models.SFAF) error {

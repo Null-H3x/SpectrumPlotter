@@ -2,11 +2,9 @@
 package models
 
 import (
-	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lib/pq"
 )
 
 type Marker struct {
@@ -25,14 +23,11 @@ type Marker struct {
 }
 
 type IRACNote struct {
-	Code           string          `json:"code" db:"code"`
-	Title          string          `json:"title" db:"title"`
-	Description    string          `json:"description" db:"description"`
-	Category       string          `json:"category" db:"category"`
-	FieldPlacement int             `json:"field_placement" db:"field_placement"`
-	Agency         pq.StringArray  `json:"agency" db:"agency"`
-	TechnicalSpecs json.RawMessage `json:"technical_specs" db:"technical_specs"`
-	CreatedAt      time.Time       `json:"created_at" db:"created_at"`
+	Code        string    `json:"code" db:"code"`
+	Title       string    `json:"title" db:"title"`
+	Description string    `json:"description" db:"description"`
+	Category    string    `json:"category" db:"category"`
+	CreatedAt   time.Time `json:"created_at" db:"created_at"`
 }
 
 type IRACNoteAssociation struct {

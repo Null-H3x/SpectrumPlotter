@@ -129,10 +129,9 @@ func (r *MarkerRepository) DeleteAll() error {
 // Helper methods for IRAC notes and SFAF fields
 func (r *MarkerRepository) getIRACNotesByMarkerID(markerID uuid.UUID) ([]models.IRACNoteAssociation, error) {
 	query := `
-        SELECT mia.id, mia.marker_id, mia.irac_note_code, mia.field_number, 
+        SELECT mia.id, mia.marker_id, mia.irac_note_code, mia.field_number,
                mia.occurrence_number, mia.created_at,
-               in_.code, in_.title, in_.description, in_.category, 
-               in_.field_placement, in_.agency, in_.technical_specs
+               in_.code, in_.title, in_.description, in_.category
         FROM marker_irac_notes mia
         JOIN irac_notes in_ ON mia.irac_note_code = in_.code
         WHERE mia.marker_id = $1
@@ -153,7 +152,6 @@ func (r *MarkerRepository) getIRACNotesByMarkerID(markerID uuid.UUID) ([]models.
 			&assoc.ID, &assoc.MarkerID, &assoc.IRACNoteCode,
 			&assoc.FieldNumber, &assoc.OccurrenceNumber, &assoc.CreatedAt,
 			&note.Code, &note.Title, &note.Description, &note.Category,
-			&note.FieldPlacement, &note.Agency, &note.TechnicalSpecs,
 		)
 		if err != nil {
 			return nil, err

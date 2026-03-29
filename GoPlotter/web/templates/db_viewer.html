@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Database Viewer - SFAF Plotter</title>
     <script>console.log('✅ DB_VIEWER.HTML TEMPLATE LOADED');</script>
+    <script src="/js/modules/auth-guard.js"></script>
+    <script>requireRole(['admin', 'ntia', 'agency', 'combatant_command', 'command', 'ism', 'operator']);</script>
     <link rel="stylesheet" href="/css/db_viewer.css">
     <link rel="stylesheet" href="/css/session_mgmt.css">
     <link rel="stylesheet" href="/css/sfaf_records.css">
@@ -74,6 +76,10 @@
                 <i class="fas fa-broadcast-tower"></i>
                 <span>Frequencies</span>
             </a>
+            <a href="/workbox" class="nav-link ism-nav-link" style="display:none">
+                <i class="fas fa-inbox"></i>
+                <span>Workbox</span>
+            </a>
             <a href="/frequency-nomination" class="nav-link">
                 <i class="fas fa-wave-square"></i>
                 <span>Frequency Tool</span>
@@ -123,6 +129,10 @@
             <div class="stat">
                 <span class="stat-value" id="compliantRecords">0</span>
                 <span class="stat-label">Compliant</span>
+            </div>
+            <div class="stat">
+                <span class="stat-value" id="poolAssignmentRecords">0</span>
+                <span class="stat-label">Pool Assignments</span>
             </div>
         </div>
 
@@ -195,6 +205,11 @@
                 <option value="uhf">UHF</option>
                 <option value="shf">SHF</option>
             </select>
+            <select id="poolAssignmentFilter" class="select">
+                <option value="">All Record Types</option>
+                <option value="pool">Pool Assignments Only</option>
+                <option value="assigned">Assigned Records Only</option>
+            </select>
             <button id="advancedQueryBtn" class="btn btn-sm">
                 <i class="fas fa-filter"></i> Advanced Query
             </button>
@@ -261,7 +276,10 @@
 
         <!-- Data Grid -->
         <div class="data-grid" id="sfafDataGrid">
-            <div class="table-container">
+            <div class="table-scroll-top" id="tableScrollTop">
+                <div class="table-scroll-top-inner" id="tableScrollTopInner"></div>
+            </div>
+            <div class="table-container" id="tableContainer">
                 <!-- Table dynamically created by JS -->
             </div>
         </div>
@@ -663,6 +681,6 @@
 </div>
 
 <script src="/js/db_viewer.js?v=7"></script>
-<script src="/js/view_manager.js"></script>
+<script src="/js/view_manager.js?v=2"></script>
 </body>
 </html>

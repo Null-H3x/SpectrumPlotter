@@ -69,9 +69,10 @@ const TooltipManager = (() => {
      */
     function buildMarkerTooltipHTML(data, dms, decimal = null) {
         const decimalDisplay = decimal || `${data.lat}, ${data.lng}`;
+        const label = data.type === 'imported' ? 'Imported Marker' : 'Manual Marker';
 
         return `
-            <b>Manual Marker</b><br>
+            <b>${label}</b><br>
             DecDeg: ${decimalDisplay}<br>
             DMS: ${dms}<br>
             Serial: ${data.serial}<br>

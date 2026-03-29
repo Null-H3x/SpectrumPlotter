@@ -6,6 +6,9 @@
     <meta charset="utf-8" />
     <title>{{.title}}</title>
 
+    <script src="/js/modules/auth-guard.js"></script>
+    <script>requireRole(['admin', 'ntia', 'agency', 'combatant_command', 'command', 'ism', 'operator']);</script>
+
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
@@ -103,6 +106,10 @@
             <a href="/frequency/assignments" class="nav-link">
                 <i class="fas fa-broadcast-tower"></i>
                 <span>Frequencies</span>
+            </a>
+            <a href="/workbox" class="nav-link ism-nav-link" style="display:none">
+                <i class="fas fa-inbox"></i>
+                <span>Workbox</span>
             </a>
             <a href="/frequency-nomination" class="nav-link">
                 <i class="fas fa-wave-square"></i>

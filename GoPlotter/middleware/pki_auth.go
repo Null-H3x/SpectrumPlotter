@@ -238,6 +238,37 @@ func RequireAuth(logger *zap.Logger) gin.HandlerFunc {
 	}
 }
 
+// RequireSessionAuth validates the session_token cookie against the database.
+// Pass a closure that calls authService.ValidateSession and sets user context keys.
+func RequireSessionAuth(validateSession func(token string, c *gin.Context) error, logger *zap.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Try cookie first, then Authorization header
+		token, err := c.Cookie("session_token")
+		if err != nil || token == "" {
+			token = c.GetHeader("Authorization")
+		}
+
+		if token == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+			c.Abort()
+			return
+		}
+
+		if err := validateSession(token, c); err != nil {
+			logger.Warn("Invalid session",
+				zap.String("path", c.Request.URL.Path),
+				zap.String("ip", c.ClientIP()),
+				zap.Error(err),
+			)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Session invalid or expired"})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
+
 // DevAuthMiddleware provides authentication bypass for development/testing
 // This middleware should ONLY be used in development mode
 func DevAuthMiddleware(enabled bool, logger *zap.Logger) gin.HandlerFunc {

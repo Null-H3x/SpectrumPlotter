@@ -170,9 +170,9 @@ type SFAF struct {
 	Field508 string `db:"field508"` // Antenna Gain (dBi) - decibels relative to isotropic
 	Field509 string `db:"field509"` // Antenna Pattern - radiation pattern description
 	Field510 string `db:"field510"` // Antenna Polarization (Horizontal, Vertical, Circular, Elliptical)
-	Field511 string `db:"field511"` // VARCHAR(30) - Feeder Loss (dB) - transmission line loss
-	Field512 string `db:"field512"` // VARCHAR(30) - Additional contacts
-	Field513 string `db:"field513"` // VARCHAR(30) - Agency contacts
+	Field511 string `db:"field511"` // VARCHAR(30) - Major Function Identifier (MFI)
+	Field512 string `db:"field512"` // VARCHAR(30) - Intermediate Function Identifier (IFI)
+	Field513 string `db:"field513"` // VARCHAR(30) - Detailed Function Identifier (DFI) — repeatable up to 5
 	Field520 string `db:"field520"` // TEXT - Extended purpose (long text)
 	Field521 string `db:"field521"` // VARCHAR(21) - Reference codes
 	Field530 string `db:"field530"` // VARCHAR(35) - Classification
@@ -1785,50 +1785,41 @@ func (s *SFAF) FromFieldMap(fields map[string]string) {
 	}
 
 	// Handle date field conversions (Source: table_info.txt shows DATE type fields)
-	if val, ok := fields["field140"]; ok && val != "" {
-		if t, err := time.Parse("2006-01-02", val); err == nil {
-			s.Field140 = &t // DATE - Start dates
+	// Supports both ISO format (2006-01-02) and SFAF file format (20060102)
+	parseDate := func(val string) *time.Time {
+		for _, layout := range []string{"2006-01-02", "20060102"} {
+			if t, err := time.Parse(layout, val); err == nil {
+				return &t
+			}
 		}
+		return nil
+	}
+	if val, ok := fields["field140"]; ok && val != "" {
+		s.Field140 = parseDate(val)
 	}
 	if val, ok := fields["field141"]; ok && val != "" {
-		if t, err := time.Parse("2006-01-02", val); err == nil {
-			s.Field141 = &t // DATE - End dates
-		}
+		s.Field141 = parseDate(val)
 	}
 	if val, ok := fields["field142"]; ok && val != "" {
-		if t, err := time.Parse("2006-01-02", val); err == nil {
-			s.Field142 = &t // DATE - Processing dates
-		}
+		s.Field142 = parseDate(val)
 	}
 	if val, ok := fields["field143"]; ok && val != "" {
-		if t, err := time.Parse("2006-01-02", val); err == nil {
-			s.Field143 = &t // DATE - Expiration dates
-		}
+		s.Field143 = parseDate(val)
 	}
 	if val, ok := fields["field805"]; ok && val != "" {
-		if t, err := time.Parse("2006-01-02", val); err == nil {
-			s.Field805 = &t // DATE - Administrative dates
-		}
+		s.Field805 = parseDate(val)
 	}
 	if val, ok := fields["field904"]; ok && val != "" {
-		if t, err := time.Parse("2006-01-02", val); err == nil {
-			s.Field904 = &t // DATE - Processing dates
-		}
+		s.Field904 = parseDate(val)
 	}
 	if val, ok := fields["field911"]; ok && val != "" {
-		if t, err := time.Parse("2006-01-02", val); err == nil {
-			s.Field911 = &t // DATE - Administrative dates
-		}
+		s.Field911 = parseDate(val)
 	}
 	if val, ok := fields["field927"]; ok && val != "" {
-		if t, err := time.Parse("2006-01-02", val); err == nil {
-			s.Field927 = &t // DATE - Processing dates
-		}
+		s.Field927 = parseDate(val)
 	}
 	if val, ok := fields["field928"]; ok && val != "" {
-		if t, err := time.Parse("2006-01-02", val); err == nil {
-			s.Field928 = &t // DATE - Completion dates
-		}
+		s.Field928 = parseDate(val)
 	}
 
 	// Handle numeric field conversions (Source: table_info.txt shows NUMERIC and INTEGER types)

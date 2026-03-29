@@ -105,8 +105,23 @@ func (ss *SFAFService) CreateSFAFWithoutValidation(req models.CreateSFAFRequest)
 }
 
 func (ss *SFAFService) GetSFAFByMarkerID(markerID string) (*models.SFAF, error) {
-	// REPLACE: ss.storage.GetSFAFByMarkerID(markerID) WITH:
 	return ss.sfafRepo.GetByMarkerID(markerID)
+}
+
+func (ss *SFAFService) GetSFAFBySerial(serial string) (*models.SFAF, error) {
+	return ss.sfafRepo.GetBySerial(serial)
+}
+
+func (ss *SFAFService) LinkSFAFToMarker(sfafID, markerID string) error {
+	sfafUUID, err := uuid.Parse(sfafID)
+	if err != nil {
+		return fmt.Errorf("invalid sfaf ID: %w", err)
+	}
+	markerUUID, err := uuid.Parse(markerID)
+	if err != nil {
+		return fmt.Errorf("invalid marker ID: %w", err)
+	}
+	return ss.sfafRepo.LinkMarker(sfafUUID, markerUUID)
 }
 
 func (ss *SFAFService) CreateSFAF(req models.CreateSFAFRequest) (*models.SFAF, error) {
@@ -781,7 +796,7 @@ func (ss *SFAFService) AutoPopulateFromMarker(marker *models.Marker) map[string]
 	}
 
 	if marker.Serial != "" {
-		fields["field101"] = marker.Serial
+		fields["field102"] = marker.Serial
 	}
 
 	return fields

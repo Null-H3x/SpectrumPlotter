@@ -232,10 +232,9 @@ func (r *GeometryRepository) GetAll() ([]*models.Geometry, error) {
 
 func (r *GeometryRepository) GetByType(geometryType models.GeometryType) ([]*models.Geometry, error) {
 	query := `
-        SELECT id, type, serial, color, latitude, longitude, 
-               circle_properties, polygon_properties, rectangle_properties, 
+        SELECT id, marker_id, type, coordinates, properties,
                created_at, updated_at
-        FROM geometries 
+        FROM geometries
         WHERE type = $1
         ORDER BY created_at DESC`
 
@@ -248,20 +247,43 @@ func (r *GeometryRepository) GetByType(geometryType models.GeometryType) ([]*mod
 	var geometries []*models.Geometry
 	for rows.Next() {
 		var geometry models.Geometry
-		var circlePropsJSON, polygonPropsJSON, rectanglePropsJSON []byte
+		var coordinatesJSON, propertiesJSON []byte
 
 		err := rows.Scan(
-			&geometry.ID, &geometry.Type, &geometry.Serial, &geometry.Color,
-			&geometry.Latitude, &geometry.Longitude,
-			&circlePropsJSON, &polygonPropsJSON, &rectanglePropsJSON,
+			&geometry.ID, &geometry.MarkerID, &geometry.Type,
+			&coordinatesJSON, &propertiesJSON,
 			&geometry.CreatedAt, &geometry.UpdatedAt)
 
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan geometry row: %w", err)
 		}
 
-		if err := r.deserializeProperties(&geometry, circlePropsJSON, polygonPropsJSON, rectanglePropsJSON); err != nil {
-			return nil, err
+		var coords map[string]float64
+		if err := json.Unmarshal(coordinatesJSON, &coords); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal coordinates: %w", err)
+		}
+		geometry.Latitude = coords["latitude"]
+		geometry.Longitude = coords["longitude"]
+
+		switch geometry.Type {
+		case models.GeometryTypeCircle:
+			var circleProps models.CircleGeometry
+			if err := json.Unmarshal(propertiesJSON, &circleProps); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal circle properties: %w", err)
+			}
+			geometry.CircleProps = &circleProps
+		case models.GeometryTypePolygon:
+			var polygonProps models.PolygonGeometry
+			if err := json.Unmarshal(propertiesJSON, &polygonProps); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal polygon properties: %w", err)
+			}
+			geometry.PolygonProps = &polygonProps
+		case models.GeometryTypeRectangle:
+			var rectangleProps models.RectangleGeometry
+			if err := json.Unmarshal(propertiesJSON, &rectangleProps); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal rectangle properties: %w", err)
+			}
+			geometry.RectangleProps = &rectangleProps
 		}
 
 		geometries = append(geometries, &geometry)
@@ -314,35 +336,66 @@ func (r *GeometryRepository) DeleteAll() error {
 	return nil
 }
 
-func (r *GeometryRepository) GetBySerial(serial string) (*models.Geometry, error) {
-	var geometry models.Geometry
-	var circlePropsJSON, polygonPropsJSON, rectanglePropsJSON []byte
-
+func (r *GeometryRepository) GetByMarkerID(markerID string) ([]*models.Geometry, error) {
 	query := `
-        SELECT id, type, serial, color, latitude, longitude, 
-               circle_properties, polygon_properties, rectangle_properties, 
+        SELECT id, marker_id, type, coordinates, properties,
                created_at, updated_at
-        FROM geometries 
-        WHERE serial = $1`
+        FROM geometries
+        WHERE marker_id = $1
+        ORDER BY created_at DESC`
 
-	err := r.db.QueryRow(query, serial).Scan(
-		&geometry.ID, &geometry.Type, &geometry.Serial, &geometry.Color,
-		&geometry.Latitude, &geometry.Longitude,
-		&circlePropsJSON, &polygonPropsJSON, &rectanglePropsJSON,
-		&geometry.CreatedAt, &geometry.UpdatedAt)
-
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
+	rows, err := r.db.Query(query, markerID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get geometry by serial: %w", err)
+		return nil, fmt.Errorf("failed to query geometries by marker_id: %w", err)
+	}
+	defer rows.Close()
+
+	var geometries []*models.Geometry
+	for rows.Next() {
+		var geometry models.Geometry
+		var coordinatesJSON, propertiesJSON []byte
+
+		err := rows.Scan(
+			&geometry.ID, &geometry.MarkerID, &geometry.Type,
+			&coordinatesJSON, &propertiesJSON,
+			&geometry.CreatedAt, &geometry.UpdatedAt)
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan geometry row: %w", err)
+		}
+
+		var coords map[string]float64
+		if err := json.Unmarshal(coordinatesJSON, &coords); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal coordinates: %w", err)
+		}
+		geometry.Latitude = coords["latitude"]
+		geometry.Longitude = coords["longitude"]
+
+		switch geometry.Type {
+		case models.GeometryTypeCircle:
+			var circleProps models.CircleGeometry
+			if err := json.Unmarshal(propertiesJSON, &circleProps); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal circle properties: %w", err)
+			}
+			geometry.CircleProps = &circleProps
+		case models.GeometryTypePolygon:
+			var polygonProps models.PolygonGeometry
+			if err := json.Unmarshal(propertiesJSON, &polygonProps); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal polygon properties: %w", err)
+			}
+			geometry.PolygonProps = &polygonProps
+		case models.GeometryTypeRectangle:
+			var rectangleProps models.RectangleGeometry
+			if err := json.Unmarshal(propertiesJSON, &rectangleProps); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal rectangle properties: %w", err)
+			}
+			geometry.RectangleProps = &rectangleProps
+		}
+
+		geometries = append(geometries, &geometry)
 	}
 
-	if err := r.deserializeProperties(&geometry, circlePropsJSON, polygonPropsJSON, rectanglePropsJSON); err != nil {
-		return nil, err
-	}
-
-	return &geometry, nil
+	return geometries, nil
 }
 
 func (r *GeometryRepository) Count() (int, error) {

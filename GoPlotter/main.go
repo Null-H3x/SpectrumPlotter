@@ -77,8 +77,13 @@ func main() {
 	sfafFieldOccRepo := repositories.NewSFAFFieldOccurrenceRepository(sqlxDB)
 	geometryRepo := repositories.NewGeometryRepository(sqlxDB)
 	frequencyRepo := repositories.NewFrequencyRepository(sqlxDB)
+	manufacturerRepo := repositories.NewManufacturerRepository(sqlxDB)
+	systemConfigRepo := repositories.NewSystemConfigRepository(sqlxDB)
+	installationRepo := repositories.NewInstallationRepository(sqlxDB)
 	userRepo := repositories.NewUserRepository(sqlxDB)
 	sessionRepo := repositories.NewSessionRepository(sqlxDB)
+	accountReqRepo := repositories.NewAccountRequestRepository(sqlxDB)
+	sfafLookupRepo := repositories.NewSFAFLookupRepository(sqlxDB)
 
 	// Initialize services
 	serialService := services.NewSerialService(sqlxDB)
@@ -101,7 +106,7 @@ func main() {
 	}
 
 	geometryService := services.NewGeometryService(geometryRepo, markerService, serialService, coordService)
-	frequencyService := services.NewFrequencyService(frequencyRepo)
+	frequencyService := services.NewFrequencyService(frequencyRepo, userRepo)
 	authService := services.NewAuthService(userRepo, sessionRepo)
 
 	// Initialize handlers with properly created services
@@ -109,7 +114,13 @@ func main() {
 	sfafHandler := handlers.NewSFAFHandler(sfafService, markerService, field530Service)
 	geometryHandler := handlers.NewGeometryHandler(geometryService)
 	frequencyHandler := handlers.NewFrequencyHandler(frequencyService)
-	authHandler := handlers.NewAuthHandler(authService)
+	manufacturerHandler := handlers.NewManufacturerHandler(manufacturerRepo)
+	systemConfigHandler := handlers.NewSystemConfigHandler(systemConfigRepo)
+	installationHandler := handlers.NewInstallationHandler(installationRepo)
+	sfafLookupHandler := handlers.NewSFAFLookupHandler(sfafLookupRepo)
+	authHandler := handlers.NewAuthHandler(authService, userRepo)
+	adminHandler := handlers.NewAdminHandler(authService, userRepo, accountReqRepo, frequencyRepo)
+	equipmentHandler := handlers.NewEquipmentHandler("./xml")
 
 	// Setup Gin router (without default middleware)
 	r := gin.New()
@@ -118,12 +129,8 @@ func main() {
 	r.Use(middleware.Recovery(logger))  // Panic recovery with logging
 	r.Use(middleware.Logger(logger))    // Request logging
 
-	// Development authentication bypass (only active when GIN_MODE=debug)
-	devMode := appConfig.Server.GinMode == "debug"
-	if devMode {
-		logger.Warn("⚠️  Development authentication bypass is ACTIVE - DO NOT USE IN PRODUCTION")
-	}
-	r.Use(middleware.DevAuthMiddleware(devMode, logger))
+	// Development authentication bypass — disabled; real session auth is enforced below
+	r.Use(middleware.DevAuthMiddleware(false, logger))
 
 	// CORS middleware (configured from .env)
 	r.Use(func(c *gin.Context) {
@@ -193,10 +200,23 @@ func main() {
 		})
 	})
 
+	// Admin control panel
+	r.GET("/admin", func(c *gin.Context) {
+		c.HTML(200, "admin.html", gin.H{
+			"title": "SFAF Plotter - Admin Control Panel",
+		})
+	})
+
 	// Add frequency management routes
 	r.GET("/frequency/assignments", func(c *gin.Context) {
 		c.HTML(200, "unit_frequencies.html", gin.H{
 			"title": "Unit Frequencies",
+		})
+	})
+
+	r.GET("/frequency", func(c *gin.Context) {
+		c.HTML(200, "request_dashboard.html", gin.H{
+			"title": "Frequency Requests",
 		})
 	})
 
@@ -206,11 +226,23 @@ func main() {
 		})
 	})
 
-	r.GET("/frequency/requests", func(c *gin.Context) {
+	r.GET("/workbox", func(c *gin.Context) {
 		c.HTML(200, "request_dashboard.html", gin.H{
-			"title": "Frequency Requests",
+			"title": "ISM Workbox",
 		})
 	})
+
+	// Session validator used by auth middleware — also injects user context for downstream handlers
+	sessionValidator := func(token string, c *gin.Context) error {
+		user, err := authService.ValidateSession(token)
+		if err != nil {
+			return err
+		}
+		c.Set("userID", user.ID)
+		c.Set("username", user.Username)
+		c.Set("role", user.Role)
+		return nil
+	}
 
 	// API routes
 	api := r.Group("/api")
@@ -222,7 +254,72 @@ func main() {
 			auth.POST("/logout", authHandler.Logout)
 			auth.GET("/session", authHandler.VerifySession)
 			auth.POST("/create-superuser", authHandler.CreateSuperuser)
+			auth.POST("/request-account", handlers.SubmitAccountRequest(accountReqRepo))
+
+			// Public: list active installations for the account-request form dropdown
+			auth.GET("/public-installations", func(c *gin.Context) {
+				type publicInstallation struct {
+					ID           string `json:"id" db:"id"`
+					Name         string `json:"name" db:"name"`
+					Code         string `json:"code" db:"code"`
+					Organization string `json:"organization" db:"organization"`
+				}
+				var list []publicInstallation
+				err := sqlxDB.Select(&list, `
+					SELECT id::text, name, COALESCE(code, '') AS code, COALESCE(organization, '') AS organization
+					FROM installations
+					WHERE is_active = true
+					ORDER BY name`)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load installations"})
+					return
+				}
+				if list == nil {
+					list = []publicInstallation{}
+				}
+				c.JSON(http.StatusOK, gin.H{"installations": list})
+			})
+
+			// Public: list active units for the account-request form dropdown
+			// Optional query param: ?installation_id=<uuid> to filter by installation
+			auth.GET("/public-units", func(c *gin.Context) {
+				type publicUnit struct {
+					ID           string `json:"id" db:"id"`
+					Name         string `json:"name" db:"name"`
+					UnitCode     string `json:"unit_code" db:"unit_code"`
+					Organization string `json:"organization" db:"organization"`
+				}
+				var units []publicUnit
+				var err error
+				installationID := c.Query("installation_id")
+				if installationID != "" {
+					err = sqlxDB.Select(&units, `
+						SELECT id::text, name, unit_code,
+						       COALESCE(organization, '') AS organization
+						FROM units
+						WHERE is_active = true AND installation_id = $1
+						ORDER BY name`, installationID)
+				} else {
+					err = sqlxDB.Select(&units, `
+						SELECT id::text, name, unit_code,
+						       COALESCE(organization, '') AS organization
+						FROM units
+						WHERE is_active = true
+						ORDER BY name`)
+				}
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load units"})
+					return
+				}
+				if units == nil {
+					units = []publicUnit{}
+				}
+				c.JSON(http.StatusOK, gin.H{"units": units})
+			})
 		}
+
+		// All remaining API routes require a valid session
+		api.Use(middleware.RequireSessionAuth(sessionValidator, logger))
 
 		api.GET("/convert-coords", func(c *gin.Context) {
 			lat := c.Query("lat")
@@ -251,9 +348,23 @@ func main() {
 		api.DELETE("/markers", markerHandler.DeleteAllMarkers)
 
 		// IRAC Notes management routes
+		api.GET("/system-config", systemConfigHandler.GetAll)
+		api.PUT("/system-config/:key", systemConfigHandler.Update)
+
 		api.GET("/irac-notes", markerHandler.GetIRACNotes)
+		api.POST("/irac-notes", markerHandler.CreateIRACNote)
+		api.PUT("/irac-notes/:code", markerHandler.UpdateIRACNote)
+		api.DELETE("/irac-notes/:code", markerHandler.DeleteIRACNote)
 		api.POST("/markers/irac-notes", markerHandler.AddIRACNoteToMarker)
 		api.DELETE("/markers/irac-notes", markerHandler.RemoveIRACNoteFromMarker)
+
+		// SELF-SERVICE USER PROFILE ROUTES
+		userGroup := api.Group("/user")
+		{
+			userGroup.GET("/profile", authHandler.GetProfile)
+			userGroup.PUT("/profile", authHandler.UpdateProfile)
+		}
+		api.POST("/auth/change-password", authHandler.ChangePassword)
 
 		// SFAF ROUTES
 		api.POST("/sfaf", sfafHandler.CreateSFAF)
@@ -265,6 +376,7 @@ func main() {
 		api.GET("/sfaf/:id", sfafHandler.GetSFAF)
 		api.GET("/sfaf/marker/:marker_id", sfafHandler.GetSFAFByMarkerID)
 		api.POST("/sfaf/validate", sfafHandler.ValidateFields)
+		api.GET("/sfaf/pool-assignments", sfafHandler.GetPoolAssignments)
 		api.GET("/sfaf/field-definitions", sfafHandler.GetFieldDefinitions)
 		api.POST("/sfaf/import", sfafHandler.ImportSFAF)
 		api.GET("/sfaf/export", sfafHandler.ExportAllSFAF)
@@ -286,6 +398,13 @@ func main() {
 		api.GET("/geometry", geometryHandler.GetAllGeometries)
 		api.DELETE("/geometry/:id", geometryHandler.DeleteGeometry)
 
+		// EQUIPMENT LIBRARY ROUTES
+		equipment := api.Group("/equipment")
+		{
+			equipment.GET("",     equipmentHandler.ListEquipment)
+			equipment.GET("/:id", equipmentHandler.GetEquipment)
+		}
+
 		// FREQUENCY MANAGEMENT ROUTES
 		frequency := api.Group("/frequency")
 		{
@@ -298,19 +417,63 @@ func main() {
 			// Frequency assignment routes
 			frequency.GET("/assignments", frequencyHandler.GetUserFrequencyAssignments)
 			frequency.GET("/assignments/expiring", frequencyHandler.GetExpiringFrequencies)
+			frequency.GET("/assignments/proposals", frequencyHandler.GetProposalAssignments)
+			frequency.GET("/assignments/submitted", frequencyHandler.GetSubmittedAssignments)
+			frequency.GET("/assignments/five-year-review", frequencyHandler.GetFiveYearReviews)
+			frequency.GET("/reviewers", frequencyHandler.GetWorkboxes)
 			frequency.POST("/assignments", frequencyHandler.CreateFrequencyAssignment)
 			frequency.GET("/assignments/conflicts", frequencyHandler.CheckFrequencyConflicts)
+			frequency.GET("/assignments/in-range", frequencyHandler.GetAssignmentsInRange)
+			frequency.PUT("/assignments/:id/elevate", frequencyHandler.ElevateAssignment)
+			frequency.PUT("/assignments/:id/retract", frequencyHandler.RetractAssignment)
+			frequency.PUT("/assignments/bulk-route", frequencyHandler.BulkRouteAssignments)
+			frequency.PUT("/assignments/:id/coordinations", frequencyHandler.SetCoordinations)
+			frequency.GET("/assignments/:id/comments", frequencyHandler.GetComments)
+			frequency.POST("/assignments/:id/comments", frequencyHandler.AddComment)
 
 			// Frequency request routes
 			frequency.GET("/requests", frequencyHandler.GetUserRequests)
 			frequency.GET("/requests/pending", frequencyHandler.GetPendingRequests)
 			frequency.POST("/requests", frequencyHandler.SubmitFrequencyRequest)
+			frequency.DELETE("/requests/:id", frequencyHandler.DeleteFrequencyRequest)
+			frequency.PUT("/requests/:id/resubmit", frequencyHandler.ResubmitFrequencyRequest)
+			frequency.PUT("/requests/:id/retract", frequencyHandler.RetractFrequencyRequest)
 			frequency.PUT("/requests/:id/review", frequencyHandler.ReviewFrequencyRequest)
 			frequency.POST("/requests/:id/approve", frequencyHandler.ApproveFrequencyRequest)
 
 			// Admin cleanup routes
 			frequency.POST("/cleanup-orphaned", frequencyHandler.CleanupOrphanedAssignments)
 		}
+
+		// ADMIN USER MANAGEMENT ROUTES
+		admin := api.Group("/admin")
+		{
+			admin.GET("/users", adminHandler.ListUsers)
+			admin.POST("/users", adminHandler.CreateUser)
+			admin.PUT("/users/:id", adminHandler.UpdateUser)
+			admin.DELETE("/users/:id", adminHandler.DeactivateUser)
+			admin.GET("/account-requests", adminHandler.ListAccountRequests)
+			admin.POST("/account-requests/:id/approve", adminHandler.ApproveAccountRequest)
+			admin.POST("/account-requests/:id/deny", adminHandler.DenyAccountRequest)
+			admin.GET("/units/search", adminHandler.SearchUnits)
+		}
+
+		// MANUFACTURER ROUTES
+		api.GET("/manufacturers", manufacturerHandler.GetAll)
+		api.POST("/manufacturers", manufacturerHandler.Create)
+		api.PUT("/manufacturers/:id", manufacturerHandler.Update)
+		api.DELETE("/manufacturers/:id", manufacturerHandler.Delete)
+
+		// INSTALLATION ROUTES
+		api.GET("/installations", installationHandler.GetAll)
+		api.POST("/installations", installationHandler.Create)
+		api.PUT("/installations/:id", installationHandler.Update)
+		api.DELETE("/installations/:id", installationHandler.Delete)
+
+		api.GET("/sfaf-lookup", sfafLookupHandler.GetAll)
+		api.POST("/sfaf-lookup", sfafLookupHandler.Create)
+		api.PUT("/sfaf-lookup/:id", sfafLookupHandler.Update)
+		api.DELETE("/sfaf-lookup/:id", sfafLookupHandler.Delete)
 	}
 
 	serverAddr := fmt.Sprintf(":%s", appConfig.Server.Port)
