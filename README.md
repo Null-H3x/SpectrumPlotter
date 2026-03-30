@@ -4,13 +4,13 @@ A spectrum-community led effort to replace SXXI and integrate with all aspects o
 
 PostgreSQL is used to store all tables and provide perpetual information storage across sessions and users.
 
-![plotter](https://github.com/user-attachments/assets/d3525df2-020c-4875-be90-61746a5dad2d)
-![radius](https://github.com/user-attachments/assets/9a23a7b7-9131-417b-953a-295a9bc1fcda)
-![db_viewer](https://github.com/user-attachments/assets/0f2a4bb1-dec4-448a-93a8-e22a1aff33c3)
+
+
 
 ---
 
 ## Features
+
 
 ### Map Viewer
 - Interactive Leaflet-based map with real-time coordinate tooltips on hover
@@ -19,6 +19,7 @@ PostgreSQL is used to store all tables and provide perpetual information storage
 - Draw and persist geometry overlays — circles, polygons, and rectangles — linked to the database
 - Field 530 polygon visualization renders MCEB authorization radius boundaries directly on the map
 - Viewport-based marker loading keeps performance smooth with large datasets
+<img width="1521" height="1131" alt="image" src="https://github.com/user-attachments/assets/9ab2c82c-bf91-4ef5-9864-bf685abdbeb6" />
 
 ### SFAF Management
 - Import raw SFAF text files — records are parsed, validated, and stored automatically
@@ -33,13 +34,29 @@ PostgreSQL is used to store all tables and provide perpetual information storage
 - Conflict detection identifies overlapping assignments across units before approval
 - Expiring frequency alerts surface assignments approaching their end date
 - Frequency Nomination & Deconfliction module supports the full nomination cycle from request to assignment
+<img width="1765" height="1278" alt="image" src="https://github.com/user-attachments/assets/d75e9065-a682-4264-98ee-58033ec9343e" />
+
+- Request form walks user through with intuitive "Turbo-Tax style" questions to ensure user isn't overwhelmed and ISM gets best information available
+- User is able to select coordinates on map and set veiwable radius, enabling full understanding of selected operation area
+- Dynamic selection of Serial Number, Frequency, and 710/702 fields with real-time availability for each tracking option
+
+<img width="1750" height="841" alt="image" src="https://github.com/user-attachments/assets/59eb38c4-a057-4f6b-9832-aceece71d69c" />
+
+<img width="1763" height="874" alt="image" src="https://github.com/user-attachments/assets/720f19fd-971a-44d4-a4af-dd54f9b203df" />
+
+<img width="1766" height="960" alt="image" src="https://github.com/user-attachments/assets/e5324d1b-3f5a-49f7-bf1f-32d1bfd032e2" />
 
 ### Database Viewer
 - Unified interface to browse and search markers, SFAF records, IRAC notes, and analytics
 - 388 IRAC coordination notes across 6 categories: coordination, emission, limitation, special, priority, and minute
 - Bulk select, edit, and delete operations across all record types
-- Analytics dashboard with frequency distribution and compliance reporting
+- Analytics dashboard with frequency distribution, spectrum occupancy chart and compliance reporting
 - Export data in multiple formats
+- View record on map with a single click
+- Customizable views to show only the fields pertinent to your task
+- Exportable data in any order or sorted in any order the user prefers
+
+<img width="1750" height="1399" alt="image" src="https://github.com/user-attachments/assets/951a6440-af58-459b-89f3-7e05c40131f4" />
 
 ### Authentication & Access Control
 - Session-based login and logout with server-side session management
