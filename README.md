@@ -44,7 +44,7 @@ PostgreSQL is used to store all tables and provide perpetual information storage
 
 <img width="1763" height="874" alt="image" src="https://github.com/user-attachments/assets/720f19fd-971a-44d4-a4af-dd54f9b203df" />
 
-<img width="1766" height="960" alt="image" src="https://github.com/user-attachments/assets/e5324d1b-3f5a-49f7-bf1f-32d1bfd032e2" />
+<img width="1897" height="846" alt="image" src="https://github.com/user-attachments/assets/dc2ee507-f33e-44ae-abb2-e616a02b71a5" />
 
 ### Database Viewer
 - Unified interface to browse and search markers, SFAF records, IRAC notes, and analytics
