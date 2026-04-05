@@ -69,3 +69,6 @@ scripts/deploy-to-ec2.sh
 
 # Claude workspace
 .claude/
+
+# Workspace files
+*.code-workspace

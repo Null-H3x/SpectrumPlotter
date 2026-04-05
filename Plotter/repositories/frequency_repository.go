@@ -218,8 +218,8 @@ func (r *FrequencyRepository) CreateFrequencyAssignment(assignment *models.Frequ
 			purpose, net_name, callsign, emission_designator, bandwidth, power_watts,
 			authorized_radius_km, assignment_date, expiration_date, assignment_authority,
 			authorization_number, priority, is_encrypted, encryption_type, classification,
-			notes, created_by, routed_to_workbox
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
+			notes, created_by, routed_to_workbox, pool_serial
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
 		RETURNING id, created_at, updated_at`
 
 	return r.db.QueryRowx(query,
@@ -230,7 +230,7 @@ func (r *FrequencyRepository) CreateFrequencyAssignment(assignment *models.Frequ
 		assignment.AssignmentDate, assignment.ExpirationDate, assignment.AssignmentAuthority,
 		assignment.AuthorizationNumber, assignment.Priority, assignment.IsEncrypted,
 		assignment.EncryptionType, assignment.Classification, assignment.Notes, assignment.CreatedBy,
-		assignment.RoutedToWorkbox,
+		assignment.RoutedToWorkbox, assignment.PoolSerial,
 	).Scan(&assignment.ID, &assignment.CreatedAt, &assignment.UpdatedAt)
 }
 

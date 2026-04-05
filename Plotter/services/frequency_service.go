@@ -245,6 +245,7 @@ func (s *FrequencyService) CreateFrequencyAssignment(
 		IsActive:            true,
 		CreatedBy:           &createdBy,
 		RoutedToWorkbox:     input.RoutedToWorkbox,
+		PoolSerial:          strPtr(input.PoolSerial),
 	}
 
 	err = s.repo.CreateFrequencyAssignment(assignment)

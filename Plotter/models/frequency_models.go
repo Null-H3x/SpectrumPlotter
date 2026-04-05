@@ -314,6 +314,7 @@ type CreateFrequencyAssignmentInput struct {
 	Classification      string     `json:"classification"`
 	Notes               string     `json:"notes,omitempty"`
 	RoutedToWorkbox     *string    `json:"routed_to_workbox,omitempty"`
+	PoolSerial          string     `json:"pool_serial,omitempty"`
 }
 
 // FrequencySearchQuery for searching available frequencies

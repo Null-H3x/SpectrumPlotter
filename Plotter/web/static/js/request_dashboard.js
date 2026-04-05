@@ -2953,6 +2953,9 @@ function restoreApprovalDraft(requestId) {
             if (val512) { setVal('sfaf_512', val512); cascade512to513(); }
             if (val513) setVal('sfaf_513', val513);
         }
+        // Restore pool serial clear button visibility
+        const clearBtn = document.getElementById('sfaf_105_clear');
+        if (clearBtn) clearBtn.style.display = draft.fields['sfaf_105'] ? '' : 'none';
         return draft.savedAt;
     } catch { return false; }
 }
