@@ -73,7 +73,7 @@ Seven distinct roles from `operator` through `ntia` and `admin` control which mo
 ### 1. Clone and configure
 
 ```bash
-git clone https://github.com/your-org/SpectrumPlotter.git
+git clone https://github.com/SpectrumIlluminati/SpectrumPlotter.git
 cd SpectrumPlotter/Plotter
 cp .env.example .env
 nano .env
