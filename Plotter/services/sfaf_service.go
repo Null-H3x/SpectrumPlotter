@@ -1076,93 +1076,292 @@ type SFAFRecordData struct {
 	Fields []SFAFFieldOccurrence
 }
 
-// parseSFAFTextFile parses the SFAF text format where each record is separated by field 005
-// Format: "FIELD_NUMBER. VALUE" on each line
-// Returns records with all field occurrences preserved
+// parseSFAFTextFile auto-detects whether the file uses the standard dot format
+// ("NNN. value") or a tab-delimited format ("NNN\tvalue"), then delegates to
+// the appropriate parser.  Both formats use Field 005 to mark record boundaries.
 func (ss *SFAFService) parseSFAFTextFile(file io.Reader) ([]SFAFRecordData, error) {
-	var records []SFAFRecordData
-	var currentRecord *SFAFRecordData
+	// Read the whole file so we can inspect it before parsing.
+	raw, err := io.ReadAll(file)
+	if err != nil {
+		return nil, fmt.Errorf("error reading file: %w", err)
+	}
 
-	scanner := bufio.NewScanner(file)
-	lineNum := 0
+	if isSXXIDotsHorizontal(raw) {
+		fmt.Println("📋 Detected SXXI DOTS horizontal format")
+		return parseSXXIDotsHorizontal(raw)
+	}
+	if isTabDelimitedSFAF(raw) {
+		fmt.Println("📋 Detected vertical tab-delimited SFAF format")
+		return parseSFAFTabDelimited(raw)
+	}
+	fmt.Println("📋 Detected dot-delimited SFAF format")
+	return parseSFAFDotDelimited(bytes.NewReader(raw))
+}
 
-	for scanner.Scan() {
-		lineNum++
-		line := strings.TrimSpace(scanner.Text())
+// isSXXIDotsHorizontal returns true when the file is an SXXI DOTS horizontal
+// export: the first non-empty line is a tab-delimited row of "NNN. (LABEL)"
+// column headers (one full SFAF record per subsequent data row).
+func isSXXIDotsHorizontal(data []byte) bool {
+	text := strings.TrimLeft(string(data), "\r\n \t")
+	firstLine := strings.SplitN(text, "\n", 2)[0]
+	firstLine = strings.TrimRight(firstLine, "\r")
+	if !strings.Contains(firstLine, "\t") {
+		return false
+	}
+	firstCol := strings.SplitN(firstLine, "\t", 2)[0]
+	firstCol = strings.TrimSpace(strings.Trim(firstCol, "\""))
+	if len(firstCol) < 4 {
+		return false
+	}
+	_, err := strconv.Atoi(firstCol[:3])
+	return err == nil && firstCol[3] == '.'
+}
 
-		// Skip empty lines
+// isTabDelimitedSFAF returns true for vertical tab-delimited SFAF files
+// (each line: "NNN\tvalue", records separated by field-005 lines).
+// Must be called AFTER isSXXIDotsHorizontal returns false.
+func isTabDelimitedSFAF(data []byte) bool {
+	lines := strings.SplitN(string(data), "\n", 20)
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
+		if !strings.Contains(line, "\t") {
+			return false
+		}
+		cols := strings.SplitN(line, "\t", 2)
+		base := strings.Split(strings.TrimSpace(cols[0]), "/")[0]
+		_, err := strconv.Atoi(base)
+		return err == nil // first column is a bare field number
+	}
+	return false
+}
 
-		// Parse line format: "FIELD_NUMBER. VALUE"
-		// Example: "005.     UE" or "102.     AF  014589" or "340/02.  G,AN/PRC-150(C)"
-		parts := strings.SplitN(line, ".", 2)
-		if len(parts) != 2 {
-			// Skip lines that don't match expected format
+// parseHeaderToken extracts the field number and 1-based occurrence index from
+// an SXXI DOTS column header such as:
+//
+//	"005. (SECURITY CLASSIFICATION)"         → "005", 1
+//	"114. (EMISSION DESIGNATOR)[02]"          → "114", 2
+//	"400. (RX STATE/COUNTRY)[R01]"            → "400", 1
+//	"440. (RX EQUIPMENT NOMENCLATURE)[R01/02]"→ "440", 2
+func parseHeaderToken(token string) (fieldNum string, occurrence int) {
+	token = strings.TrimSpace(strings.Trim(token, "\""))
+	occurrence = 1
+	if len(token) < 4 {
+		return "", 0
+	}
+	fieldNum = token[:3]
+	if _, err := strconv.Atoi(fieldNum); err != nil {
+		return "", 0
+	}
+	// Extract occurrence from trailing [...] bracket
+	bracketOpen := strings.LastIndex(token, "[")
+	bracketClose := strings.LastIndex(token, "]")
+	if bracketOpen >= 0 && bracketClose > bracketOpen {
+		inner := token[bracketOpen+1 : bracketClose]
+		inner = strings.TrimPrefix(inner, "R") // strip leading R (receiver)
+		// For "NN/MM" take the sub-occurrence MM
+		if slashIdx := strings.Index(inner, "/"); slashIdx >= 0 {
+			inner = inner[slashIdx+1:]
+		}
+		if n, err := strconv.Atoi(inner); err == nil && n > 0 {
+			occurrence = n
+		}
+	}
+	return fieldNum, occurrence
+}
+
+// parseSXXIDotsHorizontal parses the SXXI DOTS horizontal tab-delimited export.
+//
+// Format:
+//   Row 1   – tab-delimited column headers: "NNN. (LABEL)" or "NNN. (LABEL)[NN]"
+//   Rows 2+ – tab-delimited values; each row is one complete SFAF record.
+//             Empty cells are skipped.  Quoted fields (CSV-style) are handled.
+func parseSXXIDotsHorizontal(data []byte) ([]SFAFRecordData, error) {
+	// Normalise line endings
+	text := strings.ReplaceAll(string(data), "\r", "")
+
+	r := csv.NewReader(strings.NewReader(text))
+	r.Comma = '\t'
+	r.LazyQuotes = true
+	r.FieldsPerRecord = -1 // rows may have fewer fields than the header
+
+	rows, err := r.ReadAll()
+	if err != nil {
+		// Fall back to a simple tab split so a single bad cell never aborts everything
+		fmt.Printf("⚠️  CSV parse warning: %v — retrying with simple tab split\n", err)
+		lines := strings.Split(text, "\n")
+		rows = make([][]string, 0, len(lines))
+		for _, l := range lines {
+			rows = append(rows, strings.Split(l, "\t"))
+		}
+	}
+
+	if len(rows) < 2 {
+		return nil, fmt.Errorf("SXXI DOTS file has no data rows (only %d line(s))", len(rows))
+	}
+
+	// --- Parse header row ---
+	type colDef struct {
+		fieldNum   string
+		occurrence int
+	}
+	headerCols := make([]colDef, len(rows[0]))
+	for i, h := range rows[0] {
+		fn, occ := parseHeaderToken(h)
+		headerCols[i] = colDef{fn, occ}
+	}
+
+	// --- Parse data rows ---
+	var records []SFAFRecordData
+	for rowIdx, row := range rows[1:] {
+		rec := SFAFRecordData{Fields: []SFAFFieldOccurrence{}}
+		for i, rawVal := range row {
+			val := strings.TrimSpace(rawVal)
+			if val == "" || i >= len(headerCols) {
+				continue
+			}
+			cd := headerCols[i]
+			if cd.fieldNum == "" {
+				continue
+			}
+			rec.Fields = append(rec.Fields, SFAFFieldOccurrence{
+				FieldNumber: cd.fieldNum,
+				Value:       val,
+				Occurrence:  cd.occurrence,
+			})
+		}
+		if len(rec.Fields) > 0 {
+			records = append(records, rec)
+		} else {
+			fmt.Printf("⚠️  Row %d is empty — skipped\n", rowIdx+2)
+		}
+	}
+
+	fmt.Printf("📊 SXXI DOTS horizontal parser: %d records from %d data rows\n",
+		len(records), len(rows)-1)
+	return records, nil
+}
+
+// parseSFAFTabDelimited handles vertical tab-delimited files: each line is
+// "NNN\tvalue" (or "NNN/NN\tvalue"), with Field 005 separating records.
+func parseSFAFTabDelimited(data []byte) ([]SFAFRecordData, error) {
+	var records []SFAFRecordData
+	var currentRecord *SFAFRecordData
+
+	lines := strings.Split(string(data), "\n")
+
+	// Skip optional header row (first non-empty line whose first column is non-numeric)
+	start := 0
+	for i, raw := range lines {
+		line := strings.TrimSpace(raw)
+		if line == "" {
 			continue
 		}
-
-		fieldNum := strings.TrimSpace(parts[0])
-		value := strings.TrimSpace(parts[1])
-
-		// Parse field number and occurrence
-		// "340" -> field 340, occurrence 1
-		// "340/02" -> field 340, occurrence 2
-		baseFieldNum := fieldNum
-		occurrence := 1
-
-		if strings.Contains(fieldNum, "/") {
-			parts := strings.Split(fieldNum, "/")
-			baseFieldNum = parts[0]
-			if len(parts) > 1 {
-				// Parse occurrence number (e.g., "02" -> 2, "03" -> 3)
-				occNum, err := strconv.Atoi(parts[1])
-				if err == nil {
-					occurrence = occNum
-				}
-			}
+		cols := strings.SplitN(line, "\t", 2)
+		base := strings.Split(strings.TrimSpace(cols[0]), "/")[0]
+		if _, err := strconv.Atoi(base); err != nil {
+			start = i + 1
+			fmt.Printf("📋 Tab-delimited: skipping header row: %q\n", line)
 		}
+		break
+	}
 
-		// Field 005 marks the start of a new record
+	for _, raw := range lines[start:] {
+		line := strings.TrimSpace(raw)
+		if line == "" {
+			continue
+		}
+		cols := strings.SplitN(line, "\t", 2)
+		baseFieldNum, occurrence := parseFieldToken(cols[0])
+		value := ""
+		if len(cols) >= 2 {
+			value = strings.TrimSpace(cols[1])
+		}
+		if _, err := strconv.Atoi(baseFieldNum); err != nil {
+			continue
+		}
 		if baseFieldNum == "005" {
-			// Save previous record if it exists
 			if currentRecord != nil {
 				records = append(records, *currentRecord)
 			}
-			// Start new record
-			currentRecord = &SFAFRecordData{
-				Fields: []SFAFFieldOccurrence{},
-			}
+			currentRecord = &SFAFRecordData{Fields: []SFAFFieldOccurrence{}}
 		}
-
-		// If no current record yet, start one
 		if currentRecord == nil {
-			currentRecord = &SFAFRecordData{
-				Fields: []SFAFFieldOccurrence{},
-			}
+			currentRecord = &SFAFRecordData{Fields: []SFAFFieldOccurrence{}}
 		}
-
-		// Add field occurrence to current record
 		currentRecord.Fields = append(currentRecord.Fields, SFAFFieldOccurrence{
 			FieldNumber: baseFieldNum,
 			Value:       value,
 			Occurrence:  occurrence,
 		})
 	}
-
-	// Add the last record
 	if currentRecord != nil {
 		records = append(records, *currentRecord)
 	}
+	fmt.Printf("📊 Tab-delimited parser found %d records\n", len(records))
+	return records, nil
+}
 
+// parseFieldToken splits a raw field token (e.g. "340", "340/02") into
+// base field number and occurrence number.
+func parseFieldToken(token string) (base string, occurrence int) {
+	occurrence = 1
+	base = strings.TrimSpace(token)
+	if idx := strings.Index(base, "/"); idx >= 0 {
+		if n, err := strconv.Atoi(strings.TrimSpace(base[idx+1:])); err == nil {
+			occurrence = n
+		}
+		base = strings.TrimSpace(base[:idx])
+	}
+	return
+}
+
+// parseSFAFDotDelimited handles the traditional dot format: "NNN. value" per line,
+// with Field 005 marking the start of each record.
+func parseSFAFDotDelimited(file io.Reader) ([]SFAFRecordData, error) {
+	var records []SFAFRecordData
+	var currentRecord *SFAFRecordData
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, ".", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		baseFieldNum, occurrence := parseFieldToken(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		if baseFieldNum == "005" {
+			if currentRecord != nil {
+				records = append(records, *currentRecord)
+			}
+			currentRecord = &SFAFRecordData{Fields: []SFAFFieldOccurrence{}}
+		}
+		if currentRecord == nil {
+			currentRecord = &SFAFRecordData{Fields: []SFAFFieldOccurrence{}}
+		}
+		currentRecord.Fields = append(currentRecord.Fields, SFAFFieldOccurrence{
+			FieldNumber: baseFieldNum,
+			Value:       value,
+			Occurrence:  occurrence,
+		})
+	}
+	if currentRecord != nil {
+		records = append(records, *currentRecord)
+	}
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("error reading file: %w", err)
 	}
-
-	fmt.Printf("📊 Parser found %d records (detected by field 005 markers)\n", len(records))
+	fmt.Printf("📊 Dot-format parser found %d records\n", len(records))
 	return records, nil
 }
+
 
 // extractSerialFromRecord extracts the serial number from field 102
 // Format: "AF  014589" or "AF  948910"

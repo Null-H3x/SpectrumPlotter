@@ -92,60 +92,50 @@
 </head>
 
 <body>
-    <div class="navigation-bar">
-        <!-- Left: branding -->
-        <h1><i class="fas fa-map-marked-alt"></i> SFAF Plotter</h1>
-
-        <!-- Center: main nav links -->
+        <div class="navigation-bar">
+        <div class="nav-logo">
+            <i class="fas fa-tower-broadcast"></i>
+            <span>SFAF Plotter</span>
+        </div>
         <div class="nav-links nav-links-center">
-            <a href="/" class="nav-link active">
-                <i class="fas fa-map-marked-alt"></i>
-                <span>Map Viewer</span>
+            <a href="/map-viewer" class="nav-link active">
+                <i class="fas fa-map-marked-alt"></i><span>Map</span>
             </a>
             <a href="/database" class="nav-link">
-                <i class="fas fa-database"></i>
-                <span>Database</span>
+                <i class="fas fa-database"></i><span>Database</span>
             </a>
             <a href="/frequency" class="nav-link">
-                <i class="fas fa-broadcast-tower"></i>
-                <span>Frequencies</span>
+                <i class="fas fa-broadcast-tower"></i><span>Frequencies</span>
             </a>
             <a href="/workbox" class="nav-link ism-nav-link" style="display:none">
-                <i class="fas fa-inbox"></i>
-                <span>Workbox</span>
+                <i class="fas fa-inbox"></i><span>Workbox</span>
             </a>
             <a href="/frequency-nomination" class="nav-link">
-                <i class="fas fa-wave-square"></i>
-                <span>Frequency Tool</span>
+                <i class="fas fa-wave-square"></i><span>Freq Tool</span>
             </a>
             <a href="/view-manager" class="nav-link">
-                <i class="fas fa-cog"></i>
-                <span>Table Manager</span>
+                <i class="fas fa-table"></i><span>Table Manager</span>
             </a>
-            <button id="settingsNavBtn" class="nav-link nav-btn" title="Map Settings" onclick="SettingsUI.toggleSettings()">
-                <i class="fas fa-sliders-h"></i>
-                <span>Settings</span>
+            <button id="settingsNavBtn" class="nav-link" title="Map Settings"
+                    onclick="SettingsUI.toggleSettings()"
+                    style="background:none;border:none;cursor:pointer;color:inherit;">
+                <i class="fas fa-sliders-h"></i><span>Settings</span>
             </button>
-            <a href="/admin" class="nav-link admin-console-link" title="Admin Console" style="display:none">
-                <i class="fas fa-shield-halved"></i>
-                <span>Admin</span>
+            <a href="/admin" class="nav-link admin-console-link" style="display:none">
+                <i class="fas fa-shield-halved"></i><span>Admin</span>
             </a>
         </div>
-
-        <!-- Right: account actions -->
         <div class="nav-links nav-links-right">
-            <a href="/profile" class="nav-link" title="User Account">
-                <i class="fas fa-user-circle"></i>
-                <span>Account</span>
+            <a href="/profile" class="nav-link" title="Account">
+                <i class="fas fa-user-circle"></i><span>Account</span>
             </a>
-            <button class="nav-link" title="Logout" onclick="handleLogout()" style="background:none;border:none;cursor:pointer;color:inherit;">
-                <i class="fas fa-sign-out-alt"></i>
-                <span>Logout</span>
+            <button class="nav-link" onclick="handleLogout()" title="Logout"
+                    style="background:none;border:none;cursor:pointer;color:inherit;">
+                <i class="fas fa-sign-out-alt"></i><span>Logout</span>
             </button>
         </div>
     </div>
-
-    <!-- Map container -->
+<!-- Map container -->
     <div id="map"></div>
 
     <!-- Legend -->

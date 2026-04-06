@@ -5,34 +5,51 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.title}}</title>
     <link rel="stylesheet" href="/css/admin.css">
+    <link rel="stylesheet" href="/css/shared-nav.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="/js/modules/auth-guard.js"></script>
 </head>
 <body>
     <!-- Navigation Header -->
-    <nav class="admin-navbar">
-        <div class="nav-container">
-            <div class="nav-logo">
-                <i class="fas fa-tower-broadcast"></i>
-                <span class="logo-text">SFAF Plotter</span>
-            </div>
-            <div class="nav-menu">
-                <a href="/" class="nav-link"><i class="fas fa-home"></i> Home</a>
-                <a href="/map-viewer" class="nav-link"><i class="fas fa-map"></i> Map Viewer</a>
-                <a href="/database" class="nav-link"><i class="fas fa-database"></i> Database</a>
-                <a href="/frequency" class="nav-link"><i class="fas fa-broadcast-tower"></i> Frequencies</a>
-                <a href="/workbox" class="nav-link ism-nav-link" style="display:none"><i class="fas fa-inbox"></i> Workbox</a>
-                <a href="/view-manager" class="nav-link"><i class="fas fa-cog"></i> Table Manager</a>
-                <a href="/profile" class="nav-link"><i class="fas fa-user-circle"></i> Profile</a>
-                <a href="/admin" class="nav-link active"><i class="fas fa-shield-alt"></i> Admin</a>
-                <button class="nav-btn-logout" onclick="handleLogout()">
-                    <i class="fas fa-sign-out-alt"></i> Logout
-                </button>
-            </div>
+        <div class="navigation-bar">
+        <div class="nav-logo">
+            <i class="fas fa-tower-broadcast"></i>
+            <span>SFAF Plotter</span>
         </div>
-    </nav>
-
-    <!-- Main Content -->
+        <div class="nav-links nav-links-center">
+            <a href="/map-viewer" class="nav-link">
+                <i class="fas fa-map-marked-alt"></i><span>Map</span>
+            </a>
+            <a href="/database" class="nav-link">
+                <i class="fas fa-database"></i><span>Database</span>
+            </a>
+            <a href="/frequency" class="nav-link">
+                <i class="fas fa-broadcast-tower"></i><span>Frequencies</span>
+            </a>
+            <a href="/workbox" class="nav-link ism-nav-link" style="display:none">
+                <i class="fas fa-inbox"></i><span>Workbox</span>
+            </a>
+            <a href="/frequency-nomination" class="nav-link">
+                <i class="fas fa-wave-square"></i><span>Freq Tool</span>
+            </a>
+            <a href="/view-manager" class="nav-link">
+                <i class="fas fa-table"></i><span>Table Manager</span>
+            </a>
+            <a href="/admin" class="nav-link admin-console-link" style="display:none">
+                <i class="fas fa-shield-halved"></i><span>Admin</span>
+            </a>
+        </div>
+        <div class="nav-links nav-links-right">
+            <a href="/profile" class="nav-link" title="Account">
+                <i class="fas fa-user-circle"></i><span>Account</span>
+            </a>
+            <button class="nav-link" onclick="handleLogout()" title="Logout"
+                    style="background:none;border:none;cursor:pointer;color:inherit;">
+                <i class="fas fa-sign-out-alt"></i><span>Logout</span>
+            </button>
+        </div>
+    </div>
+<!-- Main Content -->
     <div class="admin-container">
         <!-- Tab Navigation -->
         <div class="tab-nav">

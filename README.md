@@ -1,68 +1,47 @@
-# SFAF Plotter
+# SpectrumPlotter
 
-A spectrum-community led effort to replace SXXI and integrate with all aspects of the DoD to deliver a frequency coordination and mapping platform built with Go. The goal is cohesive spectrum planning across all functions with a visual aspect that has been absent from previous products.
+> A spectrum management platform for DoD frequency coordination, built to replace SXXI with a visual-first approach to planning, deconfliction, and assignment tracking.
 
-PostgreSQL is used to store all tables and provide perpetual information storage across sessions and users.
-
-
-
+SpectrumPlotter combines an interactive map, full SFAF record management, and a role-gated frequency coordination workflow into a single self-hosted Go application backed by PostgreSQL. The goal is cohesive spectrum planning across all functions — with the visual context that has been absent from legacy tools.
 
 ---
 
 ## Features
 
-
-### Map Viewer
-- Interactive Leaflet-based map with real-time coordinate tooltips on hover
-- Place manual markers (draggable) or import directly from SFAF files (fixed position)
-- On-the-fly coordinate conversion between decimal degrees, DMS, and military compact formats
+### 🗺️ Map Viewer
+- Interactive Leaflet map with real-time coordinate tooltips (decimal, DMS, military compact)
+- Place draggable manual markers or import fixed-position markers directly from SFAF files
 - Draw and persist geometry overlays — circles, polygons, and rectangles — linked to the database
-- Field 530 polygon visualization renders MCEB authorization radius boundaries directly on the map
+- Field 530 polygon visualization renders MCEB authorization radius boundaries on the map
 - Viewport-based marker loading keeps performance smooth with large datasets
-<img width="1521" height="1131" alt="image" src="https://github.com/user-attachments/assets/9ab2c82c-bf91-4ef5-9864-bf685abdbeb6" />
 
-### SFAF Management
-- Import raw SFAF text files — records are parsed, validated, and stored automatically
-- Full CRUD operations on all SFAF records with 900+ field definitions
-- Field validation enforces MCEB Publication 7, Change 1 standards
-- Export individual records, a selected subset, or the entire dataset
-- SFAF Table Manager provides a structured spreadsheet-style view for browsing and inline editing
+### 📁 SFAF Management
+- Import raw SFAF files — records are parsed, validated, and stored automatically
+- Supports **SXXI DOTS horizontal** (tab-delimited spreadsheet exports), **dot-delimited** (`NNN. value`), and **vertical tab-delimited** formats — auto-detected, no configuration required
+- Full CRUD on all SFAF records with 900+ field definitions
+- Field validation enforces MC4EB Publication 7, Change 1 standards
+- Export individual records, a selected subset, or the entire dataset to CSV or text
 
-### Frequency Management
+### 📡 Frequency Management
 - Track frequency assignments per unit with automatic serial number generation
-- Submit, review, and approve frequency requests through a built-in workflow
+- Submit, review, and approve frequency requests through a built-in multi-step workflow
 - Conflict detection identifies overlapping assignments across units before approval
 - Expiring frequency alerts surface assignments approaching their end date
-- Frequency Nomination & Deconfliction module supports the full nomination cycle from request to assignment
-<img width="1765" height="1278" alt="image" src="https://github.com/user-attachments/assets/d75e9065-a682-4264-98ee-58033ec9343e" />
 
-- Request form walks user through with intuitive "Turbo-Tax style" questions to ensure user isn't overwhelmed and ISM gets best information available
-- User is able to select coordinates on map and set veiwable radius, enabling full understanding of selected operation area
-- Dynamic selection of Serial Number, Frequency, and 710/702 fields with real-time availability for each tracking option
+### 🔐 Role-Based Access Control
+Seven distinct roles from `operator` through `ntia` and `admin` control which modules, workflow steps, and data each user can see and act on. The ISM Workbox, serial allocation tools, and Admin Console are progressively unlocked by role.
 
-<img width="1750" height="841" alt="image" src="https://github.com/user-attachments/assets/59eb38c4-a057-4f6b-9832-aceece71d69c" />
+---
 
-<img width="1763" height="874" alt="image" src="https://github.com/user-attachments/assets/720f19fd-971a-44d4-a4af-dd54f9b203df" />
+## Screenshots
 
-<img width="1897" height="846" alt="image" src="https://github.com/user-attachments/assets/dc2ee507-f33e-44ae-abb2-e616a02b71a5" />
+| Map Viewer | Database |
+|---|---|
+| Interactive map with markers, geometry overlays, and coordinate tooltips | Scrollable SFAF record table with filtering, sorting, and inline import |
 
-### Database Viewer
-- Unified interface to browse and search markers, SFAF records, IRAC notes, and analytics
-- 388 IRAC coordination notes across 6 categories: coordination, emission, limitation, special, priority, and minute
-- Bulk select, edit, and delete operations across all record types
-- Analytics dashboard with frequency distribution, spectrum occupancy chart and compliance reporting
-- Export data in multiple formats
-- View record on map with a single click
-- Customizable views to show only the fields pertinent to your task
-- Exportable data in any order or sorted in any order the user prefers
-
-<img width="1750" height="1399" alt="image" src="https://github.com/user-attachments/assets/951a6440-af58-459b-89f3-7e05c40131f4" />
-
-### Authentication & Access Control
-- Session-based login and logout with server-side session management
-- PKI certificate authentication support for CAC/PIV card environments
-- Role-based access with superuser account creation
-- Development auth bypass available for local testing (disabled in production)
+| Frequencies | ISM Workbox |
+|---|---|
+| Assignment tracking with serial numbers and expiration alerts | Review queue for pending frequency coordination requests |
 
 ---
 
@@ -70,97 +49,206 @@ PostgreSQL is used to store all tables and provide perpetual information storage
 
 | Layer | Technology |
 |---|---|
-| Backend | Go 1.25, Gin |
-| Database | PostgreSQL (via sqlx) |
-| Frontend | Vanilla JS, Leaflet.js |
-| Logging | Uber Zap |
-| Config | godotenv |
-| Auth | Session tokens, PKI |
+| Backend | Go 1.21+, [Gin](https://github.com/gin-gonic/gin) |
+| Database | PostgreSQL 14+ via [sqlx](https://github.com/jmoiron/sqlx) |
+| Frontend | Vanilla JS, [Leaflet.js](https://leafletjs.com/) |
+| Logging | [Uber Zap](https://github.com/uber-go/zap) |
+| Auth | Session tokens, bcrypt password hashing |
+| Tooling | Python 3.10+ management scripts |
+
+---
+
+## Prerequisites
+
+- Linux (Debian/Ubuntu recommended)
+- Go 1.21+
+- PostgreSQL 14+
+- Python 3.10+
+- `psql` client
+
+---
+
+## Quick Start
+
+### 1. Clone and configure
+
+```bash
+git clone https://github.com/your-org/SpectrumPlotter.git
+cd SpectrumPlotter/Plotter
+cp .env.example .env
+nano .env
+```
+
+Minimum `.env`:
+
+```env
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=sfaf_user
+DB_PASSWORD=your_password
+DB_NAME=sfaf_plotter
+DB_SSLMODE=disable
+SERVER_PORT=8080
+GIN_MODE=release
+```
+
+### 2. Install and initialize
+
+```bash
+python3 install.py
+```
+
+The installer handles Go, PostgreSQL setup, schema migrations, and first-admin-user creation interactively.
+
+### 3. Start the server
+
+```bash
+python3 SpectrumPlotter.py
+```
+
+Navigate to `http://localhost:8080`.
+
+---
+
+## User Management
+
+All user operations use `users.py` from the `Plotter/` directory.
+
+```bash
+# List all users
+python3 users.py list
+
+# Create a user
+python3 users.py create --username jsmith --email jsmith@unit.mil \
+  --full-name "John Smith" --role ism
+
+# Change a role
+python3 users.py set-role --username jsmith --role command
+
+# Reset a password
+python3 users.py reset-password --username jsmith
+
+# Deactivate
+python3 users.py deactivate --username jsmith
+```
+
+---
+
+## Role Reference
+
+| Role | Workbox | Frequency Workflow | Notes |
+|------|---------|-------------------|-------|
+| `operator` | ✗ | Submit requests | Default for new accounts |
+| `ism` | ✓ | Submit + review | Installation Spectrum Manager |
+| `command` | ✓ | Submit + review + proposals | Brigade/Division |
+| `combatant_command` | ✓ | Review proposals | EUCOM/CENTCOM/etc. |
+| `agency` | ✓ | Review all + serial allocation | AFSMO, JTSC |
+| `ntia` | ✓ | National-level review | |
+| `admin` | ✓ | Full access + Admin Console | |
+
+---
+
+## SFAF Import Formats
+
+| Format | Detection | Description |
+|--------|-----------|-------------|
+| SXXI DOTS horizontal | Auto | Tab-delimited spreadsheet: row 1 = `NNN. (LABEL)` headers, rows 2+ = one record per line |
+| Dot-delimited | Auto | Traditional SFAF: `NNN. value` per line, Field 005 separates records |
+| Vertical tab-delimited | Auto | `NNN\tvalue` per line, Field 005 separates records |
+
+**Coordinate formats supported in Field 303:**
+
+| Format | Example | Notes |
+|--------|---------|-------|
+| 15-char standard | `302521N0864150W` | DDMMSSNDDDMMSSW |
+| 13-char SXXI/European | `492627E073541` | DDMMSS + lon-dir + DDMMSS, lat=North assumed |
+| 13-char N/S first | `492627N073541` | DDMMSS + N/S + DDMMSS, lon=East assumed |
+
+Placeholder coordinates (`???????????????`) are handled gracefully — the record imports without a map marker.
 
 ---
 
 ## Project Structure
 
 ```
-GoPlotter/
-├── cmd/                  # CLI utilities (db init, migrations, data tools)
-├── config/               # App config, DB connection, logging setup
-├── docs/                 # Feature and deployment documentation
-├── handlers/             # HTTP route handlers
-├── middleware/           # Logging, recovery, auth middleware
-├── migrations/           # SQL migration files
-├── models/               # Data models
-├── repositories/         # Database access layer
-├── services/             # Business logic
-├── utils/                # Response serialization helpers
-└── web/
-    ├── static/           # CSS, JS, images
-    └── templates/        # HTML templates
+Plotter/
+├── cmd/                    # CLI tools (create_user, list_users, init_database, …)
+├── config/                 # Environment and database config
+├── handlers/               # HTTP request handlers (Gin)
+├── middleware/             # Logging, session auth, recovery
+├── migrations/             # PostgreSQL migration files (001 → current)
+├── models/                 # Go structs for all domain objects
+├── repositories/           # Database access layer
+├── services/               # Business logic
+├── web/
+│   ├── static/
+│   │   ├── css/            # Stylesheets (shared-nav.css, navBar.css, …)
+│   │   └── js/             # Frontend JS (map.js, db_viewer.js, modules/)
+│   └── templates/          # HTML templates (8 pages)
+├── install.py              # First-time installer
+├── users.py                # User management CLI
+├── SpectrumPlotter.py      # Server launcher with pre-flight checks
+└── main.go                 # Application entry point
 ```
 
 ---
 
-## Pages
+## Development
 
-| Route | Description |
-|---|---|
-| `/` | Landing page |
-| `/map-viewer` | Interactive map with markers and geometry |
-| `/database` | Database viewer and analytics |
-| `/view-manager` | SFAF Table Manager |
-| `/frequency-nomination` | Frequency nomination and deconfliction |
-| `/frequency/assignments` | Unit frequency assignments |
-| `/frequency/request` | Submit a frequency request |
-| `/frequency/requests` | Frequency request dashboard |
-| `/profile` | User profile |
+### Running in debug mode
 
----
+Set `GIN_MODE=debug` in `.env` for verbose request logging.
 
-## Getting Started
+### Forced rebuild
 
-### Prerequisites
-- Go 1.21+
-- PostgreSQL
+```bash
+python3 SpectrumPlotter.py --build
+```
 
-### Setup
+### Pre-flight checks only
 
-1. Clone the repo and navigate to the project:
-   ```bash
-   git clone https://github.com/SpectrumIlluminati/SpectrumPlotter.git
-   cd SpectrumPlotter/GoPlotter
-   ```
+```bash
+python3 SpectrumPlotter.py --check
+```
 
-2. Copy the example environment file and configure it:
-   ```bash
-   cp .env.example .env
-   ```
+### Adding a migration
 
-3. Initialize the database:
-   ```bash
-   go run cmd/init_database/main.go
-   go run cmd/run_migration/main.go
-   ```
+Create the next numbered file in `migrations/`:
 
-4. Start the server:
-   ```bash
-   go run main.go
-   ```
+```bash
+nano migrations/056_your_change.sql
+```
 
-5. Open `http://localhost:8080` in your browser.
+Apply it:
 
-### Environment Variables
-
-See `.env.example` for all configuration options including database connection, server port, Gin mode, CORS settings, and logging level.
+```bash
+psql -h localhost -U sfaf_user -d sfaf_plotter -f migrations/056_your_change.sql
+```
 
 ---
 
-## Documentation
+## Roadmap
 
-Detailed documentation is available in [`GoPlotter/docs/`](GoPlotter/docs/):
+- [ ] View on Map — jump from database records directly to the map marker
+- [ ] Scrollbar size improvements in the database table view
+- [ ] JS module refactor completion (map.js target ~200 lines)
+- [ ] Integration test suite
+- [ ] PKI / CAC authentication support
 
-- [AWS Deployment](GoPlotter/docs/AWS_DEPLOYMENT.md)
-- [PKI Authentication](GoPlotter/docs/PKI_AUTHENTICATION.md)
-- [Authorization Radius Guide](GoPlotter/docs/AUTHORIZATION_RADIUS_GUIDE.md)
-- [Field 530 Implementation](GoPlotter/docs/FIELD_530_IMPLEMENTATION.md)
-- [Frequency Assignment Module](GoPlotter/docs/FREQUENCY_ASSIGNMENT_MODULE.md)
-- [Frequency Nomination](GoPlotter/docs/FREQUENCY_NOMINATION_README.md)
+---
+
+## Contributing
+
+This is a spectrum-community project. Issues, pull requests, and feature requests are welcome. Please open an issue before starting significant new work so we can coordinate direction.
+
+---
+
+## License
+
+See [LICENSE](LICENSE) for details.
+
+---
+
+## Compliance
+
+SFAF field validation targets **MC4EB Publication 7, Change 1 (08 May 2025)** standards. Field definitions, required fields, and validation rules are maintained in `services/sfaf_service.go`.

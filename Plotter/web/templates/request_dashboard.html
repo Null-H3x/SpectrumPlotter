@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.title}} - SFAF Plotter</title>
     <link rel="stylesheet" href="/css/db_viewer.css">
+    <link rel="stylesheet" href="/css/shared-nav.css">
     <link rel="stylesheet" href="/css/frequency.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -296,58 +297,49 @@
 
 <div class="app">
     <!-- Top Bar -->
-    <div class="topbar">
-        <div class="topbar-left">
-            <h1><i class="fas fa-clipboard-list"></i> Frequency Requests</h1>
+        <div class="navigation-bar">
+        <div class="nav-logo">
+            <i class="fas fa-tower-broadcast"></i>
+            <span>SFAF Plotter</span>
         </div>
-        <nav class="topbar-nav">
+        <div class="nav-links nav-links-center">
             <a href="/map-viewer" class="nav-link">
-                <i class="fas fa-map-marked-alt"></i>
-                <span>Map Viewer</span>
+                <i class="fas fa-map-marked-alt"></i><span>Map</span>
             </a>
-            <a href="/database" class="nav-link" data-operator-hide>
-                <i class="fas fa-database"></i>
-                <span>Database</span>
+            <a href="/database" class="nav-link">
+                <i class="fas fa-database"></i><span>Database</span>
             </a>
             <a href="/frequency" class="nav-link">
-                <i class="fas fa-broadcast-tower"></i>
-                <span>Frequencies</span>
+                <i class="fas fa-broadcast-tower"></i><span>Frequencies</span>
             </a>
-<a href="/workbox" class="nav-link ism-nav-link" id="navWorkbox" style="display:none">
-                <i class="fas fa-inbox"></i>
-                <span>Workbox</span>
+            <a href="/workbox" class="nav-link ism-nav-link active" style="display:none">
+                <i class="fas fa-inbox"></i><span>Workbox</span>
             </a>
-            <a href="/view-manager" class="nav-link" data-operator-hide>
-                <i class="fas fa-cog"></i>
-                <span>Table Manager</span>
+            <a href="/frequency-nomination" class="nav-link">
+                <i class="fas fa-wave-square"></i><span>Freq Tool</span>
             </a>
-            <button id="btnSerialMgmt" class="nav-link" style="display:none;background:none;border:none;cursor:pointer;" onclick="openSerialMgmt()" title="AFSMO Serial Allocation">
-                <i class="fas fa-list-ol"></i>
-                <span>Serial Mgmt</span>
-            </button>
-            <button id="btnMajcomSerialMgmt" class="nav-link" style="display:none;background:none;border:none;cursor:pointer;" onclick="openMajcomSerialMgmt()" title="MAJCOM Serial Allocation">
-                <i class="fas fa-sitemap"></i>
-                <span>Serial Mgmt</span>
-            </button>
-        </nav>
-        <div class="topbar-right">
-            <button id="refreshBtn" class="btn btn-icon" title="Refresh"><i class="fas fa-sync"></i></button>
-            <a href="/frequency/request" class="btn btn-primary btn-sm">
-                <i class="fas fa-plus"></i> New Request
+            <a href="/view-manager" class="nav-link">
+                <i class="fas fa-table"></i><span>Table Manager</span>
             </a>
-            <a href="/admin" class="btn btn-icon admin-console-link" title="Admin Console" style="display:none">
-                <i class="fas fa-shield-halved"></i>
+            <a href="/admin" class="nav-link admin-console-link" style="display:none">
+                <i class="fas fa-shield-halved"></i><span>Admin</span>
             </a>
-            <a href="/profile" class="btn btn-icon" title="User Account">
-                <i class="fas fa-user-circle"></i>
-            </a>
-            <button class="btn btn-icon" title="Logout" onclick="handleLogout()">
-                <i class="fas fa-sign-out-alt"></i>
-            </button>
+        </div>
+        <div class="nav-links nav-links-right">
+            <button id="refreshBtn" class="nav-link" title="Refresh"><i class="fas fa-sync"></i></button>
+            <a href="/frequency/request" class="nav-link"><i class="fas fa-plus"></i><span>New Request</span></a>
+            <button id="btnSerialMgmt" class="nav-link" style="display:none;background:none;border:none;cursor:pointer;" onclick="openSerialMgmt()"><i class="fas fa-list-ol"></i></button>
+            <button id="btnMajcomSerialMgmt" class="nav-link" style="display:none;background:none;border:none;cursor:pointer;" onclick="openMajcomSerialMgmt()"><i class="fas fa-sitemap"></i></button>
             <span id="sessionInfo" class="session-badge"></span>
+            <a href="/profile" class="nav-link" title="Account">
+                <i class="fas fa-user-circle"></i><span>Account</span>
+            </a>
+            <button class="nav-link" onclick="handleLogout()" title="Logout"
+                    style="background:none;border:none;cursor:pointer;color:inherit;">
+                <i class="fas fa-sign-out-alt"></i><span>Logout</span>
+            </button>
         </div>
     </div>
-
 
     <!-- Permanent Assignments Tab -->
     <div id="permanent-tab" class="tab-panel active">

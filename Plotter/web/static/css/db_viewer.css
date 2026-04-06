@@ -434,6 +434,8 @@ body {
 
 .table-container {
     overflow-x: auto;
+    overflow-y: auto;
+    max-height: calc(100vh - 320px);
     position: relative;
 }
 
@@ -468,7 +470,7 @@ body {
 
 .data-table thead {
     position: sticky;
-    top: 72px;
+    top: 0;
     z-index: 10;
 }
 

@@ -83,49 +83,89 @@ func (cs *CoordinateService) GetAllFormats(lat, lng float64) models.CoordinateRe
 	}
 }
 
-// ParseCompactDMS parses compact DMS format (e.g., "302521N0864150W") to decimal coordinates
-// Format: DDMMSS[N|S]DDDMMSS[E|W]
+// ParseCompactDMS parses compact DMS strings into decimal lat/lng.
+//
+// Three formats are supported:
+//
+//  15-char standard  "302521N0864150W"
+//    DDMMSS + N/S + DDDMMSS (3-digit lon degrees) + E/W
+//
+//  13-char SXXI/E    "492627E073541"
+//    DDMMSS + E or W (lon direction) + DDMMSS (2-digit lon degrees)
+//    Latitude sign assumed positive (North). Used in SXXI DOTS European exports.
+//
+//  13-char SXXI/N    "492627N073541"
+//    DDMMSS + N or S + DDMMSS (2-digit lon degrees)
+//    Longitude direction assumed East.
 func (cs *CoordinateService) ParseCompactDMS(compactDMS string) (lat, lng float64, err error) {
-	// Remove any whitespace
-	compactDMS = fmt.Sprintf("%s", compactDMS) // Trim spaces
+	// Strip leading/trailing spaces without importing strings
+	for len(compactDMS) > 0 && (compactDMS[0] == ' ' || compactDMS[0] == '\t') {
+		compactDMS = compactDMS[1:]
+	}
+	for len(compactDMS) > 0 && (compactDMS[len(compactDMS)-1] == ' ' || compactDMS[len(compactDMS)-1] == '\t') {
+		compactDMS = compactDMS[:len(compactDMS)-1]
+	}
 
-	// Find the N/S delimiter for latitude
+	n := len(compactDMS)
+	if n < 13 {
+		return 0, 0, fmt.Errorf("invalid compact DMS: too short (%d chars, need ≥13)", n)
+	}
+
+	dirChar := compactDMS[6] // direction character at position 6
+
 	var latStr, lngStr string
-	var latDir, lngDir string
+	var latDir, lngDir byte
 
-	// Find latitude direction (N or S)
-	if len(compactDMS) < 13 {
-		return 0, 0, fmt.Errorf("invalid compact DMS format: too short (expected at least 13 characters)")
+	switch {
+	case n == 15:
+		// Standard: DDMMSSN DDDMMSSW
+		latStr = compactDMS[0:6]
+		latDir = dirChar
+		lngStr = compactDMS[7:14]
+		lngDir = compactDMS[14]
+
+	case n == 13 && (dirChar == 'E' || dirChar == 'W'):
+		// SXXI DOTS European: DDMMSS + lon-dir + DDMMSS (2-digit lon degrees)
+		// Latitude has no explicit direction; assumed positive (North).
+		latStr = compactDMS[0:6]
+		latDir = 'N'
+		lngStr = compactDMS[7:13]
+		lngDir = dirChar
+
+	case n == 13 && (dirChar == 'N' || dirChar == 'S'):
+		// SXXI DOTS with lat direction: DDMMSSN + DDMMSS (2-digit lon degrees, E assumed)
+		latStr = compactDMS[0:6]
+		latDir = dirChar
+		lngStr = compactDMS[7:13]
+		lngDir = 'E'
+
+	default:
+		return 0, 0, fmt.Errorf("invalid compact DMS: unrecognised format (len=%d, dir=%q)", n, string(dirChar))
 	}
 
-	// Format: DDMMSSN DDDMMSSW (6 digits + direction + 7 digits + direction = 15 chars)
-	// Example: 302521N0864150W
-	latStr = compactDMS[0:6]    // 302521
-	latDir = string(compactDMS[6]) // N
-	lngStr = compactDMS[7:14]   // 0864150
-	lngDir = string(compactDMS[14]) // W
-
-	// Parse latitude
+	// Parse latitude DDMMSS
 	var latDeg, latMin, latSec int
-	_, err = fmt.Sscanf(latStr, "%2d%2d%2d", &latDeg, &latMin, &latSec)
-	if err != nil {
-		return 0, 0, fmt.Errorf("failed to parse latitude: %v", err)
+	if _, err = fmt.Sscanf(latStr, "%2d%2d%2d", &latDeg, &latMin, &latSec); err != nil {
+		return 0, 0, fmt.Errorf("failed to parse latitude %q: %v", latStr, err)
 	}
-
 	lat = float64(latDeg) + float64(latMin)/60.0 + float64(latSec)/3600.0
-	if latDir == "S" {
+	if latDir == 'S' {
 		lat = -lat
 	}
 
-	// Parse longitude
+	// Parse longitude — 3-digit degrees for 15-char format, 2-digit for 13-char
 	var lngDeg, lngMin, lngSec int
-	_, err = fmt.Sscanf(lngStr, "%3d%2d%2d", &lngDeg, &lngMin, &lngSec)
-	if err != nil {
-		return 0, 0, fmt.Errorf("failed to parse longitude: %v", err)
+	if n == 15 {
+		if _, err = fmt.Sscanf(lngStr, "%3d%2d%2d", &lngDeg, &lngMin, &lngSec); err != nil {
+			return 0, 0, fmt.Errorf("failed to parse longitude %q: %v", lngStr, err)
+		}
+	} else {
+		if _, err = fmt.Sscanf(lngStr, "%2d%2d%2d", &lngDeg, &lngMin, &lngSec); err != nil {
+			return 0, 0, fmt.Errorf("failed to parse longitude %q: %v", lngStr, err)
+		}
 	}
-
 	lng = float64(lngDeg) + float64(lngMin)/60.0 + float64(lngSec)/3600.0
-	if lngDir == "W" {
+	if lngDir == 'W' {
 		lng = -lng
 	}
 

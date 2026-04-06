@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Frequencies - SFAF Plotter</title>
     <link rel="stylesheet" href="/css/db_viewer.css">
+    <link rel="stylesheet" href="/css/shared-nav.css">
     <link rel="stylesheet" href="/css/frequency.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -454,56 +455,49 @@
 <div class="app">
 
 <!-- Top Bar -->
-    <div class="topbar">
-        <div class="topbar-left">
-            <h1><i class="fas fa-broadcast-tower"></i> Frequencies</h1>
+        <div class="navigation-bar">
+        <div class="nav-logo">
+            <i class="fas fa-tower-broadcast"></i>
+            <span>SFAF Plotter</span>
         </div>
-        <nav class="topbar-nav">
+        <div class="nav-links nav-links-center">
             <a href="/map-viewer" class="nav-link">
-                <i class="fas fa-map-marked-alt"></i>
-                <span>Map Viewer</span>
+                <i class="fas fa-map-marked-alt"></i><span>Map</span>
             </a>
             <a href="/database" class="nav-link">
-                <i class="fas fa-database"></i>
-                <span>Database</span>
+                <i class="fas fa-database"></i><span>Database</span>
             </a>
             <a href="/frequency" class="nav-link active">
-                <i class="fas fa-broadcast-tower"></i>
-                <span>Frequencies</span>
+                <i class="fas fa-broadcast-tower"></i><span>Frequencies</span>
             </a>
             <a href="/workbox" class="nav-link ism-nav-link" style="display:none">
-                <i class="fas fa-inbox"></i>
-                <span>Workbox</span>
+                <i class="fas fa-inbox"></i><span>Workbox</span>
             </a>
             <a href="/frequency-nomination" class="nav-link">
-                <i class="fas fa-wave-square"></i>
-                <span>Freq Tool</span>
+                <i class="fas fa-wave-square"></i><span>Freq Tool</span>
             </a>
             <a href="/view-manager" class="nav-link">
-                <i class="fas fa-cog"></i>
-                <span>Table Manager</span>
+                <i class="fas fa-table"></i><span>Table Manager</span>
             </a>
-        </nav>
-        <div class="topbar-right">
-            <button id="refreshBtn" class="btn btn-icon" title="Refresh"><i class="fas fa-sync"></i></button>
-            <button id="exportBtn" class="btn btn-icon" title="Export Assignments"><i class="fas fa-download"></i></button>
-            <a href="/frequency/request" class="btn btn-primary btn-sm">
-                <i class="fas fa-plus"></i> New Request
+            <a href="/admin" class="nav-link admin-console-link" style="display:none">
+                <i class="fas fa-shield-halved"></i><span>Admin</span>
             </a>
-            <a href="/admin" class="btn btn-icon admin-console-link" title="Admin Console" style="display:none">
-                <i class="fas fa-shield-halved"></i>
-            </a>
-            <a href="/profile" class="btn btn-icon" title="User Account">
-                <i class="fas fa-user-circle"></i>
-            </a>
-            <button class="btn btn-icon" title="Logout" onclick="handleLogout()">
-                <i class="fas fa-sign-out-alt"></i>
-            </button>
+        </div>
+        <div class="nav-links nav-links-right">
+            <button id="refreshBtn" class="nav-link" title="Refresh"><i class="fas fa-sync"></i></button>
+            <button id="exportBtn"  class="nav-link" title="Export"><i class="fas fa-download"></i></button>
+            <a href="/frequency/request" class="nav-link"><i class="fas fa-plus"></i><span>New Request</span></a>
             <span id="sessionInfo" class="session-badge"></span>
+            <a href="/profile" class="nav-link" title="Account">
+                <i class="fas fa-user-circle"></i><span>Account</span>
+            </a>
+            <button class="nav-link" onclick="handleLogout()" title="Logout"
+                    style="background:none;border:none;cursor:pointer;color:inherit;">
+                <i class="fas fa-sign-out-alt"></i><span>Logout</span>
+            </button>
         </div>
     </div>
-
-    <div class="frequency-section-tabs">
+<div class="frequency-section-tabs">
         <button class="section-tab active" data-section="my-frequencies" onclick="switchFrequencySection('my-frequencies')">
             <i class="fas fa-broadcast-tower"></i> My Frequencies
         </button>
