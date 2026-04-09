@@ -36,12 +36,15 @@ Seven distinct roles from `operator` through `ntia` and `admin` control which mo
 ## Screenshots
 
 | Map Viewer | Database |
-|---|---|
-| Interactive map with markers, geometry overlays, and coordinate tooltips | Scrollable SFAF record table with filtering, sorting, and inline import |
+- Interactive map with markers, geometry overlays, and coordinate tooltips
+- Scrollable SFAF record table with filtering, sorting, and inline import
+<img width="1897" height="846" alt="request map" src="https://github.com/user-attachments/assets/7e8df832-d28b-4838-96ad-bfa03485d643" />
 
 | Frequencies | ISM Workbox |
-|---|---|
-| Assignment tracking with serial numbers and expiration alerts | Review queue for pending frequency coordination requests |
+- Assignment tracking with serial numbers and expiration alerts
+- Review queue for pending frequency coordination requests |
+<img width="1750" height="841" alt="request step 1" src="https://github.com/user-attachments/assets/6b287ab0-b463-4c90-a863-e8462b98011c" />
+<img width="1763" height="874" alt="request page" src="https://github.com/user-attachments/assets/32fba6fe-a175-412a-8840-a8443e833b6c" />
 
 ---
 
