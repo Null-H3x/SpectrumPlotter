@@ -11,7 +11,9 @@ SET frequency = CASE
     -- All other frequencies: M prefix
     ELSE 'M' || frequency
 END
-WHERE frequency !~ '^[KM]';  -- skip rows already prefixed
+WHERE frequency !~ '^[KM]'   -- skip rows already prefixed
+  AND frequency != ''        -- skip empty strings (can't cast to float)
+  AND frequency IS NOT NULL; -- skip nulls
 
 -- Verify
 SELECT COUNT(*) AS prefixed_count FROM markers WHERE frequency ~ '^[KM]';

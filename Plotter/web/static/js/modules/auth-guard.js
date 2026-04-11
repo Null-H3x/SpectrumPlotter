@@ -32,7 +32,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
         if (role === 'operator') {
             // Allowed hrefs for operators — everything else is hidden.
-            const operatorAllowed = ['/map-viewer', '/', '/frequency', '/frequency/request'];
+            const operatorAllowed = ['/map-viewer', '/', '/frequency', '/frequency/request', '/profile'];
             // Hide nav-links that are anchor tags with disallowed hrefs,
             // or elements explicitly marked data-operator-hide.
             // Buttons without href (logout, refresh, etc.) are left alone.

@@ -8,6 +8,7 @@ const referenceData = {
     installations: [],
     systemConfig: [],
     sfafLookup: [],
+    controlNumbers: [],
     currentUserInstallationID: null,
 
     async init() {
@@ -64,6 +65,8 @@ const referenceData = {
             this.loadSystemConfig();
         } else if (tabName === 'sfaf-codes' && this.sfafLookup.length === 0) {
             this.loadLookup(this._currentLookupField);
+        } else if (tabName === 'control-numbers') {
+            this.loadControlNumbers();
         }
     },
 
@@ -1306,7 +1309,158 @@ const referenceData = {
             toast.style.animation = 'slideOut 0.3s ease';
             setTimeout(() => toast.remove(), 300);
         }, 3000);
-    }
+    },
+
+    // ============================================
+    // Control Numbers (702) Management
+    // ============================================
+
+    async loadControlNumbers() {
+        try {
+            const res = await fetch('/api/frequency/control-numbers');
+            const data = await res.json();
+            this.controlNumbers = data.control_numbers || [];
+            this.renderControlNumbers();
+        } catch (e) {
+            this.showError('cnTableBody', 'Failed to load control numbers');
+        }
+    },
+
+    filterControlNumbers(q) {
+        this._cnFilter = q.toLowerCase();
+        this.renderControlNumbers();
+    },
+
+    renderControlNumbers() {
+        const tbody = document.getElementById('cnTableBody');
+        if (!tbody) return;
+        const q = this._cnFilter || '';
+        const rows = q
+            ? this.controlNumbers.filter(cn =>
+                cn.number.toLowerCase().includes(q) ||
+                (cn.description || '').toLowerCase().includes(q))
+            : this.controlNumbers;
+
+        if (rows.length === 0) {
+            tbody.innerHTML = `<tr class="empty-row"><td colspan="3" style="text-align:center;">
+                <i class="fas fa-inbox"></i> ${q ? 'No entries match your search' : 'No 702 entries yet'}
+            </td></tr>`;
+            return;
+        }
+        tbody.innerHTML = rows.map(cn => `
+            <tr>
+                <td><strong>${cn.number}</strong></td>
+                <td>${cn.description || '<span style="color:#64748b;font-style:italic;">—</span>'}</td>
+                <td>
+                    <button class="btn btn-sm btn-icon" onclick="referenceData.editCN('${cn.id}')" title="Edit">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-sm btn-icon btn-danger" onclick="referenceData.deleteCN('${cn.id}', '${cn.number.replace(/'/g, "\\'")}');" title="Delete">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>`).join('');
+    },
+
+    updateCNPreview() {
+        const name = (document.getElementById('cnName').value || '').trim();
+        const year = (document.getElementById('cnYear').value || '').trim();
+        const seq  = (document.getElementById('cnSequence').value || '').trim();
+        const prev = document.getElementById('cnPreview');
+        if (!prev) return;
+        if (name && year && seq) {
+            prev.textContent = `${name} ${year}-${seq}`;
+        } else if (name) {
+            prev.textContent = name + (year ? ` ${year}` : '') + (seq ? `-${seq}` : '');
+        } else {
+            prev.textContent = '';
+        }
+    },
+
+    showAddControlNumber() {
+        document.getElementById('cnModalTitle').innerHTML = '<i class="fas fa-hashtag"></i> Add 702 Entry';
+        document.getElementById('cnForm').reset();
+        document.getElementById('cnId').value = '';
+        document.getElementById('cnYear').value = new Date().getFullYear();
+        document.getElementById('cnPreview').textContent = '';
+        document.getElementById('cnModal').style.display = 'block';
+        document.getElementById('cnName').focus();
+    },
+
+    editCN(id) {
+        const cn = this.controlNumbers.find(c => c.id === id);
+        if (!cn) return;
+        document.getElementById('cnModalTitle').innerHTML = '<i class="fas fa-hashtag"></i> Edit 702 Entry';
+        document.getElementById('cnId').value = cn.id;
+        // Parse "ORG YYYY-SEQ" format; fall back to putting whole string in name field
+        const m = cn.number.match(/^(\S+)\s+(\d{4})-(\d+)$/);
+        if (m) {
+            document.getElementById('cnName').value     = m[1];
+            document.getElementById('cnYear').value     = m[2];
+            document.getElementById('cnSequence').value = m[3];
+        } else {
+            document.getElementById('cnName').value     = cn.number;
+            document.getElementById('cnYear').value     = '';
+            document.getElementById('cnSequence').value = '';
+        }
+        document.getElementById('cnDescription').value = cn.description || '';
+        this.updateCNPreview();
+        document.getElementById('cnModal').style.display = 'block';
+    },
+
+    closeCNModal() {
+        document.getElementById('cnModal').style.display = 'none';
+    },
+
+    async saveCN() {
+        const id   = document.getElementById('cnId').value;
+        const name = (document.getElementById('cnName').value || '').trim();
+        const year = (document.getElementById('cnYear').value || '').trim();
+        const seq  = (document.getElementById('cnSequence').value || '').trim();
+        const number = (name && year && seq) ? `${name} ${year}-${seq}` : name;
+        const body = {
+            number,
+            description: document.getElementById('cnDescription').value.trim(),
+        };
+        if (!body.number) { alert('Organization name is required.'); return; }
+        try {
+            const method = id ? 'PUT' : 'POST';
+            const url    = id
+                ? `/api/frequency/control-numbers/${id}`
+                : '/api/frequency/control-numbers';
+            const res = await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            if (res.ok) {
+                this.showToast('702 entry saved', 'success');
+                this.closeCNModal();
+                this.loadControlNumbers();
+            } else {
+                const err = await res.json();
+                this.showToast('Error: ' + (err.error || 'Save failed'), 'error');
+            }
+        } catch (e) {
+            this.showToast('Error saving entry: ' + e.message, 'error');
+        }
+    },
+
+    async deleteCN(id, number) {
+        if (!confirm(`Delete 702 entry "${number}"?`)) return;
+        try {
+            const res = await fetch(`/api/frequency/control-numbers/${id}`, { method: 'DELETE' });
+            if (res.ok) {
+                this.showToast('702 entry deleted', 'success');
+                this.loadControlNumbers();
+            } else {
+                const err = await res.json();
+                this.showToast('Error: ' + (err.error || 'Delete failed'), 'error');
+            }
+        } catch (e) {
+            this.showToast('Error: ' + e.message, 'error');
+        }
+    },
 };
 
 // Initialize when DOM is ready

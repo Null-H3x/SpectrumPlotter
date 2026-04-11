@@ -75,6 +75,10 @@ type FrequencyAssignment struct {
 	// RoutedToWorkbox is the named workbox (e.g. "GAFC", "Barksdale ISM") this P/S proposal is routed to.
 	// NULL means visible to all ISM workboxes.
 	RoutedToWorkbox       *string    `json:"routed_to_workbox,omitempty" db:"routed_to_workbox"`
+	// EditAuthorityWorkbox is the workbox that currently holds edit authority over this record.
+	// Set to the creating user's ISM unit name at creation; transfers when routed to another ISM workbox.
+	// Lateral coordination (assignment_coordinations) never changes this value.
+	EditAuthorityWorkbox  *string    `json:"edit_authority_workbox,omitempty" db:"edit_authority_workbox"`
 	// PoolSerial is the serial of the pool assignment selected during approval (SFAF field 105).
 	PoolSerial            *string    `json:"pool_serial,omitempty" db:"pool_serial"`
 	CreatedAt             time.Time  `json:"created_at" db:"created_at"`
@@ -145,8 +149,13 @@ type FrequencyRequest struct {
 	ApprovalNotes        *string    `json:"approval_notes,omitempty" db:"approval_notes"`
 	DeniedReason         *string    `json:"denied_reason,omitempty" db:"denied_reason"`
 	AssignmentID         *uuid.UUID `json:"assignment_id,omitempty" db:"assignment_id"`
-	CreatedAt            time.Time  `json:"created_at" db:"created_at"`
-	UpdatedAt            time.Time  `json:"updated_at" db:"updated_at"`
+	RoutedToWorkbox      *string          `json:"routed_to_workbox,omitempty" db:"routed_to_workbox"`
+	EditAuthorityWorkbox *string          `json:"edit_authority_workbox,omitempty" db:"edit_authority_workbox"`
+	// SFAFDraft stores in-progress SFAF approval form fields so workbox edits
+	// are preserved server-side and available to all reviewers across browsers.
+	SFAFDraft            *json.RawMessage `json:"sfaf_draft,omitempty" db:"sfaf_draft"`
+	CreatedAt            time.Time        `json:"created_at" db:"created_at"`
+	UpdatedAt            time.Time        `json:"updated_at" db:"updated_at"`
 }
 
 // FrequencyConflict tracks potential interference between assignments
@@ -188,15 +197,19 @@ type UnitWithAssignments struct {
 
 // FrequencyRequestWithDetails includes request and related information
 type FrequencyRequestWithDetails struct {
-	Request         *FrequencyRequest  `json:"request"`
-	Unit            *Unit              `json:"unit"`
-	Installation    *Installation      `json:"installation,omitempty"`
-	RequestedBy     *User              `json:"requested_by"`
-	ReviewedBy      *User              `json:"reviewed_by,omitempty"`
-	ApprovedBy      *User              `json:"approved_by,omitempty"`
-	Assignment      *FrequencyAssignment `json:"assignment,omitempty"`
-	Comments        []RequestComment   `json:"comments,omitempty"`
-	CoordinatedWith []string           `json:"coordinated_with,omitempty"`
+	Request              *FrequencyRequest    `json:"request"`
+	Unit                 *Unit                `json:"unit"`
+	Installation         *Installation        `json:"installation,omitempty"`
+	RequestedBy          *User                `json:"requested_by"`
+	ReviewedBy           *User                `json:"reviewed_by,omitempty"`
+	ApprovedBy           *User                `json:"approved_by,omitempty"`
+	Assignment           *FrequencyAssignment `json:"assignment,omitempty"`
+	Comments             []RequestComment     `json:"comments,omitempty"`
+	CoordinatedWith      []string             `json:"coordinated_with,omitempty"`
+	// EditAuthorityWorkbox is the ISM workbox that currently holds edit authority.
+	// For pending requests this is the submitter's ISM unit; after assignment creation
+	// it mirrors the assignment's edit_authority_workbox.
+	EditAuthorityWorkbox *string              `json:"edit_authority_workbox,omitempty"`
 }
 
 // FrequencyAssignmentWithDetails includes assignment and unit info
@@ -277,6 +290,7 @@ type CreateFrequencyRequestInput struct {
 	Justification        string     `json:"justification" binding:"required"`
 	StopBuzzer           string     `json:"stop_buzzer,omitempty"`
 	MissionImpact        string     `json:"mission_impact,omitempty"`
+	ISMOffice            string     `json:"ism_office,omitempty"`
 }
 
 // UpdateFrequencyRequestStatusInput for reviewing/approving requests

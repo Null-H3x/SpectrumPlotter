@@ -59,6 +59,7 @@
             <button class="tab" data-tab="installations"><i class="fas fa-map-marker-alt"></i> Installations</button>
             <button class="tab" data-tab="system-config"><i class="fas fa-cog"></i> System Config</button>
             <button class="tab" data-tab="sfaf-codes"><i class="fas fa-list-ol"></i> SFAF Codes</button>
+            <button class="tab" data-tab="control-numbers"><i class="fas fa-hashtag"></i> 702s</button>
         </div>
 
         <!-- Main Content -->
@@ -341,7 +342,89 @@
                     </div>
                 </div>
             </div>
+        <!-- Control Numbers (702s) Tab -->
+            <div id="control-numbers-tab" class="tab-panel">
+                <div class="table-manager">
+                    <div class="toolbar">
+                        <div class="toolbar-left">
+                            <h2><i class="fas fa-hashtag"></i> 702 — Control / Request Numbers</h2>
+                            <span style="font-size:0.85em;color:#888;margin-left:12px;">Reference table of organizational control numbers and their purpose</span>
+                        </div>
+                        <div class="toolbar-right">
+                            <div class="search-box">
+                                <i class="fas fa-search"></i>
+                                <input type="text" id="cnSearch" placeholder="Search numbers..." oninput="referenceData.filterControlNumbers(this.value)">
+                            </div>
+                            <button class="btn btn-primary" onclick="referenceData.showAddControlNumber()">
+                                <i class="fas fa-plus"></i> Add 702
+                            </button>
+                        </div>
+                    </div>
+                    <div class="data-table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:30%;">Control / Request Number</th>
+                                    <th>Description / Purpose</th>
+                                    <th style="width:100px;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cnTableBody">
+                                <tr class="loading-row">
+                                    <td colspan="3" style="text-align:center;">
+                                        <i class="fas fa-spinner fa-spin"></i> Loading…
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
         </main>
+
+        <!-- Control Number Edit Modal -->
+        <div id="cnModal" class="modal" style="display:none;">
+            <div class="modal-dialog">
+                <div class="modal-header">
+                    <h3 id="cnModalTitle"><i class="fas fa-hashtag"></i> Add 702 Entry</h3>
+                    <button class="modal-close" onclick="referenceData.closeCNModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="cnForm">
+                        <input type="hidden" id="cnId">
+                        <div class="form-group">
+                            <label>Control / Request Number <span class="required">*</span></label>
+                            <div style="display:grid;grid-template-columns:1fr 80px 90px;gap:8px;">
+                                <div>
+                                    <div style="font-size:0.75rem;color:#94a3b8;margin-bottom:3px;">Organization</div>
+                                    <input type="text" id="cnName" class="form-input" placeholder="e.g. AFSOC" oninput="referenceData.updateCNPreview()">
+                                </div>
+                                <div>
+                                    <div style="font-size:0.75rem;color:#94a3b8;margin-bottom:3px;">Year</div>
+                                    <input type="number" id="cnYear" class="form-input" placeholder="2026" min="2000" max="2099" oninput="referenceData.updateCNPreview()">
+                                </div>
+                                <div>
+                                    <div style="font-size:0.75rem;color:#94a3b8;margin-bottom:3px;">Sequence</div>
+                                    <input type="number" id="cnSequence" class="form-input" placeholder="201" min="1" oninput="referenceData.updateCNPreview()">
+                                </div>
+                            </div>
+                            <div id="cnPreview" style="margin-top:6px;font-family:monospace;font-size:0.88rem;color:#64b5f6;min-height:1.3em;padding-left:2px;"></div>
+                        </div>
+                        <div class="form-group">
+                            <label for="cnDescription">Description / Purpose <span class="required">*</span></label>
+                            <textarea id="cnDescription" class="form-input" rows="3" required placeholder="What this number is used for…"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="referenceData.closeCNModal()">Cancel</button>
+                    <button class="btn btn-primary" onclick="referenceData.saveCN()">
+                        <i class="fas fa-save"></i> Save
+                    </button>
+                </div>
+            </div>
+        </div>
 
         <!-- SFAF Lookup Edit Modal -->
         <div id="sfafLookupModal" class="modal" style="display:none;">

@@ -2,6 +2,7 @@
 package handlers
 
 import (
+	"io"
 	"net/http"
 	"sfaf-plotter/models"
 	"sfaf-plotter/services"
@@ -377,15 +378,20 @@ func (h *FrequencyHandler) GetUserRequests(c *gin.Context) {
 	})
 }
 
-// GetPendingRequests returns all pending/under review requests (s6/admin only)
+// GetPendingRequests returns pending/under_review requests visible to the caller's workbox.
 // GET /api/frequency/requests/pending
 func (h *FrequencyHandler) GetPendingRequests(c *gin.Context) {
 	if !atLeast(c, "ism") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "ISM-level access or higher required"})
 		return
 	}
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
 
-	requests, err := h.service.GetPendingRequestsWithDetails()
+	requests, err := h.service.GetPendingRequestsWithDetails(userID.(uuid.UUID))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -508,6 +514,51 @@ func (h *FrequencyHandler) RetractFrequencyRequest(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "request retracted", "request": request})
 }
 
+// ReturnRequest routes a request back to the originating ISM workbox.
+// PUT /api/frequency/requests/:id/return
+func (h *FrequencyHandler) ReturnRequest(c *gin.Context) {
+	if !atLeast(c, "ism") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "ISM-level access or higher required"})
+		return
+	}
+	requestID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request id"})
+		return
+	}
+	if err := h.service.ReturnRequest(requestID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "request returned to originating workbox"})
+}
+
+// SaveRequestSFAFDraft persists in-progress SFAF form fields on the request
+// so edits made by one workbox are visible to all reviewers across browsers.
+// PUT /api/frequency/requests/:id/sfaf-draft
+func (h *FrequencyHandler) SaveRequestSFAFDraft(c *gin.Context) {
+	if !atLeast(c, "ism") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "ISM-level access or higher required"})
+		return
+	}
+	requestID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request id"})
+		return
+	}
+	// Read raw JSON body — we store it as-is in the JSONB column.
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil || len(body) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "request body required"})
+		return
+	}
+	if err := h.service.SaveRequestSFAFDraft(requestID, body); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "draft saved"})
+}
+
 // ReviewFrequencyRequest updates the status of a frequency request (s6/admin only)
 // PUT /api/frequency/requests/:id/review
 func (h *FrequencyHandler) ReviewFrequencyRequest(c *gin.Context) {
@@ -608,7 +659,7 @@ func (h *FrequencyHandler) ApproveFrequencyRequest(c *gin.Context) {
 	})
 }
 
-// GetSubmittedAssignments returns all assignments created by the current user.
+// GetSubmittedAssignments returns all P/S assignments from the current user's ISM unit.
 // GET /api/frequency/assignments/submitted
 func (h *FrequencyHandler) GetSubmittedAssignments(c *gin.Context) {
 	userID, exists := c.Get("userID")
@@ -619,6 +670,22 @@ func (h *FrequencyHandler) GetSubmittedAssignments(c *gin.Context) {
 	result, err := h.service.GetSubmittedAssignments(userID.(uuid.UUID))
 	if err != nil {
 		_ = c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"assignments": result})
+}
+
+// GetInboundAssignments returns P/S assignments routed to the current user's ISM workbox.
+// GET /api/frequency/assignments/inbound
+func (h *FrequencyHandler) GetInboundAssignments(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+	result, err := h.service.GetInboundAssignments(userID.(uuid.UUID))
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -774,6 +841,56 @@ func (h *FrequencyHandler) ElevateAssignment(c *gin.Context) {
 	})
 }
 
+// BulkRouteRequests sets routed_to_workbox on multiple frequency requests at once.
+// PUT /api/frequency/requests/bulk-route
+func (h *FrequencyHandler) BulkRouteRequests(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+	if !atLeast(c, "ism") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "ISM-level access or higher required"})
+		return
+	}
+
+	var body struct {
+		RequestIDs []string `json:"request_ids" binding:"required"`
+		RoutedTo   *string  `json:"routed_to"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if len(body.RequestIDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no request_ids provided"})
+		return
+	}
+
+	ids := make([]uuid.UUID, 0, len(body.RequestIDs))
+	for _, s := range body.RequestIDs {
+		id, err := uuid.Parse(s)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request id: " + s})
+			return
+		}
+		ids = append(ids, id)
+	}
+
+	var workbox *string
+	if body.RoutedTo != nil && *body.RoutedTo != "" {
+		workbox = body.RoutedTo
+	}
+
+	isAdmin := atLeast(c, "admin")
+	count, err := h.service.BulkRouteRequests(ids, workbox, userID.(uuid.UUID), isAdmin)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"updated": count})
+}
+
 // BulkRouteAssignments sets routed_to on multiple P/S proposals at once.
 // ISMs may only route proposals they own; admins bypass the ownership check.
 // PUT /api/frequency/assignments/bulk-route
@@ -925,12 +1042,18 @@ func (h *FrequencyHandler) AddRequestComment(c *gin.Context) {
 		return
 	}
 	var body struct {
-		Workbox string `json:"workbox" binding:"required"`
-		Body    string `json:"body"    binding:"required"`
+		Workbox string `json:"workbox"`
+		Body    string `json:"body" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+	// Fall back to the user's ISM unit name if workbox not supplied by client
+	if body.Workbox == "" {
+		if ismUnit, err := h.service.GetUserISMUnit(userID.(uuid.UUID)); err == nil {
+			body.Workbox = ismUnit.Name
+		}
 	}
 	comment, err := h.service.AddRequestComment(requestID, userID.(uuid.UUID), body.Workbox, body.Body)
 	if err != nil {
@@ -1011,4 +1134,64 @@ func (h *FrequencyHandler) CleanupOrphanedAssignments(c *gin.Context) {
 		"message": "Cleanup completed successfully",
 		"deleted": deleted,
 	})
+}
+
+// ── Control Numbers (702) ─────────────────────────────────────────────────────
+
+// GET /api/control-numbers
+func (h *FrequencyHandler) GetControlNumbers(c *gin.Context) {
+	rows, err := h.service.GetControlNumbers()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"control_numbers": rows})
+}
+
+// POST /api/control-numbers
+func (h *FrequencyHandler) CreateControlNumber(c *gin.Context) {
+	var cn models.ControlNumber
+	if err := c.ShouldBindJSON(&cn); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.service.CreateControlNumber(&cn); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, cn)
+}
+
+// PUT /api/control-numbers/:id
+func (h *FrequencyHandler) UpdateControlNumber(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+	var cn models.ControlNumber
+	if err := c.ShouldBindJSON(&cn); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	cn.ID = id
+	if err := h.service.UpdateControlNumber(&cn); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, cn)
+}
+
+// DELETE /api/control-numbers/:id
+func (h *FrequencyHandler) DeleteControlNumber(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+	if err := h.service.DeleteControlNumber(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }

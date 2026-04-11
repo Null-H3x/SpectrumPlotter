@@ -73,3 +73,8 @@ Nomination/Subassignment tool
 - The select button should allow user to select what record to assign frequency to
 
 - Add support for nomination based on area spectrum occupancy and allocation tables
+
+Add JRFL functionality
+Add FAS Agenda Functionality
+Add Compliance Checks
+Add Alottment/Channeling Plans

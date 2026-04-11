@@ -218,34 +218,41 @@ func (s *FrequencyService) CreateFrequencyAssignment(
 		recordType = "A"
 	}
 
+	// Resolve initial edit authority from creator's ISM unit.
+	var editAuthorityWorkbox *string
+	if ismUnit, err := s.repo.GetUserISMUnit(createdBy); err == nil {
+		editAuthorityWorkbox = &ismUnit.Name
+	}
+
 	// Create assignment
 	assignment := &models.FrequencyAssignment{
-		UnitID:              input.UnitID,
-		Serial:              strPtr(input.Serial),
-		SFAFRecordType:      recordType,
-		Frequency:           input.Frequency,
-		FrequencyMhz:        input.FrequencyMhz,
-		AssignmentType:      input.AssignmentType,
-		Purpose:             strPtr(input.Purpose),
-		NetName:             strPtr(input.NetName),
-		Callsign:            strPtr(input.Callsign),
-		EmissionDesignator:  strPtr(input.EmissionDesignator),
-		Bandwidth:           strPtr(input.Bandwidth),
-		PowerWatts:          input.PowerWatts,
-		AuthorizedRadiusKm:  input.AuthorizedRadiusKm,
-		AssignmentDate:      input.AssignmentDate,
-		ExpirationDate:      input.ExpirationDate,
-		AssignmentAuthority: strPtr(input.AssignmentAuthority),
-		AuthorizationNumber: strPtr(input.AuthorizationNumber),
-		Priority:            defaultStr(input.Priority, "routine"),
-		IsEncrypted:         input.IsEncrypted,
-		EncryptionType:      strPtr(input.EncryptionType),
-		Classification:      input.Classification,
-		Notes:               strPtr(input.Notes),
-		IsActive:            true,
-		CreatedBy:           &createdBy,
-		RoutedToWorkbox:     input.RoutedToWorkbox,
-		PoolSerial:          strPtr(input.PoolSerial),
+		UnitID:               input.UnitID,
+		Serial:               strPtr(input.Serial),
+		SFAFRecordType:       recordType,
+		Frequency:            input.Frequency,
+		FrequencyMhz:         input.FrequencyMhz,
+		AssignmentType:       input.AssignmentType,
+		Purpose:              strPtr(input.Purpose),
+		NetName:              strPtr(input.NetName),
+		Callsign:             strPtr(input.Callsign),
+		EmissionDesignator:   strPtr(input.EmissionDesignator),
+		Bandwidth:            strPtr(input.Bandwidth),
+		PowerWatts:           input.PowerWatts,
+		AuthorizedRadiusKm:   input.AuthorizedRadiusKm,
+		AssignmentDate:       input.AssignmentDate,
+		ExpirationDate:       input.ExpirationDate,
+		AssignmentAuthority:  strPtr(input.AssignmentAuthority),
+		AuthorizationNumber:  strPtr(input.AuthorizationNumber),
+		Priority:             defaultStr(input.Priority, "routine"),
+		IsEncrypted:          input.IsEncrypted,
+		EncryptionType:       strPtr(input.EncryptionType),
+		Classification:       input.Classification,
+		Notes:                strPtr(input.Notes),
+		IsActive:             true,
+		CreatedBy:            &createdBy,
+		RoutedToWorkbox:      input.RoutedToWorkbox,
+		EditAuthorityWorkbox: editAuthorityWorkbox,
+		PoolSerial:           strPtr(input.PoolSerial),
 	}
 
 	err = s.repo.CreateFrequencyAssignment(assignment)
@@ -321,6 +328,21 @@ func (s *FrequencyService) SubmitFrequencyRequest(
 		return &s
 	}
 
+	// Resolve edit authority workbox.
+	// Priority: ism_office (if it's a workbox name, not a UUID) → requester's ISM unit.
+	var editAuthorityWorkbox *string
+	if input.ISMOffice != "" {
+		if _, parseErr := uuid.Parse(input.ISMOffice); parseErr != nil {
+			// Not a UUID — treat as a workbox/ISM unit name
+			editAuthorityWorkbox = &input.ISMOffice
+		}
+	}
+	if editAuthorityWorkbox == nil {
+		if ismUnit, ismErr := s.repo.GetUserISMUnit(requestedBy); ismErr == nil {
+			editAuthorityWorkbox = &ismUnit.Name
+		}
+	}
+
 	// Create request
 	request := &models.FrequencyRequest{
 		UnitID:               input.UnitID,
@@ -364,6 +386,8 @@ func (s *FrequencyService) SubmitFrequencyRequest(
 		Justification:        input.Justification,
 		StopBuzzer:           strPtr(input.StopBuzzer),
 		MissionImpact:        strPtr(input.MissionImpact),
+		RoutedToWorkbox:      editAuthorityWorkbox,
+		EditAuthorityWorkbox: editAuthorityWorkbox,
 	}
 
 	err = s.repo.CreateFrequencyRequest(request)
@@ -396,8 +420,16 @@ func (s *FrequencyService) ReviewFrequencyRequest(
 		return nil, err
 	}
 
+	// When marking under_review, claim edit authority for the caller's workbox.
+	var editAuth *string
+	if status == "under_review" {
+		if ismUnit, ismErr := s.repo.GetUserISMUnit(reviewedBy); ismErr == nil {
+			editAuth = &ismUnit.Name
+		}
+	}
+
 	// Update status
-	err = s.repo.UpdateFrequencyRequestStatus(requestID, status, &reviewedBy, notes, "", "")
+	err = s.repo.UpdateFrequencyRequestStatus(requestID, status, &reviewedBy, notes, "", "", editAuth)
 	if err != nil {
 		return nil, err
 	}
@@ -441,7 +473,19 @@ func (s *FrequencyService) ApproveAndCreateAssignment(
 }
 
 func (s *FrequencyService) ResubmitFrequencyRequest(requestID, userID uuid.UUID, input models.CreateFrequencyRequestInput) (*models.FrequencyRequest, error) {
-	return s.repo.ResubmitFrequencyRequest(requestID, userID, input)
+	// Resolve edit authority and routing workbox, same logic as initial submission.
+	var workbox *string
+	if input.ISMOffice != "" {
+		if _, parseErr := uuid.Parse(input.ISMOffice); parseErr != nil {
+			workbox = &input.ISMOffice
+		}
+	}
+	if workbox == nil {
+		if ismUnit, err := s.repo.GetUserISMUnit(userID); err == nil {
+			workbox = &ismUnit.Name
+		}
+	}
+	return s.repo.ResubmitFrequencyRequest(requestID, userID, input, workbox)
 }
 
 func (s *FrequencyService) GetUserRequestsWithDetails(userID uuid.UUID) ([]models.FrequencyRequestWithDetails, error) {
@@ -465,8 +509,12 @@ func (s *FrequencyService) GetUserRequestsWithDetails(userID uuid.UUID) ([]model
 	return result, nil
 }
 
-func (s *FrequencyService) GetPendingRequestsWithDetails() ([]models.FrequencyRequestWithDetails, error) {
-	requests, err := s.repo.GetPendingRequests()
+func (s *FrequencyService) GetPendingRequestsWithDetails(callerID uuid.UUID) ([]models.FrequencyRequestWithDetails, error) {
+	var callerWorkbox *string
+	if ismUnit, err := s.repo.GetUserISMUnit(callerID); err == nil {
+		callerWorkbox = &ismUnit.Name
+	}
+	requests, err := s.repo.GetPendingRequests(callerWorkbox)
 	if err != nil {
 		return nil, err
 	}
@@ -484,13 +532,40 @@ func (s *FrequencyService) GetPendingRequestsWithDetails() ([]models.FrequencyRe
 		comments, _ := s.repo.GetRequestComments(request.ID)
 		coordinated, _ := s.repo.GetRequestCoordinations(request.ID)
 
+		// Resolve linked assignment and edit authority.
+		// Priority: request's own edit_authority_workbox (set on distribution)
+		//           → linked assignment's edit_authority_workbox
+		//           → requester's ISM unit (initial submission fallback)
+		var linkedAssignment *models.FrequencyAssignment
+		var editAuthority *string
+
+		if request.EditAuthorityWorkbox != nil {
+			editAuthority = request.EditAuthorityWorkbox
+		}
+
+		if request.AssignmentID != nil {
+			if a, err := s.repo.GetFrequencyAssignmentByID(*request.AssignmentID); err == nil {
+				linkedAssignment = a
+				if editAuthority == nil && a.EditAuthorityWorkbox != nil {
+					editAuthority = a.EditAuthorityWorkbox
+				}
+			}
+		}
+		if editAuthority == nil {
+			if ismUnit, err := s.repo.GetUserISMUnit(request.RequestedBy); err == nil {
+				editAuthority = &ismUnit.Name
+			}
+		}
+
 		result = append(result, models.FrequencyRequestWithDetails{
-			Request:         &request,
-			Unit:            unit,
-			Installation:    install,
-			RequestedBy:     requester,
-			Comments:        comments,
-			CoordinatedWith: coordinated,
+			Request:              &request,
+			Unit:                 unit,
+			Installation:         install,
+			RequestedBy:          requester,
+			Assignment:           linkedAssignment,
+			Comments:             comments,
+			CoordinatedWith:      coordinated,
+			EditAuthorityWorkbox: editAuthority,
 		})
 	}
 
@@ -539,7 +614,8 @@ func (s *FrequencyService) CanUserManageUnit(userID, unitID uuid.UUID) (bool, er
 	return false, nil
 }
 
-// GetSubmittedAssignments returns all assignments created by the given user, enriched with unit and routed-to user.
+// GetSubmittedAssignments returns all P/S assignments from the given user's ISM unit,
+// enriched with unit info. These populate the Submitted Proposals workbox sub-tab.
 func (s *FrequencyService) GetSubmittedAssignments(userID uuid.UUID) ([]models.FrequencyAssignmentWithDetails, error) {
 	assignments, err := s.repo.GetSubmittedAssignments(userID)
 	if err != nil {
@@ -549,6 +625,31 @@ func (s *FrequencyService) GetSubmittedAssignments(userID uuid.UUID) ([]models.F
 	for _, a := range assignments {
 		unit, _ := s.repo.GetUnitByID(a.UnitID)
 		result = append(result, models.FrequencyAssignmentWithDetails{Assignment: &a, Unit: unit})
+	}
+	return result, nil
+}
+
+// GetInboundAssignments returns P/S assignments routed to the given user's ISM workbox.
+// These populate the Action Items workbox sub-tab alongside pending requests.
+func (s *FrequencyService) GetInboundAssignments(userID uuid.UUID) ([]models.FrequencyAssignmentWithDetails, error) {
+	ismUnit, err := s.repo.GetUserISMUnit(userID)
+	if err != nil {
+		return nil, nil // user has no ISM unit — return empty, not an error
+	}
+	assignments, err := s.repo.GetInboundAssignments(ismUnit.Name)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]models.FrequencyAssignmentWithDetails, 0, len(assignments))
+	for _, a := range assignments {
+		unit, _ := s.repo.GetUnitByID(a.UnitID)
+		detail := models.FrequencyAssignmentWithDetails{Assignment: &a, Unit: unit}
+		if a.CreatedBy != nil {
+			detail.CreatedBy, _ = s.userRepo.GetUserByID(*a.CreatedBy)
+		}
+		detail.CoordinatedWith, _ = s.repo.GetCoordinations(a.ID)
+		detail.Comments, _ = s.repo.GetComments(a.ID)
+		result = append(result, detail)
 	}
 	return result, nil
 }
@@ -663,16 +764,43 @@ func (s *FrequencyService) RetractProposalAssignment(assignmentID, createdBy uui
 }
 
 // BulkRouteAssignments sets routed_to_workbox on the given P/S proposal IDs.
-// ISMs may only route their own proposals; admins bypass the ownership check.
+// Only the workbox that currently holds edit authority may distribute a record.
+// Admins bypass the check.
 func (s *FrequencyService) BulkRouteAssignments(ids []uuid.UUID, workbox *string, callerID uuid.UUID, isAdmin bool) (int64, error) {
-	var ownerID *uuid.UUID
+	var callerWorkbox *string
 	if !isAdmin {
-		ownerID = &callerID
+		if ismUnit, err := s.repo.GetUserISMUnit(callerID); err == nil {
+			callerWorkbox = &ismUnit.Name
+		}
 	}
-	return s.repo.BulkRouteAssignments(ids, workbox, ownerID)
+	return s.repo.BulkRouteAssignments(ids, workbox, callerWorkbox)
+}
+
+// BulkRouteRequests sets routed_to_workbox on the given frequency request IDs.
+func (s *FrequencyService) BulkRouteRequests(ids []uuid.UUID, workbox *string, callerID uuid.UUID, isAdmin bool) (int64, error) {
+	var callerWorkbox *string
+	if !isAdmin {
+		if ismUnit, err := s.repo.GetUserISMUnit(callerID); err == nil {
+			callerWorkbox = &ismUnit.Name
+		}
+	}
+	return s.repo.BulkRouteRequests(ids, workbox, callerWorkbox)
 }
 
 // DeleteFrequencyRequest permanently removes a cancelled/denied request.
+func (s *FrequencyService) GetUserISMUnit(userID uuid.UUID) (*models.Unit, error) {
+	return s.repo.GetUserISMUnit(userID)
+}
+
+// ReturnRequest sends a request back to the originating ISM workbox.
+func (s *FrequencyService) ReturnRequest(requestID uuid.UUID) error {
+	return s.repo.ReturnRequest(requestID)
+}
+
+func (s *FrequencyService) SaveRequestSFAFDraft(requestID uuid.UUID, draft []byte) error {
+	return s.repo.SaveRequestSFAFDraft(requestID, draft)
+}
+
 func (s *FrequencyService) DeleteFrequencyRequest(requestID, requestedBy uuid.UUID, isAdmin bool) error {
 	return s.repo.DeleteFrequencyRequest(requestID, requestedBy, isAdmin)
 }
@@ -711,4 +839,23 @@ func (s *FrequencyService) GetFiveYearReviews(userID uuid.UUID, role string) ([]
 		result = append(result, models.FrequencyAssignmentWithDetails{Assignment: &a, Unit: unit})
 	}
 	return result, nil
+}
+
+
+// ── Control Numbers (702) ─────────────────────────────────────────────────────
+
+func (s *FrequencyService) GetControlNumbers() ([]models.ControlNumber, error) {
+	return s.repo.GetControlNumbers()
+}
+
+func (s *FrequencyService) CreateControlNumber(cn *models.ControlNumber) error {
+	return s.repo.CreateControlNumber(cn)
+}
+
+func (s *FrequencyService) UpdateControlNumber(cn *models.ControlNumber) error {
+	return s.repo.UpdateControlNumber(cn)
+}
+
+func (s *FrequencyService) DeleteControlNumber(id uuid.UUID) error {
+	return s.repo.DeleteControlNumber(id)
 }

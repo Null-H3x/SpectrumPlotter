@@ -289,6 +289,58 @@ function serialPickerSelect(serial) {
     closeSerialPicker();
 }
 
+// ── 702 Control Number Picker ─────────────────────────────────────────────
+let _cn702PickerRows = [];
+
+async function open702Picker() {
+    document.getElementById('cn702PickerModal').style.display = 'flex';
+    document.getElementById('cn702PickerSearch').value = '';
+    const list = document.getElementById('cn702PickerList');
+    list.innerHTML = '<div style="color:#64748b;text-align:center;padding:24px;font-size:0.85rem;">Loading…</div>';
+    try {
+        const res  = await fetch('/api/frequency/control-numbers');
+        const data = await res.json();
+        _cn702PickerRows = data.control_numbers || [];
+        document.getElementById('cn702PickerInfo').textContent =
+            `${_cn702PickerRows.length} entr${_cn702PickerRows.length === 1 ? 'y' : 'ies'}`;
+        _702PickerRender(_cn702PickerRows);
+    } catch (e) {
+        list.innerHTML = `<div style="color:#ef5350;text-align:center;padding:24px;">Failed to load: ${e.message}</div>`;
+    }
+}
+
+function close702Picker() {
+    document.getElementById('cn702PickerModal').style.display = 'none';
+}
+
+function _702PickerFilter() {
+    const q = document.getElementById('cn702PickerSearch').value.toLowerCase().trim();
+    if (!q) { _702PickerRender(_cn702PickerRows); return; }
+    _702PickerRender(_cn702PickerRows.filter(cn =>
+        cn.number.toLowerCase().includes(q) ||
+        (cn.description || '').toLowerCase().includes(q)
+    ));
+}
+
+function _702PickerRender(rows) {
+    const list = document.getElementById('cn702PickerList');
+    if (!rows.length) {
+        list.innerHTML = '<div style="color:#64748b;text-align:center;padding:24px;font-size:0.85rem;font-style:italic;">No entries found</div>';
+        return;
+    }
+    list.innerHTML = rows.map(cn => `
+        <div class="cn702-picker-row" onclick="_702PickerSelect(${JSON.stringify(cn.number)}, ${JSON.stringify(cn.description || '')})">
+            <span class="cn702-num">${cn.number}</span>
+            ${cn.description ? `<span class="cn702-desc">${cn.description}</span>` : ''}
+        </div>`).join('');
+}
+
+function _702PickerSelect(number, description) {
+    document.getElementById('sfaf_702').value = number;
+    if (description) document.getElementById('sfaf_702_desc').value = description;
+    close702Picker();
+}
+
 // ── Pool Frequency Picker ──────────────────────────────────────────────────
 let _poolPickerWindow = null;
 
@@ -297,11 +349,52 @@ function openPoolPicker() {
         _poolPickerWindow.focus();
         return;
     }
+
+    // Build pre-fill params from the currently open approval form
+    const params = new URLSearchParams();
+
+    // Frequency range: use sfaf_110 as a point frequency, or fall back to request range
+    const freq110 = (document.getElementById('sfaf_110')?.value || '').trim();
+    if (freq110) {
+        // Strip prefix (K/M) if present and convert to MHz
+        const freqMHz = _sfafFreqToMHz(freq110);
+        if (freqMHz) {
+            params.set('startFreq', freqMHz);
+            params.set('endFreq',   freqMHz);
+        }
+    } else {
+        const reqData = pendingRequests.find(r => r.request.id === currentRequestId);
+        if (reqData?.request?.frequency_range_min) params.set('startFreq', reqData.request.frequency_range_min);
+        if (reqData?.request?.frequency_range_max) params.set('endFreq',   reqData.request.frequency_range_max);
+    }
+
+    // Emission designator → emission type (first 3 chars = bandwidth, rest = type)
+    const ems = (document.getElementById('sfaf_114')?.value || '').trim();
+    if (ems) params.set('emissionType', ems);
+
+    // Power (sfaf_115 format: "W50" for 50W)
+    const pwr = (document.getElementById('sfaf_115')?.value || '').trim();
+    if (pwr) {
+        const pwrNum = parseFloat(pwr.replace(/^[Ww]/, ''));
+        if (!isNaN(pwrNum)) params.set('minPower', pwrNum);
+    }
+
+    const qs = params.toString();
     _poolPickerWindow = window.open(
-        '/frequency-nomination',
-        'poolPicker',
-        'width=1300,height=750,resizable=yes,scrollbars=yes'
+        '/frequency-nomination' + (qs ? '?' + qs : ''),
+        '_blank'
     );
+}
+
+// Convert SFAF frequency string (e.g. "M243.000", "K34500") to MHz number
+function _sfafFreqToMHz(sfaf) {
+    if (!sfaf) return null;
+    const s = sfaf.toUpperCase().trim();
+    const val = parseFloat(s.replace(/^[KMG]/, ''));
+    if (isNaN(val)) return null;
+    if (s.startsWith('K')) return val / 1000;
+    if (s.startsWith('G')) return val * 1000;
+    return val; // M prefix or bare number = MHz
 }
 
 function applyPoolSelection(data) {
@@ -640,7 +733,7 @@ async function _loadSfafLookups() {
 }
 
 // Repopulate a <select> from the cache for the given fieldCode.
-// keepCustom=true appends a "Custom…" option at the end (for 200-series).
+// keepCustom=true appends an "Other" option at the end (for 200-series).
 // The current value is restored if it still exists in the new option list.
 function _populateSfafSelect(selectId, fieldCode, keepCustom = false) {
     const sel = document.getElementById(selectId);
@@ -668,13 +761,23 @@ function _populateSfafSelect(selectId, fieldCode, keepCustom = false) {
 
     if (keepCustom) {
         const custom = document.createElement('option');
-        custom.value = 'CUSTOM';
-        custom.textContent = 'Custom…';
+        custom.value = 'OTHER';
+        custom.textContent = 'Other';
         sel.appendChild(custom);
     }
 
-    if (currentVal && [...sel.options].some(o => o.value === currentVal)) {
-        sel.value = currentVal;
+    if (currentVal) {
+        if ([...sel.options].some(o => o.value === currentVal)) {
+            sel.value = currentVal;
+        } else {
+            // Value not in rebuilt list (hardcoded option displaced by DB list, or legacy value).
+            // Re-add it so the user's selection is not silently lost.
+            const opt = document.createElement('option');
+            opt.value = currentVal;
+            opt.textContent = currentVal;
+            sel.appendChild(opt);
+            sel.value = currentVal;
+        }
     }
 }
 
@@ -767,7 +870,7 @@ function _populateAllApprovalSelects() {
     _populateSfafSelect('sfaf_463',  '363');   // RX polarization uses same list as TX
     _populateSfafSelect('sfaf_704',  '704');
     _populateSfafSelect('sfaf_716',  '716');
-    // Selects that keep a "Custom…" option (200-series)
+    // Selects that keep an "Other" option (200-series)
     _populateSfafSelect('sfaf_200',  '200', true);
     _populateSfafSelect('sfaf_201',  '201', true);
     _populateSfafSelect('sfaf_202',  '202', true);
@@ -883,9 +986,8 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     // Route default tab by URL path
     if (isWorkbox) {
-        if (window.canViewProposals) switchTab('proposals');
-        else if (isISM)              switchTab('pending-review');
-        else                         window.location.replace('/frequency');
+        if (isISM) switchTab('pending-review');
+        else       window.location.replace('/frequency');
     }
     // /frequency stays on 'permanent' (the default active tab in HTML)
 });
@@ -1021,15 +1123,27 @@ async function loadRequests() {
     }
 }
 
+let inboundAssignments = [];
+
 async function loadPendingRequests() {
     try {
-        const res  = await fetch('/api/frequency/requests/pending');
-        const data = await res.json();
-        pendingRequests = sortByPriorityAndAge(data.requests || []);
+        const [reqRes, inboundRes] = await Promise.all([
+            fetch('/api/frequency/requests/pending'),
+            fetch('/api/frequency/assignments/inbound')
+        ]);
+        const reqData     = await reqRes.json();
+        const inboundData = inboundRes.ok ? await inboundRes.json() : {};
+
+        pendingRequests    = sortByPriorityAndAge(reqData.requests || []);
+        inboundAssignments = inboundData.assignments || [];
+
+        const total = pendingRequests.length + inboundAssignments.length;
         const pendingBadge = document.getElementById('pendingCount');
-        if (pendingBadge) pendingBadge.textContent = pendingRequests.length;
-        document.getElementById('actionItemsCount').textContent = pendingRequests.length;
+        if (pendingBadge) pendingBadge.textContent = total;
+        document.getElementById('actionItemsCount').textContent = total;
+
         renderWorkbox(pendingRequests);
+        renderInboundAssignments(inboundAssignments);
     } catch (err) {
         console.error('Error loading pending requests:', err);
         showError('pendingRequestsContainer', 'Error loading workbox');
@@ -1078,7 +1192,6 @@ function updateWorkboxActionBar() {
     const bar   = document.getElementById('workboxActionBar');
     const count = document.getElementById('workboxSelectedCount');
     if (!bar) return;
-    bar.style.display = selectedWorkboxIds.size > 0 ? 'flex' : 'none';
     if (count) count.textContent = `${selectedWorkboxIds.size} selected`;
 
     // Status Log and Lateral Coordination only apply to a single selection
@@ -1106,32 +1219,88 @@ window.clearWorkboxSelection = function() {
     updateWorkboxActionBar();
 };
 
-window.routeSelectedWorkbox = async function() {
+window.routeSelectedWorkbox = function() {
     if (selectedWorkboxIds.size === 0) return;
     const sel   = document.getElementById('workboxRouteToAction');
     const dest  = sel?.value || null;
-    const label = sel?.selectedOptions[0]?.text || 'all reviewers';
+    const label = sel?.selectedOptions[0]?.text || '';
 
-    // Require a comment
-    const comment = prompt(`Comment required for Status Log (distributing ${selectedWorkboxIds.size} record${selectedWorkboxIds.size > 1 ? 's' : ''} to: ${label}):`);
-    if (comment === null) return; // cancelled
-    if (!comment.trim()) {
-        showAlert('A comment is required when distributing records.', 'warning');
+    if (!dest) {
+        showAlert('Select a destination workbox before distributing.', 'warning');
         return;
     }
 
-    // Post comment to each request's status log, then route
-    const ids = [...selectedWorkboxIds];
+    // Open the distribution modal (comment entered there, not via prompt)
+    const destSpan = document.getElementById('distributeModalDest');
+    const countEl  = document.getElementById('distributeRecordCount');
+    const textarea = document.getElementById('distributeComment');
+    if (destSpan) destSpan.textContent = label || dest;
+    if (countEl)  countEl.textContent  = `${selectedWorkboxIds.size} record${selectedWorkboxIds.size !== 1 ? 's' : ''} selected`;
+    if (textarea) textarea.value = '';
+    const modal = document.getElementById('distributeModal');
+    if (modal) { modal.style.display = 'flex'; setTimeout(() => textarea?.focus(), 50); }
+};
+
+window.closeDistributeModal = function() {
+    const modal = document.getElementById('distributeModal');
+    if (modal) modal.style.display = 'none';
+};
+
+window.confirmDistribute = async function() {
+    const comment  = document.getElementById('distributeComment')?.value.trim();
+    if (!comment) {
+        showAlert('A Status Log entry is required when distributing.', 'warning');
+        return;
+    }
+
+    const sel  = document.getElementById('workboxRouteToAction');
+    const dest = sel?.value || null;
+    if (!dest) return;
+
+    const requestIds = [...selectedWorkboxIds];
+
+    closeDistributeModal();
+
     try {
-        // Add status log comment to each selected request
-        await Promise.all(ids.map(id =>
-            fetch(`/api/frequency/requests/${id}/review`, {
+        // If the approval modal is open for one of the selected requests,
+        // auto-save that draft to the server before routing so the receiving
+        // workbox gets the in-progress SFAF edits.
+        const openModalId = document.getElementById('approvalModal')?.style.display !== 'none'
+            ? document.getElementById('approvalRequestId')?.value
+            : null;
+        if (openModalId && requestIds.includes(openModalId)) {
+            const draft = { requestId: openModalId, savedAt: new Date().toISOString(), fields: collectApprovalFormData() };
+            const draftStr = JSON.stringify(draft);
+            localStorage.setItem(`approvalDraft:${openModalId}`, draftStr);
+            await fetch(`/api/frequency/requests/${openModalId}/sfaf-draft`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: 'under_review', notes: comment.trim() })
+                body: draftStr,
+            }).catch(() => {});
+        }
+
+        // Route the requests themselves to the destination workbox
+        const routeRes = await fetch('/api/frequency/requests/bulk-route', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ request_ids: requestIds, routed_to: dest }),
+        });
+        const routeData = await routeRes.json();
+        if (!routeRes.ok) {
+            showAlert('Distribute failed: ' + (routeData.error || routeRes.statusText), 'danger');
+            return;
+        }
+
+        // Post the comment to each request's status log
+        await Promise.all(requestIds.map(id =>
+            fetch(`/api/frequency/requests/${id}/comments`, {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ body: comment, workbox: userWorkbox || '' }),
             })
         ));
-        showAlert(`Distributed ${ids.length} record${ids.length > 1 ? 's' : ''} to ${label} with comment.`, 'success');
+
+        showAlert(`Distributed ${routeData.updated} record${routeData.updated !== 1 ? 's' : ''} to ${dest}.`, 'success');
         clearWorkboxSelection();
         loadPendingRequests();
     } catch (err) {
@@ -1202,10 +1371,16 @@ function renderWorkbox(reqs, filtered = false) {
         const freqStr = req.requested_frequency ||
             (req.frequency_range_min != null ? `${req.frequency_range_min}–${req.frequency_range_max} MHz` : '—');
 
+        // pool_serial is the authoritative column; fall back to sfaf_draft.fields.sfaf_102
+        // for records where the serial was entered in a draft before pool_serial sync was added.
+        const cardSerial = req.pool_serial || req.sfaf_draft?.fields?.sfaf_102 || null;
+
         const actionBtns = [
             `<button class="btn-xs btn-xs-info" onclick="viewRequest('${req.id}')"><i class="fas fa-eye"></i> View</button>`
         ];
-        if (isPending) {
+        const editAuth = r.edit_authority_workbox;
+        const myWorkboxOwnsIt = userWorkbox && editAuth && editAuth === userWorkbox;
+        if ((isPending || isUnderReview) && !myWorkboxOwnsIt) {
             actionBtns.push(
                 `<button class="btn-xs btn-xs-review" onclick="markUnderReview('${req.id}')"><i class="fas fa-clipboard-check"></i> Mark Under Review</button>`
             );
@@ -1225,7 +1400,12 @@ function renderWorkbox(reqs, filtered = false) {
 
         return `
         <div class="request-card workbox-card pri-${pri}${checked ? ' wb-card-selected' : ''}" style="position:relative;">
-            <label style="position:absolute;top:10px;left:10px;cursor:pointer;z-index:1;">
+            <div class="workbox-card-serial-bar">
+                <span class="workbox-serial ${cardSerial ? 'workbox-serial-assigned' : 'workbox-serial-unassigned'}">
+                    Serial: ${cardSerial || 'Not Yet Assigned'}
+                </span>
+            </div>
+            <label style="position:absolute;top:38px;left:10px;cursor:pointer;z-index:1;">
                 <input type="checkbox" class="workbox-cb" data-id="${req.id}" ${checked}
                     onchange="toggleWorkboxSelect(this)" style="accent-color:#3b82f6;cursor:pointer;">
             </label>
@@ -1259,12 +1439,75 @@ function renderWorkbox(reqs, filtered = false) {
                     <span class="workbox-field-value">${formatDate(req.start_date)}${req.end_date ? ' – ' + formatDate(req.end_date) : ' (permanent)'}</span>
                 </div>
                 ${req.justification ? `<div class="workbox-field" style="width:100%;flex-basis:100%;"><span class="workbox-field-label">Justification:</span><span class="workbox-field-value">${req.justification}</span></div>` : ''}
+                <div class="workbox-field" style="width:100%;flex-basis:100%;margin-top:4px;">
+                    <span class="workbox-field-label"><i class="fas fa-user-shield" style="margin-right:4px;"></i>Edit Authority:</span>
+                    <span class="workbox-field-value" style="font-weight:600;color:${r.edit_authority_workbox ? '#60a5fa' : '#64748b'};">
+                        ${r.edit_authority_workbox || 'Unassigned'}
+                    </span>
+                </div>
             </div>
             <div class="workbox-card-actions">
                 ${actionBtns.join('')}
             </div>
             <div id="req-comment-row-${req.id}" style="display:none;padding:0 12px 8px;">
                 ${commentLogHtml}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function renderInboundAssignments(assignments) {
+    const section   = document.getElementById('inboundAssignmentsSection');
+    const container = document.getElementById('inboundAssignmentsContainer');
+    if (!container || !section) return;
+
+    if (!assignments || assignments.length === 0) {
+        section.style.display = 'none';
+        return;
+    }
+    section.style.display = '';
+
+    container.innerHTML = assignments.map(p => {
+        const a    = p.assignment;
+        const unit = p.unit;
+        const typeLabel = { P: 'Permanent Proposal', S: 'Temporary Proposal' };
+        const coordChips = (p.coordinated_with || []).map(wb =>
+            `<span class="coord-chip" title="Lateral coordination">${wb}</span>`
+        ).join('');
+
+        const commentLog = renderCommentLog(a.id, p.comments || []);
+
+        return `
+        <div class="request-card workbox-card" style="border-left:3px solid #6366f1;">
+            <div class="workbox-card-header">
+                <div class="workbox-card-title">
+                    <h4>${unit?.name || 'Unknown Unit'} — ${a.frequency}</h4>
+                    <div class="workbox-card-meta">
+                        <span>${typeLabel[a.sfaf_record_type] || a.sfaf_record_type}</span>
+                        <span>• Received ${formatDate(a.updated_at)}</span>
+                    </div>
+                </div>
+                <div class="workbox-card-badges">
+                    <span class="frequency-badge" style="background:#312e81;color:#c7d2fe;">DISTRIBUTED</span>
+                    ${coordChips}
+                </div>
+            </div>
+            <div class="workbox-card-body">
+                ${a.purpose ? `<div class="workbox-field"><span class="workbox-field-label">Purpose:</span><span class="workbox-field-value">${a.purpose}</span></div>` : ''}
+                ${a.emission_designator ? `<div class="workbox-field"><span class="workbox-field-label">Emission:</span><span class="workbox-field-value">${a.emission_designator}</span></div>` : ''}
+                <div class="workbox-field">
+                    <span class="workbox-field-label"><i class="fas fa-user-shield" style="margin-right:4px;"></i>Edit Authority:</span>
+                    <span class="workbox-field-value" style="font-weight:600;color:#60a5fa;">${a.edit_authority_workbox || '—'}</span>
+                </div>
+            </div>
+            <div class="workbox-card-actions">
+                <button class="btn-xs btn-xs-info" onclick="viewAssignment('${a.id}')"><i class="fas fa-eye"></i> View</button>
+                <button class="btn-xs btn-xs-secondary" onclick="openInboundCommentLog('${a.id}')">
+                    <i class="fas fa-comments"></i> Status Log${(p.comments||[]).length ? ` (${p.comments.length})` : ''}
+                </button>
+            </div>
+            <div id="inbound-comment-row-${a.id}" style="display:none;padding:0 12px 8px;">
+                ${commentLog}
             </div>
         </div>`;
     }).join('');
@@ -1289,23 +1532,68 @@ window.markUnderReview = async function(requestId) {
     }
 };
 
-window.quickReject = async function(requestId) {
-    const reason = prompt('Reason for rejection (required):');
-    if (!reason || !reason.trim()) return;
-    currentRequestId = requestId;
+window.quickReject = function(requestId) {
+    _rejectModalMode    = 'return';
+    _rejectModalTarget  = requestId;
+    document.getElementById('rejectModalTitle').textContent        = 'Return Record';
+    document.getElementById('rejectModalDesc').textContent         = 'Provide a reason. This entry is required and will appear in the record\'s Status Log.';
+    document.getElementById('rejectModalConfirmLabel').textContent = 'Return & Log';
+    document.getElementById('rejectComment').value = '';
+    document.getElementById('rejectModal').style.display = 'flex';
+    setTimeout(() => document.getElementById('rejectComment').focus(), 50);
+};
+
+window.closeRejectModal = function() {
+    document.getElementById('rejectModal').style.display = 'none';
+};
+
+let _rejectModalMode   = 'return'; // 'return' | 'deny'
+let _rejectModalTarget = null;
+
+window.confirmReject = async function() {
+    const comment = document.getElementById('rejectComment').value.trim();
+    if (!comment) {
+        showAlert('A reason is required before rejecting or returning a record.', 'warning');
+        document.getElementById('rejectComment').focus();
+        return;
+    }
+
+    closeRejectModal();
+
     try {
-        const res = await fetch(`/api/frequency/requests/${requestId}/review`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'denied', notes: reason.trim() })
-        });
-        if (res.ok) {
-            showAlert('Request rejected and returned to originator', 'success');
-            loadPendingRequests();
+        if (_rejectModalMode === 'return') {
+            // Post the comment first, then return the record
+            await fetch(`/api/frequency/requests/${_rejectModalTarget}/comments`, {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ body: comment, workbox: userWorkbox || '' }),
+            });
+            const res = await fetch(`/api/frequency/requests/${_rejectModalTarget}/return`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+            });
+            if (res.ok) {
+                showAlert('Record returned to originating workbox.', 'success');
+            } else {
+                const d = await res.json();
+                showAlert('Error: ' + (d.error || 'Failed to return'), 'danger');
+            }
         } else {
-            const d = await res.json();
-            showAlert('Error: ' + (d.error || 'Failed to reject'), 'danger');
+            // 'deny' — set status to denied with the comment as the reason
+            const res = await fetch(`/api/frequency/requests/${_rejectModalTarget}/review`, {
+                method:  'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ status: 'denied', notes: comment }),
+            });
+            if (res.ok) {
+                showAlert('Request rejected.', 'success');
+                closeRequestModal();
+            } else {
+                const d = await res.json();
+                showAlert('Error: ' + (d.error || 'Failed to reject'), 'danger');
+            }
         }
+        loadPendingRequests();
     } catch (err) {
         showAlert('Error: ' + err.message, 'danger');
     }
@@ -1433,11 +1721,18 @@ function renderRequests(containerId, requests) {
     }
 
     container.innerHTML = requests.map(req => {
-        const retractable = ['pending', 'under_review'].includes(req.request.status);
+        const retractable = req.request.status === 'pending';
         const retractBtn = retractable
             ? `<button class="btn-xs btn-xs-danger" title="Retract this request"
                 onclick="event.stopPropagation(); retractRequest('${req.request.id}')">
                 <i class="fas fa-undo-alt"></i> Retract
+               </button>`
+            : '';
+        const resubmittable = req.request.status === 'cancelled';
+        const resubmitBtn = resubmittable
+            ? `<button class="btn-xs btn-xs-primary" title="Edit and resubmit this request"
+                onclick="event.stopPropagation(); openResubmitModal('${req.request.id}')">
+                <i class="fas fa-edit"></i> Edit &amp; Resubmit
                </button>`
             : '';
         return `
@@ -1454,6 +1749,7 @@ function renderRequests(containerId, requests) {
                     <span class="frequency-badge badge-${req.request.priority}">${formatPurpose(req.request.priority)}</span>
                     <span class="frequency-badge badge-${req.request.status.replace('_', '-')}">${formatStatus(req.request.status)}</span>
                     ${retractBtn}
+                    ${resubmitBtn}
                 </div>
             </div>
             <div class="request-body">
@@ -1947,7 +2243,7 @@ function generateRequestActionsHTML(requestData) {
         actions += '<button class="btn btn-success" onclick="openApprovalModal()">Approve</button>';
         actions += '<button class="btn btn-danger" onclick="rejectRequest()">Reject</button>';
     }
-    if (['pending', 'under_review'].includes(req.status)) {
+    if (req.status === 'pending') {
         actions += `<button class="btn btn-danger" onclick="closeRequestModal(); retractRequest('${req.id}')">
             <i class="fas fa-undo-alt"></i> Retract
         </button>`;
@@ -2185,6 +2481,18 @@ function openApprovalModal() {
     // Reset form
     document.getElementById('approvalForm').reset();
     toggleApprovalEncryption(false);
+    // Remove dynamically-added occurrence rows (form.reset() only resets values, not DOM structure)
+    document.querySelectorAll('#sfaf-500-entries .occurrence-group:not(:first-child), #sfaf-501-entries .occurrence-group:not(:first-child)').forEach(el => el.remove());
+    document.querySelectorAll('#emission-groups .emission-group:not(:first-child)').forEach(el => el.remove());
+    // Reset 702 table to one blank row
+    const _tbody702 = document.getElementById('tbody-702');
+    if (_tbody702) {
+        _tbody702.innerHTML = `<tr class="row-702">
+            <td><input type="text" class="form-control form-control-sm field-702-number" placeholder="e.g. AFSOC 2026-269"></td>
+            <td><input type="text" class="form-control form-control-sm field-702-desc" placeholder="Short description"></td>
+            <td><button type="button" class="btn-702-remove" onclick="remove702Row(this)" style="display:none;" title="Remove">✕</button></td>
+        </tr>`;
+    }
     // Clear any stale 512/513 options left over from a previous modal open.
     cascade511to512();
 
@@ -2271,7 +2579,7 @@ document.getElementById('approvalRequestId').value = currentRequestId;
             } catch (_) { /* ignore parse errors */ }
         }
         if (req.authorized_radius_km != null)
-            setVal('sfaf_306', `${Math.round(req.authorized_radius_km)}${req.operating_area_applies_to || 'B'}`);
+            setVal('sfaf_306', `${Math.ceil(req.authorized_radius_km)}${req.operating_area_applies_to || 'B'}`);
 
         // ── Transmitter Equipment / Antenna ──
         setVal('sfaf_340',             req.antenna_make_model || '');
@@ -2289,7 +2597,7 @@ document.getElementById('approvalRequestId').value = currentRequestId;
         // ── Receiver Data (400 series) ──
         // coverage_area is internal only — not mapped to any SFAF field
         if (req.authorized_radius_km != null)
-            setVal('sfaf_406', `${Math.round(req.authorized_radius_km)}${req.operating_area_applies_to || 'B'}`);
+            setVal('sfaf_406', `${Math.ceil(req.authorized_radius_km)}${req.operating_area_applies_to || 'B'}`);
         // Mirror TX equipment to RX when rx_same_as_tx (defaults true)
         if (req.rx_same_as_tx !== false) {
             setVal('sfaf_440', req.antenna_make_model || '');
@@ -2327,7 +2635,9 @@ document.getElementById('approvalRequestId').value = currentRequestId;
                    String(today.getDate()).padStart(2, '0');
     function _fmtPOC(user) {
         if (!user) return '';
-        const name  = (user.full_name || '').toUpperCase().trim();
+        const parts = (user.full_name || '').toUpperCase().trim().split(/\s+/);
+        // Only first and last name
+        const name  = parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1]}` : parts[0] || '';
         const phone = (user.phone_dsn || user.phone || '').replace(/\D/g, '');
         return [name, phone, yymmdd].filter(Boolean).join(',');
     }
@@ -2336,7 +2646,31 @@ document.getElementById('approvalRequestId').value = currentRequestId;
     if (requestData?.requested_by && !document.getElementById('sfaf_803').value)
         setVal('sfaf_803', _fmtPOC(requestData.requested_by));
 
-    // Restore any previously saved draft (overwrites auto-populated values)
+    // Restore draft — prefer server-side (travels across workboxes) over localStorage.
+    // Use whichever has the later savedAt timestamp.
+    const localRaw   = localStorage.getItem(`approvalDraft:${currentRequestId}`);
+    const serverRaw  = requestData?.request?.sfaf_draft ? JSON.stringify(requestData.request.sfaf_draft) : null;
+    let   draftToUse = null;
+    try {
+        const local  = localRaw  ? JSON.parse(localRaw)  : null;
+        const server = serverRaw ? (typeof requestData.request.sfaf_draft === 'string'
+                                    ? JSON.parse(requestData.request.sfaf_draft)
+                                    : requestData.request.sfaf_draft) : null;
+        if (local && server) {
+            draftToUse = new Date(local.savedAt) >= new Date(server.savedAt) ? local : server;
+        } else {
+            draftToUse = local || server;
+        }
+    } catch (_) { draftToUse = null; }
+
+    if (draftToUse) {
+        // Write into localStorage so restoreApprovalDraft picks it up
+        localStorage.setItem(`approvalDraft:${currentRequestId}`, JSON.stringify(draftToUse));
+    }
+    // Repopulate all DB-managed selects BEFORE restoring draft so options exist
+    // when the draft's saved values are written into the select elements.
+    _populateAllApprovalSelects();
+
     const savedAt = restoreApprovalDraft(currentRequestId);
     if (savedAt) {
         showAlert(`Draft restored (saved ${new Date(savedAt).toLocaleTimeString()})`, 'info');
@@ -2345,10 +2679,6 @@ document.getElementById('approvalRequestId').value = currentRequestId;
     // Apply saved defaults to any fields still blank after request prefill / draft restore
     applyApprovalDefaults();
     updateDefaultsBadge();
-
-    // Repopulate all DB-managed selects with any values added/changed via the
-    // SFAF Codes admin tab. Runs after defaults so the restored value is preserved.
-    _populateAllApprovalSelects();
 
     document.getElementById('approvalModal').style.display = 'flex';
 
@@ -2380,6 +2710,211 @@ function closeApprovalModal() {
     if (panel) panel.style.display = 'none';
     const results = document.getElementById('deconflictResults');
     if (results) results.innerHTML = '';
+    // Close output menu if open
+    const om = document.getElementById('outputMenu');
+    if (om) om.style.display = 'none';
+    // Close 702 picker if open
+    const p702 = document.getElementById('cn702PickerModal');
+    if (p702) p702.style.display = 'none';
+}
+
+// ── Output menu ───────────────────────────────────────────────────────────────
+
+function toggleOutputMenu() {
+    const menu = document.getElementById('outputMenu');
+    if (!menu) return;
+    const isOpen = menu.style.display !== 'none';
+    menu.style.display = isOpen ? 'none' : '';
+    if (!isOpen) {
+        // Close when clicking outside
+        setTimeout(() => {
+            document.addEventListener('click', function _close(e) {
+                if (!document.getElementById('outputMenuWrap')?.contains(e.target)) {
+                    menu.style.display = 'none';
+                    document.removeEventListener('click', _close);
+                }
+            });
+        }, 0);
+    }
+}
+
+// Collect all SFAF field values from the approval form into a flat object.
+// Returns { fieldNum: value } e.g. { '102': 'AF260001', '110': 'M138.000', ... }
+function _collectSFAFFields() {
+    const fields = {};
+    // Collect single-value fields by id pattern sfaf_NNN or sfaf_NNN_N
+    document.querySelectorAll('#approvalForm input[id^="sfaf_"], #approvalForm select[id^="sfaf_"], #approvalForm textarea[id^="sfaf_"]').forEach(el => {
+        if (el.type === 'hidden' && el.id.endsWith('_text')) return; // skip display helpers
+        const m = el.id.match(/^sfaf_(\d+(?:_\d+)?)$/);
+        if (!m) return;
+        const val = el.type === 'checkbox' ? (el.checked ? 'Y' : '') : (el.value || '').trim();
+        if (val) fields[m[1]] = val;
+    });
+    // 206 / 209 etc. — resolve "OTHER" → custom text
+    ['sfaf_200','sfaf_201','sfaf_202','sfaf_203','sfaf_204','sfaf_205','sfaf_206','sfaf_209'].forEach(id => {
+        const sel = document.getElementById(id);
+        if (sel?.value === 'OTHER') {
+            const custom = document.getElementById(id + '_custom');
+            const num = id.replace('sfaf_', '');
+            if (custom?.value.trim()) fields[num] = custom.value.trim();
+            else delete fields[num];
+        }
+    });
+    // Emission groups (113-116) — use first group IDs; additional groups appended
+    const emGroups = [...document.querySelectorAll('#emission-groups .emission-group')].map(g => ({
+        113: (g.querySelector('#sfaf_113, [data-field="sfaf_113"]') || {}).value || '',
+        114: (g.querySelector('#sfaf_114, [data-field="sfaf_114"]') || {}).value || '',
+        115: (g.querySelector('#sfaf_115, [data-field="sfaf_115"]') || {}).value || '',
+        116: (g.querySelector('#sfaf_116, [data-field="sfaf_116"]') || {}).value || '',
+    }));
+    // 500 / 501 multi-occurrence
+    const occ500    = [...document.querySelectorAll('#sfaf-500-entries input')].map(i => i.value.trim()).filter(Boolean);
+    const occ501    = [...document.querySelectorAll('#sfaf-501-entries input')].map(i => i.value.trim()).filter(Boolean);
+    const entries702 = _collect702Entries();
+    return { fields, emGroups, occ500, occ501, entries702 };
+}
+
+// Helper: get label for a field number from SFAF
+const SFAF_LABELS = {
+    '005':'Classification', '010':'Agency', '101':'Frequency File', '102':'Serial Number',
+    '107':'Receipt Date', '110':'Frequency', '113':'Station Class', '114':'Emission Designator',
+    '115':'Power', '116':'Power Type', '130':'Hours of Operation', '140':'Effective Date',
+    '141':'Expiration Date', '144':'Coordination', '151':'Coordination Status',
+    '200':'Agency', '201':'Unified Command', '202':'Service Component', '203':'Bureau',
+    '204':'Command', '205':'Subcommand', '206':'IFM', '207':'Operating Unit', '208':'Net/Code',
+    '209':'AFC', '300':'State/Country', '301':'Installation', '303':'Coordinates',
+    '306':'Radius', '340':'TX Equipment', '354':'TX Antenna', '355':'TX Ant Nomenclature',
+    '357':'TX Ant Gain', '358':'TX Elevation', '359':'TX Height AGL', '360':'TX H-Beamwidth',
+    '361':'TX V-Beamwidth', '362':'TX Orientation', '363':'TX Polarization',
+    '400':'RX State/Country', '401':'RX Installation', '403':'RX Coordinates', '406':'RX Radius',
+    '440':'RX Equipment', '443':'RX Cert', '454':'RX Antenna', '458':'RX Elevation',
+    '459':'RX Height AGL', '460':'RX H-Beamwidth', '461':'RX V-Beamwidth',
+    '462':'RX Orientation', '463':'RX Polarization',
+    '500':'IRAC Notes', '501':'Notes', '502':'Description', '503':'Agency Free-text',
+    '511':'MFI', '512':'IFI', '513':'DFI',
+    '520':'Justification', '702':'Coordination Notes', '704':'Coordination Type',
+    '716':'Spectrum Use', '801':'POC Action', '803':'POC Requester',
+};
+
+window.outputSFAF1Col = function() {
+    document.getElementById('outputMenu').style.display = 'none';
+    const { fields, emGroups, occ500, occ501 } = _collectSFAFFields();
+    const lines = [];
+    // Build ordered field list
+    const allNums = Object.keys(fields).sort((a, b) => parseFloat(a) - parseFloat(b));
+    allNums.forEach(num => {
+        // Emission group fields are handled separately
+        if (['113','114','115','116'].includes(num)) return;
+        lines.push(`${num.padEnd(6)}${SFAF_LABELS[num] ? SFAF_LABELS[num] + ': ' : ''}${fields[num]}`);
+    });
+    // Emission groups
+    emGroups.forEach((g, i) => {
+        const prefix = emGroups.length > 1 ? ` [Group ${i+1}]` : '';
+        if (g['113']) lines.push(`113${prefix.padEnd(3)}Station Class: ${g['113']}`);
+        if (g['114']) lines.push(`114${prefix.padEnd(3)}Emission Designator: ${g['114']}`);
+        if (g['115']) lines.push(`115${prefix.padEnd(3)}Power: ${g['115']}`);
+        if (g['116']) lines.push(`116${prefix.padEnd(3)}Power Type: ${g['116']}`);
+    });
+    occ500.forEach(v => lines.push(`500   IRAC Notes: ${v}`));
+    occ501.forEach(v => lines.push(`501   Notes: ${v}`));
+    entries702.forEach(e => lines.push(`702   Control/Request Number: ${e.number}${e.description ? ' — ' + e.description : ''}`));
+    _openTextOutput('SFAF — 1 Column', lines.join('\n'));
+};
+
+window.outputSFAF3Col = function() {
+    document.getElementById('outputMenu').style.display = 'none';
+    const { fields, emGroups, occ500, occ501 } = _collectSFAFFields();
+    const skip = new Set(['113','114','115','116']);
+    const entries = Object.keys(fields)
+        .filter(n => !skip.has(n))
+        .sort((a, b) => parseFloat(a) - parseFloat(b))
+        .map(n => `${n.padEnd(4)}${fields[n]}`);
+    emGroups.forEach((g, i) => {
+        const sfx = emGroups.length > 1 ? `/${i+1}` : '';
+        if (g['113']) entries.push(`113${sfx}  ${g['113']}`);
+        if (g['114']) entries.push(`114${sfx}  ${g['114']}`);
+        if (g['115']) entries.push(`115${sfx}  ${g['115']}`);
+        if (g['116']) entries.push(`116${sfx}  ${g['116']}`);
+    });
+    occ500.forEach(v => entries.push(`500   ${v}`));
+    occ501.forEach(v => entries.push(`501   ${v}`));
+    entries702.forEach(e => entries.push(`702   ${e.number}${e.description ? ' / ' + e.description : ''}`));
+    // Arrange in 3 columns
+    const colW = Math.ceil(entries.length / 3);
+    const cols = [entries.slice(0, colW), entries.slice(colW, colW*2), entries.slice(colW*2)];
+    const rows = [];
+    for (let i = 0; i < colW; i++) {
+        rows.push([cols[0][i] || '', cols[1][i] || '', cols[2][i] || ''].map(s => s.padEnd(28)).join(' | '));
+    }
+    _openTextOutput('SFAF — 3 Column', rows.join('\n'));
+};
+
+window.outputSpreadsheet = function() {
+    document.getElementById('outputMenu').style.display = 'none';
+    const { fields, emGroups, occ500, occ501 } = _collectSFAFFields();
+    const rows = [['Field', 'Label', 'Value']];
+    const skip = new Set(['113','114','115','116']);
+    Object.keys(fields).filter(n => !skip.has(n)).sort((a,b) => parseFloat(a)-parseFloat(b)).forEach(n => {
+        rows.push([n, SFAF_LABELS[n] || '', fields[n]]);
+    });
+    emGroups.forEach((g, i) => {
+        const sfx = emGroups.length > 1 ? ` (Group ${i+1})` : '';
+        if (g['113']) rows.push(['113', 'Station Class' + sfx, g['113']]);
+        if (g['114']) rows.push(['114', 'Emission Designator' + sfx, g['114']]);
+        if (g['115']) rows.push(['115', 'Power' + sfx, g['115']]);
+        if (g['116']) rows.push(['116', 'Power Type' + sfx, g['116']]);
+    });
+    occ500.forEach(v => rows.push(['500', 'IRAC Notes', v]));
+    occ501.forEach(v => rows.push(['501', 'Notes', v]));
+    entries702.forEach(e => rows.push(['702', 'Control/Request Number', e.number, e.description || '']));
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+    _downloadFile('sfaf_export.csv', 'text/csv', csv);
+};
+
+window.outputGMF = function() {
+    document.getElementById('outputMenu').style.display = 'none';
+    const { fields, emGroups, occ500, occ501 } = _collectSFAFFields();
+    // GMF format: fixed-width record lines per MIL-STD-461 / IRAC GMF spec
+    // Each line: field tag (3 chars) + occurrence (1 char) + value
+    const lines = [];
+    const addLine = (num, occ, val) => {
+        if (val) lines.push(`${String(num).padStart(3,'0')}${occ} ${val}`);
+    };
+    const skip = new Set(['113','114','115','116']);
+    Object.keys(fields).filter(n => !skip.has(n)).sort((a,b) => parseFloat(a)-parseFloat(b)).forEach(n => {
+        addLine(n, '1', fields[n]);
+    });
+    emGroups.forEach((g, i) => {
+        const occ = String(i + 1);
+        addLine(113, occ, g['113']);
+        addLine(114, occ, g['114']);
+        addLine(115, occ, g['115']);
+        addLine(116, occ, g['116']);
+    });
+    occ500.forEach((v, i) => addLine(500, String(i+1), v));
+    occ501.forEach((v, i) => addLine(501, String(i+1), v));
+    entries702.forEach((e, i) => addLine(702, String(i+1), e.number + (e.description ? ' ' + e.description : '')));
+    _openTextOutput('GMF Export', lines.join('\n'));
+};
+
+function _openTextOutput(title, content) {
+    const w = window.open('', '_blank', 'width=800,height=600,scrollbars=yes');
+    if (!w) { showAlert('Allow pop-ups to view output.', 'warning'); return; }
+    w.document.write(`<!DOCTYPE html><html><head><title>${title}</title>
+<style>body{background:#0f172a;color:#e2e8f0;font-family:monospace;font-size:13px;padding:20px;}
+pre{white-space:pre-wrap;word-break:break-all;}
+h2{color:#93c5fd;margin-bottom:12px;font-family:sans-serif;}</style></head>
+<body><h2>${title}</h2><pre>${content.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</pre></body></html>`);
+    w.document.close();
+}
+
+function _downloadFile(filename, mime, content) {
+    const blob = new Blob([content], { type: mime });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
 }
 
 // ── Approval modal map ────────────────────────────────────────────────────────
@@ -2507,31 +3042,14 @@ function _latlngToSFAF(lat, lon) {
          + String(lonD).padStart(3,'0') + String(lonM).padStart(2,'0') + String(lonS).padStart(2,'0') + lonH;
 }
 
-// Parse SFAF field 306 radius: "30B" → metres (NM × 1852), "UNL" → null
+// Parse SFAF field 306 radius: "100B" → metres (km × 1000), "UNL" → null
 function _parseSFAFRadius(str) {
     if (!str) return null;
     const s = str.trim().toUpperCase();
     if (s === 'UNL' || s === 'UNLIM') return null;
     const m = s.match(/^(\d+(?:\.\d+)?)/);
     if (!m) return null;
-    return parseFloat(m[1]) * 1852; // NM → metres
-}
-
-// Radius unit helpers — SFAF fields always store NM
-function _getMapRadiusUnit() {
-    return document.getElementById('mapRadiusUnit')?.value || 'NM';
-}
-function _toNM(val, unit) {
-    const n = parseFloat(val);
-    if (isNaN(n)) return '';
-    if (unit === 'KM')  return (n / 1.852).toFixed(4);
-    if (unit === 'MI')  return (n / 1.15078).toFixed(4);
-    return String(n); // already NM
-}
-function _fromNM(nm, unit) {
-    if (unit === 'KM')  return (nm * 1.852).toFixed(1);
-    if (unit === 'MI')  return (nm * 1.15078).toFixed(1);
-    return nm.toFixed(1); // NM
+    return parseFloat(m[1]) * 1000; // km → metres
 }
 
 // updateApprovalMap — redraws marker + circle, never moves the camera.
@@ -2544,11 +3062,11 @@ window.updateApprovalMap = function(panToLocation) {
     // For map circle: use 306 first (strip T/B suffix), fall back to 406
     const radiusStr = radius306 || radius406;
 
-    // Keep map-panel radius input in sync (convert NM → selected display unit)
+    // Keep map-panel radius input in sync (value is km, ceil to whole number)
     const mapRadiusEl = document.getElementById('mapRadiusInput');
     if (mapRadiusEl && mapRadiusEl !== document.activeElement) {
-        const nmRaw = parseFloat(radiusStr.replace(/[TBtb]$/, ''));
-        mapRadiusEl.value = isNaN(nmRaw) ? radiusStr.replace(/[TBtb]$/, '') : _fromNM(nmRaw, _getMapRadiusUnit());
+        const kmRaw = parseFloat(radiusStr.replace(/[TBtb]$/, ''));
+        mapRadiusEl.value = isNaN(kmRaw) ? '' : Math.ceil(kmRaw);
     }
     _syncRadiusSuffixCheckboxes(radius306, radius406);
 
@@ -2673,22 +3191,22 @@ function _updateRadiusLabel(suffix) {
     else                     label.textContent = '306 — Radius';
 }
 
-// Called when user types in the map-panel radius input
+// Called when user types in the map-panel radius input (value is km, whole numbers)
 window.onMapRadiusInput = function(raw) {
-    const numeric = raw.replace(/[TBtb]$/, '').trim();
-    const nmVal   = numeric ? _toNM(numeric, _getMapRadiusUnit()) : '';
+    const numeric = String(raw).replace(/[TBtb]$/, '').trim();
+    const kmVal   = numeric ? String(Math.ceil(parseFloat(numeric)) || '') : '';
     const checked = [...document.querySelectorAll('input[name="radiusSuffix"]')].find(c => c.checked);
     const suffix = checked?.value || 'T';
     const f306 = document.getElementById('sfaf_306');
     const f406 = document.getElementById('sfaf_406');
     if (suffix === 'R') {
         if (f306) f306.value = '';
-        if (f406) f406.value = nmVal;
+        if (f406) f406.value = kmVal;
     } else if (suffix === 'B') {
-        if (f306) f306.value = nmVal ? nmVal + 'B' : '';
+        if (f306) f306.value = kmVal ? kmVal + 'B' : '';
         if (f406) f406.value = '';
     } else {
-        if (f306) f306.value = nmVal ? nmVal + 'T' : '';
+        if (f306) f306.value = kmVal ? kmVal + 'T' : '';
         if (f406) f406.value = '';
     }
     updateApprovalMap();
@@ -2723,18 +3241,6 @@ window.onRadiusSuffixChange = function(cb) {
     updateApprovalMap();
 };
 
-// Called when the unit dropdown changes — re-display the current NM value in the new unit
-window.onMapRadiusUnitChange = function() {
-    const f306 = document.getElementById('sfaf_306')?.value || '';
-    const f406 = document.getElementById('sfaf_406')?.value || '';
-    const radiusStr = f306 || f406;
-    const nm = parseFloat(radiusStr.replace(/[TBtb]$/, ''));
-    const mapRadiusEl = document.getElementById('mapRadiusInput');
-    if (mapRadiusEl && !isNaN(nm)) {
-        mapRadiusEl.value = _fromNM(nm, _getMapRadiusUnit());
-    }
-    updateApprovalMap();
-};
 
 // ── Frequency Deconfliction ────────────────────────────────────────────────────
 
@@ -2893,19 +3399,43 @@ window.assignDeconflictFreq = function(freqStr, freqMhz) {
 // Collect every input/select/textarea inside the approval form into a plain object
 function collectApprovalFormData() {
     const data = {};
+
+    // Ensure the hidden sfaf_102 value is in sync with the visible text input
+    // in case the user hasn't blurred the field yet.
+    const _102text   = document.getElementById('sfaf_102_text');
+    const _102hidden = document.getElementById('sfaf_102');
+    if (_102text && _102hidden) _102hidden.value = _102text.value.trim();
+
+    // Multi-occurrence lists: stored as arrays keyed by container id
+    ['sfaf-500-entries', 'sfaf-501-entries'].forEach(cid => {
+        const c = document.getElementById(cid);
+        if (c) data[`__occ__${cid}`] = [...c.querySelectorAll('input')].map(i => i.value);
+    });
+
+    // Emission groups (113-116): stored as array of objects
+    data['__emission_groups__'] = [...document.querySelectorAll('#emission-groups .emission-group')].map(g => ({
+        sfaf_113: (g.querySelector('#sfaf_113, [data-field="sfaf_113"]') || {}).value || '',
+        sfaf_114: (g.querySelector('#sfaf_114, [data-field="sfaf_114"]') || {}).value || '',
+        sfaf_115: (g.querySelector('#sfaf_115, [data-field="sfaf_115"]') || {}).value || '',
+        sfaf_116: (g.querySelector('#sfaf_116, [data-field="sfaf_116"]') || {}).value || '',
+    }));
+
+    // 702 table entries
+    data['__702_entries__'] = _collect702Entries();
+
+    // All other fields — skip elements inside multi-occurrence containers and 702 table
     document.querySelectorAll('#approvalForm input, #approvalForm select, #approvalForm textarea').forEach(el => {
+        if (el.closest('#sfaf-500-entries, #sfaf-501-entries, #emission-groups, #sfaf-702-manager')) return;
         const key = el.id || el.dataset.field;
         if (!key) return;
-        if (el.type === 'checkbox') {
-            data[key] = el.checked;
-        } else {
-            data[key] = el.value;
-        }
+        if (el.type === 'checkbox') data[key] = el.checked;
+        else data[key] = el.value;
     });
+
     return data;
 }
 
-function saveApprovalDraft() {
+async function saveApprovalDraft() {
     const requestId = document.getElementById('approvalRequestId').value;
     if (!requestId) { showAlert('No request selected.', 'warning'); return; }
 
@@ -2914,7 +3444,29 @@ function saveApprovalDraft() {
         savedAt: new Date().toISOString(),
         fields: collectApprovalFormData(),
     };
-    localStorage.setItem(`approvalDraft:${requestId}`, JSON.stringify(draft));
+    const draftStr = JSON.stringify(draft);
+    localStorage.setItem(`approvalDraft:${requestId}`, draftStr);
+
+    // Persist to server so draft travels across browsers/workboxes
+    try {
+        await fetch(`/api/frequency/requests/${requestId}/sfaf-draft`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: draftStr,
+        });
+
+        // If sfaf_102 (serial) was saved, update in-memory data so the workbox
+        // card reflects the new serial without requiring a full page refresh.
+        const serial = draft.fields['sfaf_102'];
+        if (serial) {
+            [allRequests, pendingRequests].forEach(arr => {
+                if (!Array.isArray(arr)) return;
+                const entry = arr.find(r => r.request.id === requestId);
+                if (entry) entry.request.pool_serial = serial;
+            });
+            renderWorkbox(pendingRequests);
+        }
+    } catch (_) { /* non-fatal — localStorage backup still present */ }
 
     const btn = document.getElementById('btnSaveDraft');
     const orig = btn.innerHTML;
@@ -2933,13 +3485,76 @@ function restoreApprovalDraft(requestId) {
     if (!raw) return false;
     try {
         const draft = JSON.parse(raw);
+
+        // ── Multi-occurrence: 500 / 501 occurrence lists ──
+        [['sfaf-500-entries', 'sfaf_500', '500 — IRAC Notes entry', 'e.g. S189, E029, C010'],
+         ['sfaf-501-entries', 'sfaf_501', '501 — Notes entry',      'e.g. M015,IRAC 43521/1']
+        ].forEach(([cid, fieldName, label, ph]) => {
+            const vals = draft.fields[`__occ__${cid}`];
+            if (!Array.isArray(vals) || vals.length === 0) return;
+            const c = document.getElementById(cid);
+            if (!c) return;
+            vals.forEach((v, i) => {
+                const inputs = c.querySelectorAll('input');
+                if (i < inputs.length) {
+                    inputs[i].value = v;
+                } else {
+                    addOccurrence(cid, fieldName, label, ph);
+                    c.querySelectorAll('input')[i].value = v;
+                }
+            });
+        });
+
+        // ── Multi-occurrence: emission groups (113-116) ──
+        const emGroups = draft.fields['__emission_groups__'];
+        if (Array.isArray(emGroups) && emGroups.length > 0) {
+            // First group — has IDs
+            const g0 = emGroups[0] || {};
+            setVal('sfaf_113', g0.sfaf_113 || '');
+            setVal('sfaf_114', g0.sfaf_114 || '');
+            setVal('sfaf_115', g0.sfaf_115 || '');
+            setVal('sfaf_116', g0.sfaf_116 || '');
+            // Additional groups
+            for (let i = 1; i < emGroups.length; i++) {
+                addEmissionGroup();
+                const groups = document.querySelectorAll('#emission-groups .emission-group');
+                const g = groups[i];
+                if (!g) continue;
+                const gd = emGroups[i] || {};
+                const inp = field => g.querySelector(`[data-field="${field}"]`);
+                if (inp('sfaf_113')) inp('sfaf_113').value = gd.sfaf_113 || '';
+                if (inp('sfaf_114')) inp('sfaf_114').value = gd.sfaf_114 || '';
+                if (inp('sfaf_115')) inp('sfaf_115').value = gd.sfaf_115 || '';
+                if (inp('sfaf_116')) inp('sfaf_116').value = gd.sfaf_116 || '';
+            }
+        }
+
+        // ── 702 table entries ──
+        if (draft.fields['__702_entries__']) {
+            _restore702Entries(draft.fields['__702_entries__']);
+        }
+
+        // ── All other fields ──
+        const SKIP_KEYS = new Set(['__emission_groups__', '__702_entries__']);
         Object.entries(draft.fields).forEach(([key, val]) => {
+            if (key.startsWith('__occ__') || SKIP_KEYS.has(key)) return;
             const el = document.getElementById(key) ||
                        document.querySelector(`[data-field="${key}"]`);
             if (!el) return;
             if (el.type === 'checkbox') {
                 el.checked = !!val;
                 if (el.id === 'sfaf_encrypted') toggleApprovalEncryption(!!val);
+            } else if (el.tagName === 'SELECT') {
+                el.value = val;
+                // If the value isn't in the option list (e.g. hardcoded option displaced by DB
+                // rebuild), add it back so the user's selection is preserved.
+                if (el.value !== String(val) && val) {
+                    const opt = document.createElement('option');
+                    opt.value = val;
+                    opt.textContent = val;
+                    el.appendChild(opt);
+                    el.value = val;
+                }
             } else {
                 el.value = val;
             }
@@ -3068,27 +3683,15 @@ async function submitApproval() {
     }
 }
 
-async function rejectRequest() {
-    const reason = prompt('Reason for rejection (required):');
-    if (!reason || !reason.trim()) return;
-
-    try {
-        const res = await fetch(`/api/frequency/requests/${currentRequestId}/review`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'denied', notes: reason.trim() })
-        });
-        if (res.ok) {
-            showAlert('Request rejected and returned to originator', 'success');
-            closeRequestModal();
-            loadPendingRequests();
-        } else {
-            const data = await res.json();
-            showAlert('Error: ' + (data.error || 'Failed to reject request'), 'danger');
-        }
-    } catch (err) {
-        showAlert('Error: ' + err.message, 'danger');
-    }
+function rejectRequest() {
+    _rejectModalMode    = 'deny';
+    _rejectModalTarget  = currentRequestId;
+    document.getElementById('rejectModalTitle').textContent        = 'Reject Request';
+    document.getElementById('rejectModalDesc').textContent         = 'Provide a reason for rejection. This entry is required and will be recorded in the Status Log.';
+    document.getElementById('rejectModalConfirmLabel').textContent = 'Reject & Log';
+    document.getElementById('rejectComment').value = '';
+    document.getElementById('rejectModal').style.display = 'flex';
+    setTimeout(() => document.getElementById('rejectComment').focus(), 50);
 }
 
 // ── Formatters ────────────────────────────────────────────────────────────────
@@ -3801,6 +4404,61 @@ window.removeEmissionGroup = function(btn) {
     });
 };
 
+// ── 702 Table Manager ─────────────────────────────────────────────────────────
+
+window.add702Row = function() {
+    const tbody = document.getElementById('tbody-702');
+    if (!tbody) return;
+    const tr = document.createElement('tr');
+    tr.className = 'row-702';
+    tr.innerHTML = `
+        <td><input type="text" class="form-control form-control-sm field-702-number" placeholder="e.g. AFSOC 2026-269"></td>
+        <td><input type="text" class="form-control form-control-sm field-702-desc" placeholder="Short description"></td>
+        <td><button type="button" class="btn-702-remove" onclick="remove702Row(this)" title="Remove">✕</button></td>`;
+    tbody.appendChild(tr);
+    _update702RemoveBtns();
+    tr.querySelector('.field-702-number').focus();
+};
+
+window.remove702Row = function(btn) {
+    btn.closest('tr').remove();
+    _update702RemoveBtns();
+};
+
+function _update702RemoveBtns() {
+    const rows = document.querySelectorAll('#tbody-702 .row-702');
+    rows.forEach(r => {
+        const btn = r.querySelector('.btn-702-remove');
+        if (btn) btn.style.display = rows.length > 1 ? '' : 'none';
+    });
+}
+
+function _collect702Entries() {
+    return [...document.querySelectorAll('#tbody-702 .row-702')].map(r => ({
+        number: r.querySelector('.field-702-number')?.value.trim() || '',
+        description: r.querySelector('.field-702-desc')?.value.trim() || '',
+    })).filter(e => e.number || e.description);
+}
+
+function _restore702Entries(entries) {
+    const tbody = document.getElementById('tbody-702');
+    if (!tbody || !Array.isArray(entries) || entries.length === 0) return;
+    // Clear all rows and recreate
+    tbody.innerHTML = '';
+    entries.forEach((e, i) => {
+        const tr = document.createElement('tr');
+        tr.className = 'row-702';
+        tr.innerHTML = `
+            <td><input type="text" class="form-control form-control-sm field-702-number" placeholder="e.g. AFSOC 2026-269" value="${(e.number || '').replace(/"/g,'&quot;')}"></td>
+            <td><input type="text" class="form-control form-control-sm field-702-desc" placeholder="Short description" value="${(e.description || '').replace(/"/g,'&quot;')}"></td>
+            <td><button type="button" class="btn-702-remove" onclick="remove702Row(this)" title="Remove">✕</button></td>`;
+        tbody.appendChild(tr);
+    });
+    // If entries was empty, add a blank row
+    if (entries.length === 0) add702Row();
+    _update702RemoveBtns();
+}
+
 // Receiver block (400 series) multi-occurrence
 const RX_ANTENNA_OPTIONS = `
     <option value="">— Select Antenna Type —</option>
@@ -3942,7 +4600,8 @@ async function loadProposals() {
         const res  = await fetch('/api/frequency/assignments/proposals');
         const data = res.ok ? await res.json() : {};
         allProposals = data.proposals || [];
-        document.getElementById('proposalsCount').textContent = allProposals.length;
+        const proposalsCountEl = document.getElementById('proposalsCount');
+        if (proposalsCountEl) proposalsCountEl.textContent = allProposals.length;
         applyProposalFilters();
     } catch (err) {
         container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-circle"></i><p>Failed to load proposals: ${err.message}</p></div>`;
@@ -4075,24 +4734,24 @@ window.confirmElevation = async function() {
 
 // ── SFAF lookup helpers ───────────────────────────────────────────────────────
 // Returns the effective value of a lookup select: the custom text input when
-// "CUSTOM" is selected, or the select value itself otherwise.
+// "Other" is selected, or the select value itself otherwise.
 function getSFAFValue(id) {
     const sel = document.getElementById(id);
     if (!sel) return '';
-    if (sel.tagName === 'SELECT' && sel.value === 'CUSTOM') {
+    if (sel.tagName === 'SELECT' && sel.value === 'OTHER') {
         return (document.getElementById(id + '_custom')?.value || '').trim();
     }
     return (sel.value || '').trim();
 }
 
-// Show/hide the paired custom text input based on whether "CUSTOM" is selected.
+// Show/hide the paired custom text input based on whether "Other" is selected.
 function onLookupSelChange(selId, inputId) {
     const sel = document.getElementById(selId);
     const inp = document.getElementById(inputId);
     if (!sel || !inp) return;
-    const isCustom = sel.value === 'CUSTOM';
-    inp.style.display = isCustom ? '' : 'none';
-    if (isCustom) inp.focus();
+    const isOther = sel.value === 'OTHER';
+    inp.style.display = isOther ? '' : 'none';
+    if (isOther) inp.focus();
 }
 
 // ── MFI / IFI / DFI cascade ──────────────────────────────────────────────────
@@ -4335,6 +4994,39 @@ function _parseApprovalSSRFTransmitters(doc) {
     }).filter(tx => tx.name);
 }
 
+// Extract Notation/Code elements from an SSRF document and populate field 501 entries.
+// Codes are gathered from Assignment > Notation > Code (and top-level Notation > Code).
+function _applySSRFNotationCodes(doc) {
+    const ns = 'urn:us:gov:dod:standard:ssrf:3.0.1';
+    function allNS(parent, localName) {
+        const byNS = [...parent.getElementsByTagNameNS(ns, localName)];
+        return byNS.length ? byNS : [...parent.getElementsByTagName(localName)];
+    }
+    const codes = new Set();
+    allNS(doc, 'Notation').forEach(notation => {
+        allNS(notation, 'Code').forEach(codeEl => {
+            const v = codeEl.textContent.trim();
+            if (v) codes.add(v);
+        });
+    });
+    if (!codes.size) return;
+
+    const container = document.getElementById('sfaf-501-entries');
+    if (!container) return;
+    const entries = [...codes];
+    // Fill existing inputs first, then add new rows for overflow
+    const existing = container.querySelectorAll('input[data-field="sfaf_501"]');
+    entries.forEach((code, i) => {
+        if (i < existing.length) {
+            existing[i].value = code;
+        } else {
+            addOccurrence('sfaf-501-entries', 'sfaf_501', '501 — Notes entry', 'e.g. M015,IRAC 43521/1');
+            const inputs = container.querySelectorAll('input[data-field="sfaf_501"]');
+            inputs[inputs.length - 1].value = code;
+        }
+    });
+}
+
 window.loadApprovalSSRFFile = function(input) {
     const file = input.files[0];
     if (!file) return;
@@ -4357,6 +5049,8 @@ window.loadApprovalSSRFFile = function(input) {
             document.getElementById('approvalSsrfTxSearch').value = '';
             _renderApprovalSSRFTxList();
             _renderApprovalSSRFModeList();
+            // Pre-populate field 501 with Notation/Code values from the SSRF document
+            _applySSRFNotationCodes(doc);
             document.getElementById('approvalSsrfModal').style.display = 'flex';
         } catch (ex) {
             showAlert('Failed to read file: ' + ex.message, 'danger');
@@ -4601,6 +5295,8 @@ window.openRequestCoordModal = function(requestId, currentWorkboxes) {
     if (!modal) return;
     const search = document.getElementById('reqCoordSearch');
     if (search) search.value = '';
+    const commentEl = document.getElementById('reqCoordComment');
+    if (commentEl) commentEl.value = '';
     renderReqCoordList();
     modal.style.display = 'flex';
 };
@@ -4613,13 +5309,25 @@ window.closeReqCoordModal = function() {
 
 window.saveReqCoordinations = async function() {
     if (!reqCoordModalRequestId) return;
+    const comment = document.getElementById('reqCoordComment')?.value.trim();
+    if (!comment) {
+        showAlert('A Status Log entry is required for lateral coordination.', 'warning');
+        return;
+    }
     try {
-        const res = await fetch(`/api/frequency/requests/${reqCoordModalRequestId}/coordinations`, {
+        const coordRes = await fetch(`/api/frequency/requests/${reqCoordModalRequestId}/coordinations`, {
             method:  'PUT',
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify({ workboxes: [...reqCoordSelected] }),
         });
-        if (!res.ok) { showAlert('Error saving coordinations', 'danger'); return; }
+        if (!coordRes.ok) { showAlert('Error saving coordinations', 'danger'); return; }
+
+        await fetch(`/api/frequency/requests/${reqCoordModalRequestId}/comments`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ body: comment, workbox: userWorkbox || '' }),
+        });
+
         closeReqCoordModal();
         showAlert('Lateral coordination updated.', 'success');
         loadPendingRequests();
@@ -4696,6 +5404,19 @@ window.toggleCommentLog = function(assignmentId) {
     if (chevron) chevron.style.transform = open ? 'rotate(180deg)' : '';
 };
 
+window.openInboundCommentLog = function(assignmentId) {
+    const row = document.getElementById(`inbound-comment-row-${assignmentId}`);
+    if (!row) return;
+    const open = row.style.display === 'none';
+    row.style.display = open ? '' : 'none';
+    if (open) {
+        const body    = document.getElementById(`comment-log-body-${assignmentId}`);
+        const chevron = document.getElementById(`comment-log-chevron-${assignmentId}`);
+        if (body)    body.style.display = '';
+        if (chevron) chevron.style.transform = 'rotate(180deg)';
+    }
+};
+
 window.submitComment = async function(assignmentId) {
     const input = document.getElementById(`comment-input-${assignmentId}`);
     if (!input) return;
@@ -4712,9 +5433,9 @@ window.submitComment = async function(assignmentId) {
         if (!res.ok) { showAlert('Error: ' + (data.error || 'Failed to save comment'), 'danger'); return; }
         input.value = '';
         showAlert('Comment added.', 'success');
-        // Refresh to show new comment
         loadProposals();
         loadSubmittedProposals();
+        loadPendingRequests(); // refresh inbound assignments section
     } catch (err) {
         showAlert('Error: ' + err.message, 'danger');
     }

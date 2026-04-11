@@ -83,7 +83,7 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="maxPowerWatts">Max Power (Watts)</label>
+                    <label for="maxPowerWatts">Min Power (Watts)</label>
                     <input type="number" id="maxPowerWatts" class="form-input" step="1" placeholder="Leave blank for any">
                 </div>
 
@@ -194,6 +194,16 @@
         // Pool assignments loaded from the database
         let poolAssignments = [];
 
+        // Pre-fill form fields from URL query params (passed by the approval modal)
+        (function applyURLParams() {
+            const p = new URLSearchParams(window.location.search);
+            if (p.get('startFreq'))  document.getElementById('startFreq').value       = p.get('startFreq');
+            if (p.get('endFreq'))    document.getElementById('endFreq').value         = p.get('endFreq');
+            if (p.get('emissionType')) document.getElementById('emissionType').value  = p.get('emissionType');
+            if (p.get('minBw'))      document.getElementById('minBandwidthKhz').value = p.get('minBw');
+            if (p.get('minPower'))   document.getElementById('maxPowerWatts').value   = p.get('minPower');
+        })();
+
         // Load pool assignments on page init
         async function loadPoolAssignments() {
             const banner = document.getElementById('poolStatusBanner');
@@ -229,7 +239,7 @@
             if (endFreq   !== null) filtered = filtered.filter(p => p.frequency_mhz <= endFreq);
             if (emType)             filtered = filtered.filter(p => (p.emission_type || '').toUpperCase() === emType);
             if (minBwKhz  !== null) filtered = filtered.filter(p => p.emission_bandwidth_khz >= minBwKhz);
-            if (maxPowerW !== null) filtered = filtered.filter(p => p.power_watts <= maxPowerW);
+            if (maxPowerW !== null) filtered = filtered.filter(p => p.power_watts >= maxPowerW);
 
             displayResults(filtered, poolAssignments.length);
         }

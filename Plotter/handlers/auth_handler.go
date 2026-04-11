@@ -361,13 +361,11 @@ func (h *AuthHandler) UpdateProfile(c *gin.Context) {
 	}
 	if req.ServiceBranch != "" {
 		user.ServiceBranch = &req.ServiceBranch
-	} else {
-		user.ServiceBranch = nil
 	}
+	// Empty string means "not provided" — preserve the existing DB value.
+	// Sending "" would otherwise wipe a field that simply failed to load in the UI.
 	if req.PayGrade != "" {
 		user.PayGrade = &req.PayGrade
-	} else {
-		user.PayGrade = nil
 	}
 
 	if err := h.userRepo.UpdateUserProfile(user); err != nil {

@@ -99,7 +99,33 @@
             display: flex;
             gap: 0.4rem;
             align-items: center;
+            flex-wrap: wrap;
             flex-shrink: 0;
+        }
+        .workbox-card-serial-bar {
+            padding: 0.35rem 1rem 0.3rem;
+            border-bottom: 1px solid rgba(100,150,255,0.08);
+            background: rgba(0,0,0,0.15);
+            border-radius: 8px 8px 0 0;
+        }
+        .workbox-serial {
+            font-size: 0.85rem;
+            font-weight: 700;
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            letter-spacing: 0.04em;
+            white-space: nowrap;
+        }
+        .workbox-serial-assigned {
+            background: #1e3a5f;
+            color: #93c5fd;
+            border: 1px solid #3b82f6;
+        }
+        .workbox-serial-unassigned {
+            background: #1e293b;
+            color: #64748b;
+            border: 1px dashed #475569;
+            font-style: italic;
         }
         .workbox-card-body {
             display: flex;
@@ -217,6 +243,76 @@
 
         /* ── Lookup select + custom input ── */
         .lookup-custom-input { margin-top: 4px; }
+        .output-menu-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            padding: 7px 14px;
+            background: none;
+            border: none;
+            color: #cbd5e1;
+            font-size: 0.82rem;
+            cursor: pointer;
+            text-align: left;
+            transition: background 0.15s;
+        }
+        .output-menu-item:hover { background: rgba(100,150,255,0.1); color: #e2e8f0; }
+        /* 702 table manager */
+        #sfaf-702-manager { margin-top: 4px; }
+        .table-702 { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
+        .table-702 thead th {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #64748b;
+            padding: 4px 6px;
+            border-bottom: 1px solid rgba(100,150,255,0.12);
+        }
+        .table-702 tbody td { padding: 3px 4px; }
+        .table-702 .form-control-sm {
+            padding: 4px 8px;
+            font-size: 0.8rem;
+            height: auto;
+        }
+        .btn-702-remove {
+            background: none;
+            border: none;
+            color: #ef4444;
+            cursor: pointer;
+            font-size: 0.8rem;
+            padding: 2px 5px;
+            border-radius: 4px;
+            opacity: 0.7;
+            transition: opacity 0.15s;
+        }
+        .btn-702-remove:hover { opacity: 1; }
+        .btn-702-add {
+            background: rgba(59,130,246,0.08);
+            border: 1px dashed rgba(59,130,246,0.3);
+            color: #60a5fa;
+            font-size: 0.75rem;
+            padding: 4px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .btn-702-add:hover { background: rgba(59,130,246,0.15); }
+
+        /* ── 702 Picker ── */
+        .cn702-picker-row {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding: 8px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid rgba(100,150,255,0.08);
+            transition: background 0.12s;
+        }
+        .cn702-picker-row:last-child { border-bottom: none; }
+        .cn702-picker-row:hover { background: rgba(100,150,255,0.1); }
+        .cn702-num { font-family: monospace; font-size: 0.9rem; color: #e2e8f0; font-weight: 600; }
+        .cn702-desc { font-size: 0.78rem; color: #94a3b8; }
 
         /* ── Map panel resizer ── */
         #approvalResizer {
@@ -494,7 +590,7 @@
                 </select>
             </div>
         </div>
-        <div id="workboxActionBar" class="clone-action-bar" style="display:none">
+        <div id="workboxActionBar" class="clone-action-bar">
             <span id="workboxSelectedCount">0 selected</span>
             <span class="action-bar-divider"></span>
             <button id="workboxStatusLogBtn" class="btn btn-sm btn-secondary" onclick="openWorkboxStatusLog()" disabled title="Select exactly one record">
@@ -519,6 +615,13 @@
                 <i class="fas fa-spinner fa-spin"></i>
                 <p>Loading workbox...</p>
             </div>
+        </div>
+
+        <div id="inboundAssignmentsSection" style="display:none;">
+            <div style="padding:8px 0 4px; font-size:0.75rem; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:0.05em; border-top:1px solid #1e293b; margin-top:12px;">
+                <i class="fas fa-inbox" style="margin-right:6px;"></i>Distributed Proposals
+            </div>
+            <div id="inboundAssignmentsContainer" class="requests-container"></div>
         </div>
 
         </div><!-- /action-items-subpanel -->
@@ -1039,10 +1142,12 @@
                             </div>
                             <div class="form-group">
                                 <label for="sfaf_105">105 — Pool Assignment Serial</label>
-                                <div style="display:flex;gap:6px;align-items:center;">
-                                    <input type="text" id="sfaf_105" name="sfaf_105" class="form-control" placeholder="Select from frequency pool" autocomplete="off" style="flex:1;" readonly>
-                                    <button type="button" class="btn btn-sm btn-secondary" onclick="openPoolPicker()" title="Browse frequency pool"><i class="fas fa-broadcast-tower"></i> Browse Pool</button>
-                                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="clearPoolSelection()" title="Clear pool selection" id="sfaf_105_clear" style="display:none;"><i class="fas fa-times"></i></button>
+                                <div style="display:flex;flex-direction:column;gap:6px;">
+                                    <input type="text" id="sfaf_105" name="sfaf_105" class="form-control" placeholder="Select from frequency pool" autocomplete="off" style="width:100%;" readonly>
+                                    <div style="display:flex;gap:6px;">
+                                        <button type="button" class="btn btn-sm btn-secondary" onclick="openPoolPicker()" title="Browse frequency pool"><i class="fas fa-broadcast-tower"></i> Browse Pool</button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="clearPoolSelection()" title="Clear pool selection" id="sfaf_105_clear" style="display:none;"><i class="fas fa-times"></i></button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1234,7 +1339,7 @@
                                     <option value="NSA">NSA</option>
                                     <option value="DIA">DIA</option>
                                     <option value="DOE">DOE</option>
-                                    <option value="CUSTOM">Custom…</option>
+                                    <option value="OTHER">Other</option>
                                 </select>
                                 <input type="text" id="sfaf_200_custom" class="form-control lookup-custom-input" style="display:none" placeholder="Enter agency code">
                             </div>
@@ -1253,7 +1358,7 @@
                                     <option value="SPACECOM">SPACECOM</option>
                                     <option value="STRATCOM">STRATCOM</option>
                                     <option value="TRANSCOM">TRANSCOM</option>
-                                    <option value="CUSTOM">Custom…</option>
+                                    <option value="OTHER">Other</option>
                                 </select>
                                 <input type="text" id="sfaf_201_custom" class="form-control lookup-custom-input" style="display:none" placeholder="Enter unified command">
                             </div>
@@ -1283,7 +1388,7 @@
                                     <option value="MARFORSOC">MARFORSOC — Marine Forces Special Ops</option>
                                     <option value="NAVEUR">NAVEUR — Naval Forces Europe</option>
                                     <option value="NAVPAC">NAVPAC — Naval Forces Pacific</option>
-                                    <option value="CUSTOM">Custom…</option>
+                                    <option value="OTHER">Other</option>
                                 </select>
                                 <input type="text" id="sfaf_202_custom" class="form-control lookup-custom-input" style="display:none" placeholder="Enter service component">
                             </div>
@@ -1299,7 +1404,7 @@
                                     <option value="J6">J6 — Communications / C4</option>
                                     <option value="J7">J7 — Training &amp; Exercises</option>
                                     <option value="J8">J8 — Resource Management</option>
-                                    <option value="CUSTOM">Custom…</option>
+                                    <option value="OTHER">Other</option>
                                 </select>
                                 <input type="text" id="sfaf_203_custom" class="form-control lookup-custom-input" style="display:none" placeholder="Enter bureau code">
                             </div>
@@ -1309,17 +1414,17 @@
                                 <label for="sfaf_204">204 — Command</label>
                                 <select id="sfaf_204" class="form-control" onchange="onLookupSelChange('sfaf_204','sfaf_204_custom')">
                                     <option value="">— Select —</option>
-                                    <option value="CUSTOM">Custom…</option>
+                                    <option value="OTHER">Other</option>
                                 </select>
-                                <input type="text" id="sfaf_204_custom" class="form-control lookup-custom-input" style="display:" placeholder="Enter command designation">
+                                <input type="text" id="sfaf_204_custom" class="form-control lookup-custom-input" style="display:none" placeholder="Enter command designation">
                             </div>
                             <div class="form-group">
                                 <label for="sfaf_205">205 — Subcommand</label>
                                 <select id="sfaf_205" class="form-control" onchange="onLookupSelChange('sfaf_205','sfaf_205_custom')">
                                     <option value="">— Select —</option>
-                                    <option value="CUSTOM">Custom…</option>
+                                    <option value="OTHER">Other</option>
                                 </select>
-                                <input type="text" id="sfaf_205_custom" class="form-control lookup-custom-input" style="display:" placeholder="Enter subcommand designation">
+                                <input type="text" id="sfaf_205_custom" class="form-control lookup-custom-input" style="display:none" placeholder="Enter subcommand designation">
                             </div>
                         </div>
                         <div class="form-row">
@@ -1349,7 +1454,7 @@
                                     <option value="STEWART">FORT STEWART, GA</option>
                                     <option value="LEJEUNE">CAMP LEJEUNE, NC</option>
                                     <option value="PENDLETON">CAMP PENDLETON, CA</option>
-                                    <option value="CUSTOM">Custom…</option>
+                                    <option value="OTHER">Other</option>
                                 </select>
                                 <input type="text" id="sfaf_206_custom" class="form-control lookup-custom-input" style="display:none" placeholder="Enter installation IFM code">
                             </div>
@@ -1374,7 +1479,7 @@
                                     <option value="NAFC">NAFC — DoD Nevada AFC</option>
                                     <option value="WAFC">WAFC — DoD Western AFC</option>
                                     <option value="USAKA">USAKA — DoD AFC Kwajalein</option>
-                                    <option value="CUSTOM">Custom…</option>
+                                    <option value="OTHER">Other</option>
                                 </select>
                                 <input type="text" id="sfaf_209_custom" class="form-control lookup-custom-input" style="display:none" placeholder="Enter AFC/organization code">
                             </div>
@@ -1479,10 +1584,6 @@
                             <div class="form-group">
                                 <label for="sfaf_359">359 — Feedpoint Height AGL</label>
                                 <input type="number" step="0.1" id="sfaf_359" class="form-control" placeholder="meters above ground" oninput="calcSFAFHAMSL('sfaf_358','sfaf_359','tx_hamsl_auto')">
-                            </div>
-                            <div class="form-group">
-                                <label for="tx_hamsl_auto">Feedpoint AMSL (auto)</label>
-                                <input type="number" step="0.1" id="tx_hamsl_auto" class="form-control" placeholder="Auto (358 + 359)" readonly style="opacity:0.6;cursor:not-allowed">
                             </div>
                         </div>
                         <div class="form-row">
@@ -1614,10 +1715,6 @@
                                     <div class="form-group">
                                         <label>459 — Feedpoint Height AGL</label>
                                         <input type="number" step="0.1" id="sfaf_459" data-field="sfaf_459" class="form-control" placeholder="meters above ground" oninput="calcSFAFHAMSL('sfaf_458','sfaf_459','rx_hamsl_auto')">
-                                    </div>
-                                    <div class="form-group">
-                                        <label>Feedpoint AMSL (auto)</label>
-                                        <input type="number" step="0.1" id="rx_hamsl_auto" class="form-control" placeholder="Auto (458 + 459)" readonly style="opacity:0.6;cursor:not-allowed">
                                     </div>
                                 </div>
                                 <div class="form-row">
@@ -1756,10 +1853,14 @@
                                 <label for="sfaf_701">701 — Frequency Action Officer</label>
                                 <input type="text" id="sfaf_701" class="form-control" placeholder="e.g. T01, T02">
                             </div>
-                            <div class="form-group">
-                                <label for="sfaf_702">702 — Control/Request Number</label>
-                                <input type="text" id="sfaf_702" class="form-control" placeholder="e.g. AFSOC 2026-269">
+                        </div>
+                        <div class="form-group">
+                            <label for="sfaf_702">702 — Control/Request Number</label>
+                            <div style="display:flex;gap:6px;align-items:center;">
+                                <input type="text" id="sfaf_702" class="form-control" placeholder="e.g. AFSOC 2026-269" style="flex:1;">
+                                <button type="button" class="btn btn-sm btn-secondary" onclick="open702Picker()" title="Pick from 702 table"><i class="fas fa-hashtag"></i> Pick</button>
                             </div>
+                            <input type="text" id="sfaf_702_desc" class="form-control" style="margin-top:4px;font-size:0.82rem;" placeholder="Short description (local reference only)">
                         </div>
                         <div class="form-row">
                             <div class="form-group">
@@ -1851,13 +1952,9 @@
             <div style="padding:6px 12px 10px; border-top:1px solid rgba(100,150,255,0.10); display:flex; flex-direction:column; gap:6px;">
                 <div style="display:flex; align-items:center; gap:8px;">
                     <label id="mapRadiusLabel" style="font-size:0.78rem; color:#64b5f6; font-weight:600; white-space:nowrap; margin:0;">306 — Radius</label>
-                    <input type="text" id="mapRadiusInput" class="form-control" style="width:90px; font-size:0.8rem; padding:4px 8px; height:auto;"
-                        placeholder="e.g. 30, UNL" oninput="onMapRadiusInput(this.value);">
-                    <select id="mapRadiusUnit" class="form-control" style="width:70px; font-size:0.8rem; padding:4px 6px; height:auto;" onchange="onMapRadiusUnitChange()">
-                        <option value="NM">NM</option>
-                        <option value="KM">km</option>
-                        <option value="MI">mi</option>
-                    </select>
+                    <input type="number" id="mapRadiusInput" class="form-control" style="width:90px; font-size:0.8rem; padding:4px 8px; height:auto;"
+                        placeholder="km" min="0" step="1" oninput="onMapRadiusInput(this.value);">
+                    <span style="font-size:0.8rem; color:#94a3b8; white-space:nowrap;">km</span>
                     <button type="button" class="btn btn-sm btn-secondary" onclick="clearApprovalMap()" style="padding:4px 10px; font-size:0.78rem; margin-left:auto;">
                         <i class="fas fa-times"></i> Clear
                     </button>
@@ -1872,9 +1969,24 @@
 
         </div><!-- /modal-body -->
         <div class="modal-footer">
-            <div style="display:flex;gap:6px;margin-right:auto;">
+            <div style="display:flex;gap:6px;margin-right:auto;align-items:center;">
                 <button type="button" class="btn btn-xs btn-xs-info" onclick="approvalExpandAll()"><i class="fas fa-expand-alt"></i> Expand All</button>
                 <button type="button" class="btn btn-xs btn-xs-info" onclick="approvalCollapseAll()"><i class="fas fa-compress-alt"></i> Collapse All</button>
+                <div style="position:relative;" id="outputMenuWrap">
+                    <button type="button" class="btn btn-xs"
+                            style="background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.35);color:#6ee7b7;"
+                            onclick="toggleOutputMenu()">
+                        <i class="fas fa-file-export"></i> Output to… <i class="fas fa-caret-down" style="margin-left:3px;font-size:0.7em;"></i>
+                    </button>
+                    <div id="outputMenu" style="display:none;position:absolute;bottom:calc(100% + 4px);left:0;
+                         background:#1e293b;border:1px solid rgba(100,150,255,0.2);border-radius:8px;
+                         min-width:180px;z-index:200;padding:4px 0;box-shadow:0 -4px 20px rgba(0,0,0,0.4);">
+                        <button class="output-menu-item" onclick="outputSFAF1Col()"><i class="fas fa-align-justify"></i> SFAF 1 Column</button>
+                        <button class="output-menu-item" onclick="outputSFAF3Col()"><i class="fas fa-columns"></i> SFAF 3 Column</button>
+                        <button class="output-menu-item" onclick="outputSpreadsheet()"><i class="fas fa-table"></i> Spreadsheet</button>
+                        <button class="output-menu-item" onclick="outputGMF()"><i class="fas fa-satellite-dish"></i> GMF</button>
+                    </div>
+                </div>
             </div>
             <button class="btn" onclick="closeApprovalModal()">Close</button>
             <button class="btn btn-secondary" onclick="saveApprovalDraft()" id="btnSaveDraft">
@@ -2556,6 +2668,28 @@
 </div>
 
 <!-- ── Serial Number Picker Modal ── -->
+<!-- 702 Picker Modal -->
+<div id="cn702PickerModal" class="modal" style="display:none;">
+    <div class="modal-content" style="max-width:580px;">
+        <div class="modal-header">
+            <h3><i class="fas fa-hashtag"></i> Pick 702 — Control/Request Number</h3>
+            <button class="modal-close" onclick="close702Picker()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <div style="margin-bottom:10px;">
+                <input type="text" id="cn702PickerSearch" class="form-control" placeholder="Search number or description…" oninput="_702PickerFilter()">
+            </div>
+            <div id="cn702PickerList" style="max-height:360px;overflow-y:auto;border:1px solid rgba(100,150,255,0.15);border-radius:6px;">
+                <div style="color:#64748b;text-align:center;padding:24px;font-size:0.85rem;">Loading…</div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <span id="cn702PickerInfo" style="font-size:0.8rem;color:#64748b;flex:1;"></span>
+            <button type="button" class="btn btn-secondary" onclick="close702Picker()">Cancel</button>
+        </div>
+    </div>
+</div>
+
 <div id="serialPickerModal" class="modal" style="display:none;">
     <div class="modal-content" style="max-width:560px;">
         <div class="modal-header">
@@ -2611,10 +2745,70 @@
                                 border-radius:8px;padding:8px;"></div>
                 </div>
             </div>
+            <div class="form-group" style="margin-top:14px;">
+                <label for="reqCoordComment" style="font-size:0.78rem;color:#94a3b8;">
+                    <i class="fas fa-comments" style="margin-right:4px;"></i>Status Log Entry (required)
+                </label>
+                <textarea id="reqCoordComment" class="form-control" rows="3"
+                    placeholder="Describe the coordination action, e.g. 'Sent to AFSOC ISM for deconfliction review.'"></textarea>
+            </div>
         </div>
         <div class="modal-footer">
             <button class="btn-secondary" onclick="closeReqCoordModal()">Cancel</button>
-            <button class="btn-primary" onclick="saveReqCoordinations()"><i class="fas fa-save"></i> Save</button>
+            <button class="btn-primary" onclick="saveReqCoordinations()"><i class="fas fa-save"></i> Save &amp; Log</button>
+        </div>
+    </div>
+</div>
+
+<!-- Distribution Comment Modal -->
+<div id="distributeModal" class="modal" style="display:none;">
+    <div class="modal-content" style="max-width:500px;">
+        <div class="modal-header">
+            <h3><i class="fas fa-share"></i> Distribute to <span id="distributeModalDest"></span></h3>
+            <button class="modal-close" onclick="closeDistributeModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p style="font-size:0.82rem;color:#94a3b8;margin-bottom:12px;">
+                Add a Status Log entry for this distribution. This comment will be visible to the receiving workbox.
+            </p>
+            <div class="form-group">
+                <label for="distributeComment">Status Log Entry</label>
+                <textarea id="distributeComment" class="form-control" rows="4"
+                    placeholder="Describe reason for distribution, any coordination notes, or relevant remarks…"></textarea>
+            </div>
+            <div id="distributeRecordCount" style="font-size:0.78rem;color:#64748b;margin-top:6px;"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn" onclick="closeDistributeModal()">Cancel</button>
+            <button class="btn btn-info" onclick="confirmDistribute()">
+                <i class="fas fa-share"></i> Distribute &amp; Log
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Reject / Return Modal -->
+<div id="rejectModal" class="modal" style="display:none;">
+    <div class="modal-content" style="max-width:500px;">
+        <div class="modal-header">
+            <h3><i class="fas fa-times-circle" style="color:#f87171;"></i> <span id="rejectModalTitle">Return Record</span></h3>
+            <button class="modal-close" onclick="closeRejectModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p style="font-size:0.82rem;color:#94a3b8;margin-bottom:12px;" id="rejectModalDesc">
+                Provide a reason. This entry is required and will appear in the record's Status Log.
+            </p>
+            <div class="form-group">
+                <label for="rejectComment">Reason / Status Log Entry <span class="required">*</span></label>
+                <textarea id="rejectComment" class="form-control" rows="4"
+                    placeholder="Describe the reason for returning or rejecting this record…"></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn" onclick="closeRejectModal()">Cancel</button>
+            <button class="btn btn-danger" onclick="confirmReject()">
+                <i class="fas fa-times"></i> <span id="rejectModalConfirmLabel">Return &amp; Log</span>
+            </button>
         </div>
     </div>
 </div>

@@ -322,6 +322,8 @@
             this.input.addEventListener('focus', () => this._open());
             this.input.addEventListener('blur', () => setTimeout(() => this._close(), 150));
             this.input.addEventListener('input', () => this._renderDropdown(this.input.value));
+            // Refresh display when value is set programmatically via el.value = x
+            this.select.addEventListener('change', () => this._refreshInput());
         }
 
         _observe() {
@@ -469,8 +471,8 @@
             : '');
 
         // Populate installation dropdown, then unit dropdown
-        // ISM options will also be refreshed here if no service_branch set
-        populateInstallationDropdown(user.installation_id, user.unit_id);
+        // primary_unit_id is returned at top level by /api/user/profile, not inside user{}
+        populateInstallationDropdown(user.installation_id, profileData?.primary_unit_id || user.unit_id);
     }
 
     function setValue(id, val) {
@@ -490,6 +492,8 @@
             el.appendChild(opt);
             el.value = val;
         }
+        // Notify FilterableSelect wrapper to refresh its text input
+        el.dispatchEvent(new Event('change'));
     }
 
     function populateInstallationDropdown(currentInstallationID, currentUnitID) {

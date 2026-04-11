@@ -549,8 +549,8 @@ function ufRenderRequests(reqs) {
                 <div class="request-badges">
                     <span class="frequency-badge badge-${req.priority}">${fmtPurpose(req.priority)}</span>
                     <span class="frequency-badge badge-${req.status.replace('_', '-')}">${fmtStatus(req.status)}</span>
-                    ${req.status === 'denied' ? `<button class="btn-xs btn-xs-primary" onclick="event.stopPropagation();openResubmitModal('${req.id}')"><i class="fas fa-edit"></i> Edit &amp; Resubmit</button>` : ''}
-                    ${(req.status === 'pending' || req.status === 'under_review') ? `<button class="btn-xs btn-xs-danger" onclick="event.stopPropagation();ufRetractRequest('${req.id}')"><i class="fas fa-ban"></i> Retract</button>` : ''}
+                    ${(req.status === 'denied' || req.status === 'cancelled') ? `<button class="btn-xs btn-xs-primary" onclick="event.stopPropagation();openResubmitModal('${req.id}')"><i class="fas fa-edit"></i> Edit &amp; Resubmit</button>` : ''}
+                    ${req.status === 'pending' ? `<button class="btn-xs btn-xs-danger" onclick="event.stopPropagation();ufRetractRequest('${req.id}')"><i class="fas fa-ban"></i> Retract</button>` : ''}
                     ${(req.status === 'cancelled' || req.status === 'denied') ? `<button class="btn-xs btn-xs-danger" onclick="event.stopPropagation();ufDeleteRequest('${req.id}')"><i class="fas fa-trash"></i> Delete</button>` : ''}
                 </div>
             </div>

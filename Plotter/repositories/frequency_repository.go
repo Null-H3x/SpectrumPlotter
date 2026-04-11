@@ -3,6 +3,7 @@ package repositories
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -218,8 +219,8 @@ func (r *FrequencyRepository) CreateFrequencyAssignment(assignment *models.Frequ
 			purpose, net_name, callsign, emission_designator, bandwidth, power_watts,
 			authorized_radius_km, assignment_date, expiration_date, assignment_authority,
 			authorization_number, priority, is_encrypted, encryption_type, classification,
-			notes, created_by, routed_to_workbox, pool_serial
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
+			notes, created_by, routed_to_workbox, pool_serial, edit_authority_workbox
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
 		RETURNING id, created_at, updated_at`
 
 	return r.db.QueryRowx(query,
@@ -230,7 +231,7 @@ func (r *FrequencyRepository) CreateFrequencyAssignment(assignment *models.Frequ
 		assignment.AssignmentDate, assignment.ExpirationDate, assignment.AssignmentAuthority,
 		assignment.AuthorizationNumber, assignment.Priority, assignment.IsEncrypted,
 		assignment.EncryptionType, assignment.Classification, assignment.Notes, assignment.CreatedBy,
-		assignment.RoutedToWorkbox, assignment.PoolSerial,
+		assignment.RoutedToWorkbox, assignment.PoolSerial, assignment.EditAuthorityWorkbox,
 	).Scan(&assignment.ID, &assignment.CreatedAt, &assignment.UpdatedAt)
 }
 
@@ -433,14 +434,16 @@ func (r *FrequencyRepository) CreateFrequencyRequest(request *models.FrequencyRe
 			coverage_area, operating_area_geojson, authorized_radius_km, operating_area_applies_to,
 			start_date, end_date, hours_of_operation,
 			num_transmitters, num_receivers, is_encrypted, encryption_type, classification,
-			requires_coordination, coordination_notes, justification, stop_buzzer, mission_impact
+			requires_coordination, coordination_notes, justification, stop_buzzer, mission_impact,
+			routed_to_workbox, edit_authority_workbox
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
 			$16, $17, $18, $19, $20,
 			$21, $22, $23, $24,
 			$25, $26, $27, $28, $29, $30,
 			$31, $32, $33, $34, $35,
-			$36, $37, $38, $39, $40, $41
+			$36, $37, $38, $39, $40, $41,
+			$42, $43
 		)
 		RETURNING id, created_at, updated_at`
 
@@ -456,6 +459,7 @@ func (r *FrequencyRepository) CreateFrequencyRequest(request *models.FrequencyRe
 		request.NumTransmitters, request.NumReceivers, request.IsEncrypted, request.EncryptionType,
 		request.Classification, request.RequiresCoordination, request.CoordinationNotes,
 		request.Justification, request.StopBuzzer, request.MissionImpact,
+		request.RoutedToWorkbox, request.EditAuthorityWorkbox,
 	).Scan(&request.ID, &request.CreatedAt, &request.UpdatedAt)
 }
 
@@ -489,14 +493,133 @@ func (r *FrequencyRepository) GetUserFrequencyRequests(userID uuid.UUID) ([]mode
 	return requests, err
 }
 
-func (r *FrequencyRepository) GetPendingRequests() ([]models.FrequencyRequest, error) {
+// GetPendingRequests returns pending/under_review requests visible to the caller's workbox.
+// Unrouted requests (routed_to_workbox IS NULL) are visible to all ISMs.
+// Routed requests are only visible to the destination workbox.
+func (r *FrequencyRepository) GetPendingRequests(callerWorkbox *string) ([]models.FrequencyRequest, error) {
 	var requests []models.FrequencyRequest
-	query := `
-		SELECT * FROM frequency_requests
-		WHERE status IN ('pending', 'under_review')
-		ORDER BY priority DESC, created_at`
-	err := r.db.Select(&requests, query)
+	var query string
+	var args []interface{}
+
+	if callerWorkbox != nil {
+		query = `
+			SELECT * FROM frequency_requests
+			WHERE status IN ('pending', 'under_review')
+			  AND (routed_to_workbox IS NULL OR routed_to_workbox = $1)
+			ORDER BY priority DESC, created_at`
+		args = []interface{}{*callerWorkbox}
+	} else {
+		query = `
+			SELECT * FROM frequency_requests
+			WHERE status IN ('pending', 'under_review')
+			ORDER BY priority DESC, created_at`
+	}
+
+	err := r.db.Select(&requests, query, args...)
 	return requests, err
+}
+
+// BulkRouteRequests sets routed_to_workbox on the given request IDs.
+// callerWorkbox restricts updates to requests the caller currently holds authority over.
+func (r *FrequencyRepository) BulkRouteRequests(ids []uuid.UUID, workbox *string, callerWorkbox *string) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]interface{}, 0, len(ids)+2)
+	args = append(args, workbox)
+	args = append(args, time.Now())
+	for i, id := range ids {
+		placeholders[i] = fmt.Sprintf("$%d", i+3)
+		args = append(args, id)
+	}
+	authorityClause := ""
+	if callerWorkbox != nil {
+		args = append(args, *callerWorkbox)
+		authorityClause = fmt.Sprintf(
+			" AND (edit_authority_workbox = $%d OR edit_authority_workbox IS NULL)",
+			len(args))
+	}
+	query := fmt.Sprintf(`
+		UPDATE frequency_requests
+		SET routed_to_workbox = $1, edit_authority_workbox = $1, updated_at = $2
+		WHERE id IN (%s)
+		  AND status IN ('pending', 'under_review')%s`,
+		strings.Join(placeholders, ","), authorityClause)
+	result, err := r.db.Exec(query, args...)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+// ReturnRequest routes a request back to the original submitter's ISM unit
+// and resets status to 'pending'. Used when a higher workbox rejects and
+// returns the record for correction.
+// Clears routed_to_workbox (NULL = visible to all base ISMs) so the originating
+// base ISM will see it again regardless of whether the requester has an ISM unit.
+func (r *FrequencyRepository) ReturnRequest(id uuid.UUID) error {
+	result, err := r.db.Exec(`
+		UPDATE frequency_requests
+		SET routed_to_workbox     = NULL,
+		    edit_authority_workbox = NULL,
+		    status                = 'pending',
+		    denied_reason         = NULL,
+		    updated_at            = NOW()
+		WHERE id = $1
+		  AND status IN ('pending', 'under_review')`, id)
+	if err != nil {
+		return err
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("request not found or not in a returnable state")
+	}
+	return nil
+}
+
+// SaveRequestSFAFDraft persists in-progress SFAF approval form fields on the
+// request record so that edits made by one workbox are visible to all others.
+// Any ISM-level user who can see the request may update the draft.
+func (r *FrequencyRepository) SaveRequestSFAFDraft(id uuid.UUID, draft []byte) error {
+	// Extract sfaf_102 (Agency Serial Number) from the draft so pool_serial
+	// is kept in sync and reflects on workbox cards immediately.
+	var parsed struct {
+		Fields map[string]json.RawMessage `json:"fields"`
+	}
+	var serial *string
+	if json.Unmarshal(draft, &parsed) == nil {
+		if raw, ok := parsed.Fields["sfaf_102"]; ok {
+			var s string
+			if json.Unmarshal(raw, &s) == nil && s != "" {
+				serial = &s
+			}
+		}
+	}
+
+	var result sql.Result
+	var err error
+	if serial != nil {
+		result, err = r.db.Exec(`
+			UPDATE frequency_requests
+			SET sfaf_draft = $2, pool_serial = $3, updated_at = NOW()
+			WHERE id = $1
+			  AND status IN ('pending', 'under_review')`, id, draft, *serial)
+	} else {
+		result, err = r.db.Exec(`
+			UPDATE frequency_requests
+			SET sfaf_draft = $2, updated_at = NOW()
+			WHERE id = $1
+			  AND status IN ('pending', 'under_review')`, id, draft)
+	}
+	if err != nil {
+		return err
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("request not found or not in a reviewable state")
+	}
+	return nil
 }
 
 // DeleteFrequencyRequest permanently removes a cancelled or denied request.
@@ -532,7 +655,7 @@ func (r *FrequencyRepository) RetractFrequencyRequest(id uuid.UUID, requestedBy 
 		SET status = 'cancelled', updated_at = $1
 		WHERE id = $2
 		  AND requested_by = $3
-		  AND status IN ('pending', 'under_review')`,
+		  AND status = 'pending'`,
 		now, id, requestedBy)
 	if err != nil {
 		return err
@@ -546,7 +669,7 @@ func (r *FrequencyRepository) RetractFrequencyRequest(id uuid.UUID, requestedBy 
 
 // ResubmitFrequencyRequest updates a denied request's fields and resets it to pending.
 // Only the owning user may call this, and only while the request is in 'denied' state.
-func (r *FrequencyRepository) ResubmitFrequencyRequest(id uuid.UUID, requestedBy uuid.UUID, input models.CreateFrequencyRequestInput) (*models.FrequencyRequest, error) {
+func (r *FrequencyRepository) ResubmitFrequencyRequest(id uuid.UUID, requestedBy uuid.UUID, input models.CreateFrequencyRequestInput, workbox *string) (*models.FrequencyRequest, error) {
 	var req models.FrequencyRequest
 	err := r.db.Get(&req, `
 		UPDATE frequency_requests SET
@@ -592,8 +715,10 @@ func (r *FrequencyRepository) ResubmitFrequencyRequest(id uuid.UUID, requestedBy
 			review_notes               = NULL,
 			reviewed_by                = NULL,
 			reviewed_at                = NULL,
+			routed_to_workbox          = $38,
+			edit_authority_workbox     = $38,
 			updated_at                 = NOW()
-		WHERE id = $38 AND requested_by = $39 AND status = 'denied'
+		WHERE id = $39 AND requested_by = $40 AND status IN ('denied', 'cancelled')
 		RETURNING *`,
 		input.RequestType,
 		input.Priority,
@@ -632,6 +757,7 @@ func (r *FrequencyRepository) ResubmitFrequencyRequest(id uuid.UUID, requestedBy
 		input.Justification,
 		input.StopBuzzer,
 		input.MissionImpact,
+		workbox,
 		id,
 		requestedBy,
 	)
@@ -649,9 +775,25 @@ func (r *FrequencyRepository) UpdateFrequencyRequestStatus(
 	status string,
 	reviewedBy *uuid.UUID,
 	reviewNotes, approvalNotes, deniedReason string,
+	editAuthorityWorkbox *string,
 ) error {
 	now := time.Now()
-	query := `
+	if editAuthorityWorkbox != nil {
+		_, err := r.db.Exec(`
+			UPDATE frequency_requests SET
+				status = $1,
+				reviewed_by = $2,
+				reviewed_at = $3,
+				review_notes = $4,
+				approval_notes = $5,
+				denied_reason = $6,
+				edit_authority_workbox = $7,
+				updated_at = $8
+			WHERE id = $9`,
+			status, reviewedBy, now, reviewNotes, approvalNotes, deniedReason, *editAuthorityWorkbox, now, id)
+		return err
+	}
+	_, err := r.db.Exec(`
 		UPDATE frequency_requests SET
 			status = $1,
 			reviewed_by = $2,
@@ -660,9 +802,8 @@ func (r *FrequencyRepository) UpdateFrequencyRequestStatus(
 			approval_notes = $5,
 			denied_reason = $6,
 			updated_at = $7
-		WHERE id = $8`
-
-	_, err := r.db.Exec(query, status, reviewedBy, now, reviewNotes, approvalNotes, deniedReason, now, id)
+		WHERE id = $8`,
+		status, reviewedBy, now, reviewNotes, approvalNotes, deniedReason, now, id)
 	return err
 }
 
@@ -734,13 +875,37 @@ func (r *FrequencyRepository) GetAssignmentsInRange(minMhz, maxMhz float64) ([]m
 	return assignments, err
 }
 
-// GetSubmittedAssignments returns all active assignments created by the given user.
+// GetSubmittedAssignments returns all active P/S assignments created by any user
+// in the same ISM unit as the given user. These represent proposals the workbox
+// has submitted/distributed into the system.
 func (r *FrequencyRepository) GetSubmittedAssignments(userID uuid.UUID) ([]models.FrequencyAssignment, error) {
 	var assignments []models.FrequencyAssignment
 	err := r.db.Select(&assignments, `
+		SELECT fa.*
+		FROM frequency_assignments fa
+		WHERE fa.sfaf_record_type IN ('P', 'S')
+		  AND fa.is_active = true
+		  AND fa.created_by IN (
+		      SELECT uu2.user_id
+		      FROM user_units uu1
+		      JOIN user_units uu2 ON uu2.unit_id = uu1.unit_id
+		      WHERE uu1.user_id = $1
+		        AND uu1.unit_id IN (SELECT id FROM units WHERE unit_type = 'ISM')
+		  )
+		ORDER BY fa.created_at DESC`, userID)
+	return assignments, err
+}
+
+// GetInboundAssignments returns active P/S assignments routed to the given workbox.
+// These appear in the receiving workbox's Action Items.
+func (r *FrequencyRepository) GetInboundAssignments(workbox string) ([]models.FrequencyAssignment, error) {
+	var assignments []models.FrequencyAssignment
+	err := r.db.Select(&assignments, `
 		SELECT * FROM frequency_assignments
-		WHERE created_by = $1 AND is_active = true
-		ORDER BY created_at DESC`, userID)
+		WHERE sfaf_record_type IN ('P', 'S')
+		  AND is_active = true
+		  AND routed_to_workbox = $1
+		ORDER BY created_at DESC`, workbox)
 	return assignments, err
 }
 
@@ -835,8 +1000,9 @@ func (r *FrequencyRepository) CleanupOrphanedAssignments() (int64, error) {
 
 // BulkRouteAssignments sets routed_to_workbox on the given P/S proposal IDs.
 // Passing nil for workbox clears the routing (unroutes).
-// Only updates records owned by ownerID unless ownerID is nil (admin bypass).
-func (r *FrequencyRepository) BulkRouteAssignments(ids []uuid.UUID, workbox *string, ownerID *uuid.UUID) (int64, error) {
+// callerWorkbox restricts updates to records where edit_authority_workbox matches;
+// pass nil to bypass the check (admin).
+func (r *FrequencyRepository) BulkRouteAssignments(ids []uuid.UUID, workbox *string, callerWorkbox *string) (int64, error) {
 	if len(ids) == 0 {
 		return 0, nil
 	}
@@ -848,18 +1014,20 @@ func (r *FrequencyRepository) BulkRouteAssignments(ids []uuid.UUID, workbox *str
 		placeholders[i] = fmt.Sprintf("$%d", i+3)
 		args = append(args, id)
 	}
-	ownerClause := ""
-	if ownerID != nil {
-		args = append(args, *ownerID)
-		ownerClause = fmt.Sprintf(" AND created_by = $%d", len(args))
+	authorityClause := ""
+	if callerWorkbox != nil {
+		args = append(args, *callerWorkbox)
+		// Allow routing if caller holds edit authority OR if edit_authority_workbox is NULL
+		// (records created before authority tracking was added).
+		authorityClause = fmt.Sprintf(" AND (edit_authority_workbox = $%d OR edit_authority_workbox IS NULL)", len(args))
 	}
 	query := fmt.Sprintf(`
 		UPDATE frequency_assignments
-		SET routed_to_workbox = $1, updated_at = $2
+		SET routed_to_workbox = $1, edit_authority_workbox = $1, updated_at = $2
 		WHERE id IN (%s)
 		  AND sfaf_record_type IN ('P', 'S')
 		  AND is_active = true%s`,
-		strings.Join(placeholders, ","), ownerClause)
+		strings.Join(placeholders, ","), authorityClause)
 	result, err := r.db.Exec(query, args...)
 	if err != nil {
 		return 0, err
@@ -1017,4 +1185,38 @@ func (r *FrequencyRepository) GetPublicUnits(installationID string) ([]PublicUni
 		units = []PublicUnit{}
 	}
 	return units, err
+}
+
+// ── Control Numbers (702) ─────────────────────────────────────────────────────
+
+func (r *FrequencyRepository) GetControlNumbers() ([]models.ControlNumber, error) {
+	var rows []models.ControlNumber
+	err := r.db.Select(&rows, `SELECT * FROM control_numbers ORDER BY number ASC`)
+	if rows == nil {
+		rows = []models.ControlNumber{}
+	}
+	return rows, err
+}
+
+func (r *FrequencyRepository) CreateControlNumber(cn *models.ControlNumber) error {
+	cn.ID = uuid.New()
+	_, err := r.db.Exec(
+		`INSERT INTO control_numbers (id, number, description, created_at, updated_at)
+		 VALUES ($1, $2, $3, NOW(), NOW())`,
+		cn.ID, cn.Number, cn.Description,
+	)
+	return err
+}
+
+func (r *FrequencyRepository) UpdateControlNumber(cn *models.ControlNumber) error {
+	_, err := r.db.Exec(
+		`UPDATE control_numbers SET number=$2, description=$3, updated_at=NOW() WHERE id=$1`,
+		cn.ID, cn.Number, cn.Description,
+	)
+	return err
+}
+
+func (r *FrequencyRepository) DeleteControlNumber(id uuid.UUID) error {
+	_, err := r.db.Exec(`DELETE FROM control_numbers WHERE id=$1`, id)
+	return err
 }

@@ -373,6 +373,7 @@ func main() {
 			frequency.GET("/assignments/expiring", frequencyHandler.GetExpiringFrequencies)
 			frequency.GET("/assignments/proposals", frequencyHandler.GetProposalAssignments)
 			frequency.GET("/assignments/submitted", frequencyHandler.GetSubmittedAssignments)
+			frequency.GET("/assignments/inbound", frequencyHandler.GetInboundAssignments)
 			frequency.GET("/assignments/five-year-review", frequencyHandler.GetFiveYearReviews)
 			frequency.GET("/reviewers", frequencyHandler.GetWorkboxes)
 			frequency.POST("/assignments", frequencyHandler.CreateFrequencyAssignment)
@@ -380,6 +381,7 @@ func main() {
 			frequency.GET("/assignments/in-range", frequencyHandler.GetAssignmentsInRange)
 			frequency.PUT("/assignments/:id/elevate", frequencyHandler.ElevateAssignment)
 			frequency.PUT("/assignments/:id/retract", frequencyHandler.RetractAssignment)
+			frequency.PUT("/requests/bulk-route", frequencyHandler.BulkRouteRequests)
 			frequency.PUT("/assignments/bulk-route", frequencyHandler.BulkRouteAssignments)
 			frequency.PUT("/assignments/:id/coordinations", frequencyHandler.SetCoordinations)
 			frequency.GET("/assignments/:id/comments", frequencyHandler.GetComments)
@@ -393,6 +395,8 @@ func main() {
 			frequency.PUT("/requests/:id/resubmit", frequencyHandler.ResubmitFrequencyRequest)
 			frequency.PUT("/requests/:id/retract", frequencyHandler.RetractFrequencyRequest)
 			frequency.PUT("/requests/:id/review", frequencyHandler.ReviewFrequencyRequest)
+			frequency.PUT("/requests/:id/return", frequencyHandler.ReturnRequest)
+			frequency.PUT("/requests/:id/sfaf-draft", frequencyHandler.SaveRequestSFAFDraft)
 			frequency.POST("/requests/:id/approve", frequencyHandler.ApproveFrequencyRequest)
 			frequency.GET("/requests/:id/comments", frequencyHandler.GetRequestComments)
 			frequency.POST("/requests/:id/comments", frequencyHandler.AddRequestComment)
@@ -400,6 +404,12 @@ func main() {
 
 			// Admin cleanup routes
 			frequency.POST("/cleanup-orphaned", frequencyHandler.CleanupOrphanedAssignments)
+
+			// Control Numbers (702)
+			frequency.GET("/control-numbers", frequencyHandler.GetControlNumbers)
+			frequency.POST("/control-numbers", frequencyHandler.CreateControlNumber)
+			frequency.PUT("/control-numbers/:id", frequencyHandler.UpdateControlNumber)
+			frequency.DELETE("/control-numbers/:id", frequencyHandler.DeleteControlNumber)
 		}
 
 		// ADMIN USER MANAGEMENT ROUTES

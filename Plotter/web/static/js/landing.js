@@ -201,7 +201,8 @@
             submitBtn.disabled = false;
 
             setTimeout(() => {
-                window.location.href = role === 'admin' ? '/admin' : '/frequency';
+                const ismRoles = ['ism', 'command', 'combatant_command', 'agency', 'ntia', 'admin'];
+                window.location.href = role === 'admin' ? '/admin' : ismRoles.includes(role) ? '/workbox' : '/frequency';
             }, 500);
         } catch (err) {
             showNotification('Login error: ' + err.message, 'error');
