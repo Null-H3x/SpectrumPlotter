@@ -859,3 +859,21 @@ func (s *FrequencyService) UpdateControlNumber(cn *models.ControlNumber) error {
 func (s *FrequencyService) DeleteControlNumber(id uuid.UUID) error {
 	return s.repo.DeleteControlNumber(id)
 }
+
+// ── Workboxes ─────────────────────────────────────────────────────────────────
+
+func (s *FrequencyService) GetAllWorkboxes() ([]models.Workbox, error) {
+	return s.repo.GetAllWorkboxes()
+}
+
+func (s *FrequencyService) CreateWorkbox(w *models.Workbox) error {
+	return s.repo.CreateWorkbox(w)
+}
+
+func (s *FrequencyService) UpdateWorkbox(w *models.Workbox) error {
+	return s.repo.UpdateWorkbox(w)
+}
+
+func (s *FrequencyService) DeleteWorkbox(id uuid.UUID) error {
+	return s.repo.DeleteWorkbox(id)
+}

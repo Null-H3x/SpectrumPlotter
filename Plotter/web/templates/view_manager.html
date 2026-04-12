@@ -60,6 +60,7 @@
             <button class="tab" data-tab="system-config"><i class="fas fa-cog"></i> System Config</button>
             <button class="tab" data-tab="sfaf-codes"><i class="fas fa-list-ol"></i> SFAF Codes</button>
             <button class="tab" data-tab="control-numbers"><i class="fas fa-hashtag"></i> 702s</button>
+            <button class="tab" data-tab="workboxes"><i class="fas fa-inbox"></i> Workboxes</button>
         </div>
 
         <!-- Main Content -->
@@ -356,7 +357,7 @@
                                 <input type="text" id="cnSearch" placeholder="Search numbers..." oninput="referenceData.filterControlNumbers(this.value)">
                             </div>
                             <button class="btn btn-primary" onclick="referenceData.showAddControlNumber()">
-                                <i class="fas fa-plus"></i> Add 702
+                                <i class="fas fa-plus"></i> Seed 702s
                             </button>
                         </div>
                     </div>
@@ -381,18 +382,118 @@
                 </div>
             </div>
 
+        <!-- Workboxes Tab -->
+            <div id="workboxes-tab" class="tab-panel">
+                <div class="table-manager">
+                    <div class="toolbar">
+                        <div class="toolbar-left">
+                            <h2><i class="fas fa-inbox"></i> Workboxes</h2>
+                            <span style="font-size:0.85em;color:#888;margin-left:12px;">ISM spectrum management offices — ISM+ users are identified by their workbox, not by unit</span>
+                        </div>
+                        <div class="toolbar-right">
+                            <div class="search-box">
+                                <i class="fas fa-search"></i>
+                                <input type="text" id="wbSearch" placeholder="Search workboxes..." oninput="referenceData.filterWorkboxes(this.value)">
+                            </div>
+                            <button class="btn btn-primary" onclick="referenceData.showAddWorkbox()">
+                                <i class="fas fa-plus"></i> Add Workbox
+                            </button>
+                        </div>
+                    </div>
+                    <div class="data-table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:25%;">Name</th>
+                                    <th>Description</th>
+                                    <th style="width:80px;">Active</th>
+                                    <th style="width:100px;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="wbTableBody">
+                                <tr class="loading-row">
+                                    <td colspan="4" style="text-align:center;">
+                                        <i class="fas fa-spinner fa-spin"></i> Loading…
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
         </main>
+
+        <!-- Workbox Edit Modal -->
+        <div id="wbModal" class="modal" style="display:none;">
+            <div class="modal-dialog">
+                <div class="modal-header">
+                    <h3 id="wbModalTitle"><i class="fas fa-inbox"></i> Add Workbox</h3>
+                    <button class="modal-close" onclick="referenceData.closeWBModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="wbId">
+                    <div class="form-group">
+                        <label for="wbName">Workbox Name <span class="required">*</span></label>
+                        <input type="text" id="wbName" class="form-input" required placeholder="e.g. AFSOC ISM">
+                    </div>
+                    <div class="form-group">
+                        <label for="wbDescription">Description</label>
+                        <input type="text" id="wbDescription" class="form-input" placeholder="e.g. Air Force Special Operations Command ISM">
+                    </div>
+                    <div class="form-group" style="display:flex;align-items:center;gap:8px;">
+                        <input type="checkbox" id="wbIsActive" checked style="width:auto;">
+                        <label for="wbIsActive" style="margin:0;">Active</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="referenceData.closeWBModal()">Cancel</button>
+                    <button class="btn btn-primary" onclick="referenceData.saveWorkbox()">
+                        <i class="fas fa-save"></i> Save
+                    </button>
+                </div>
+            </div>
+        </div>
 
         <!-- Control Number Edit Modal -->
         <div id="cnModal" class="modal" style="display:none;">
             <div class="modal-dialog">
                 <div class="modal-header">
-                    <h3 id="cnModalTitle"><i class="fas fa-hashtag"></i> Add 702 Entry</h3>
+                    <h3 id="cnModalTitle"><i class="fas fa-hashtag"></i> Add 702 Entries</h3>
                     <button class="modal-close" onclick="referenceData.closeCNModal()">&times;</button>
                 </div>
                 <div class="modal-body">
-                    <form id="cnForm">
-                        <input type="hidden" id="cnId">
+                    <input type="hidden" id="cnId">
+
+                    <!-- Range-add section (shown when adding) -->
+                    <div id="cnBulkSection">
+                        <div style="display:grid;grid-template-columns:1fr 80px 90px 90px;gap:10px;margin-bottom:12px;">
+                            <div>
+                                <div style="font-size:0.75rem;color:#94a3b8;margin-bottom:3px;">Organization <span class="required">*</span></div>
+                                <input type="text" id="cnRangeOrg" class="form-input" placeholder="e.g. AFSOC" oninput="referenceData.updateCNRangePreview()">
+                            </div>
+                            <div>
+                                <div style="font-size:0.75rem;color:#94a3b8;margin-bottom:3px;">Year <span class="required">*</span></div>
+                                <input type="number" id="cnRangeYear" class="form-input" min="2000" max="2099" oninput="referenceData.updateCNRangePreview()">
+                            </div>
+                            <div>
+                                <div style="font-size:0.75rem;color:#94a3b8;margin-bottom:3px;">Seq Start <span class="required">*</span></div>
+                                <input type="number" id="cnRangeStart" class="form-input" placeholder="200" min="1" oninput="referenceData.updateCNRangePreview()">
+                            </div>
+                            <div>
+                                <div style="font-size:0.75rem;color:#94a3b8;margin-bottom:3px;">Seq End <span class="required">*</span></div>
+                                <input type="number" id="cnRangeEnd" class="form-input" placeholder="299" min="1" oninput="referenceData.updateCNRangePreview()">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="cnRangeDesc">Description / Purpose <span style="color:#64748b;font-weight:400;">(optional — applied to all)</span></label>
+                            <input type="text" id="cnRangeDesc" class="form-input" placeholder="e.g. MC130 AGA nets">
+                        </div>
+                        <div id="cnRangePreview" style="margin-top:8px;font-size:0.83rem;color:#64b5f6;min-height:1.3em;padding:6px 8px;background:rgba(100,150,255,0.06);border-radius:6px;border:1px solid rgba(100,150,255,0.15);display:none;"></div>
+                    </div>
+
+                    <!-- Single-edit section (shown when editing) -->
+                    <div id="cnEditSection" style="display:none;">
                         <div class="form-group">
                             <label>Control / Request Number <span class="required">*</span></label>
                             <div style="display:grid;grid-template-columns:1fr 80px 90px;gap:8px;">
@@ -412,10 +513,10 @@
                             <div id="cnPreview" style="margin-top:6px;font-family:monospace;font-size:0.88rem;color:#64b5f6;min-height:1.3em;padding-left:2px;"></div>
                         </div>
                         <div class="form-group">
-                            <label for="cnDescription">Description / Purpose <span class="required">*</span></label>
-                            <textarea id="cnDescription" class="form-input" rows="3" required placeholder="What this number is used for…"></textarea>
+                            <label for="cnDescription">Description / Purpose</label>
+                            <textarea id="cnDescription" class="form-input" rows="3" placeholder="What this number is used for…"></textarea>
                         </div>
-                    </form>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary" onclick="referenceData.closeCNModal()">Cancel</button>

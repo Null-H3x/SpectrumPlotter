@@ -177,15 +177,16 @@ func (h *AdminHandler) UpdateUser(c *gin.Context) {
 	var req struct {
 		Email            string  `json:"email"`
 		FullName         string  `json:"full_name"`
-		Organization     string  `json:"organization"`
-		Role             string  `json:"role"`
-		IsActive         *bool   `json:"is_active"`
-		Password         string  `json:"password"`
-		Phone            *string `json:"phone"`
-		PhoneDSN         *string `json:"phone_dsn"`
-		DefaultISMOffice *string `json:"default_ism_office"`
-		ServiceBranch    *string `json:"service_branch"`
-		PayGrade         *string `json:"pay_grade"`
+		Organization     string     `json:"organization"`
+		Role             string     `json:"role"`
+		IsActive         *bool      `json:"is_active"`
+		Password         string     `json:"password"`
+		Phone            *string    `json:"phone"`
+		PhoneDSN         *string    `json:"phone_dsn"`
+		DefaultISMOffice *string    `json:"default_ism_office"`
+		WorkboxID        *uuid.UUID `json:"workbox_id"`
+		ServiceBranch    *string    `json:"service_branch"`
+		PayGrade         *string    `json:"pay_grade"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
@@ -238,6 +239,13 @@ func (h *AdminHandler) UpdateUser(c *gin.Context) {
 			user.DefaultISMOffice = nil
 		} else {
 			user.DefaultISMOffice = req.DefaultISMOffice
+		}
+	}
+	if req.WorkboxID != nil {
+		if *req.WorkboxID == uuid.Nil {
+			user.WorkboxID = nil
+		} else {
+			user.WorkboxID = req.WorkboxID
 		}
 	}
 	if req.ServiceBranch != nil {

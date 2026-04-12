@@ -328,11 +328,14 @@ function _702PickerRender(rows) {
         list.innerHTML = '<div style="color:#64748b;text-align:center;padding:24px;font-size:0.85rem;font-style:italic;">No entries found</div>';
         return;
     }
-    list.innerHTML = rows.map(cn => `
-        <div class="cn702-picker-row" onclick="_702PickerSelect(${JSON.stringify(cn.number)}, ${JSON.stringify(cn.description || '')})">
+    list.innerHTML = rows.map((cn, i) => `
+        <div class="cn702-picker-row" data-idx="${i}">
             <span class="cn702-num">${cn.number}</span>
             ${cn.description ? `<span class="cn702-desc">${cn.description}</span>` : ''}
         </div>`).join('');
+    list.querySelectorAll('.cn702-picker-row').forEach((el, i) => {
+        el.addEventListener('click', () => _702PickerSelect(rows[i].number, rows[i].description || ''));
+    });
 }
 
 function _702PickerSelect(number, description) {
@@ -912,7 +915,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const data = res.ok ? await res.json() : {};
         if (!data.valid) { window.location.href = '/'; return; }
         userRole    = data.user?.role || 'operator';
-        userWorkbox = data.user?.default_ism_office || null;
+        userWorkbox = data.user?.workbox_name || data.user?.default_ism_office || null;
         currentUser = data.user || null;
     } catch {
         window.location.href = '/';
@@ -2798,7 +2801,7 @@ const SFAF_LABELS = {
 
 window.outputSFAF1Col = function() {
     document.getElementById('outputMenu').style.display = 'none';
-    const { fields, emGroups, occ500, occ501 } = _collectSFAFFields();
+    const { fields, emGroups, occ500, occ501, entries702 } = _collectSFAFFields();
     const lines = [];
     // Build ordered field list
     const allNums = Object.keys(fields).sort((a, b) => parseFloat(a) - parseFloat(b));
@@ -2823,7 +2826,7 @@ window.outputSFAF1Col = function() {
 
 window.outputSFAF3Col = function() {
     document.getElementById('outputMenu').style.display = 'none';
-    const { fields, emGroups, occ500, occ501 } = _collectSFAFFields();
+    const { fields, emGroups, occ500, occ501, entries702 } = _collectSFAFFields();
     const skip = new Set(['113','114','115','116']);
     const entries = Object.keys(fields)
         .filter(n => !skip.has(n))
@@ -2851,7 +2854,7 @@ window.outputSFAF3Col = function() {
 
 window.outputSpreadsheet = function() {
     document.getElementById('outputMenu').style.display = 'none';
-    const { fields, emGroups, occ500, occ501 } = _collectSFAFFields();
+    const { fields, emGroups, occ500, occ501, entries702 } = _collectSFAFFields();
     const rows = [['Field', 'Label', 'Value']];
     const skip = new Set(['113','114','115','116']);
     Object.keys(fields).filter(n => !skip.has(n)).sort((a,b) => parseFloat(a)-parseFloat(b)).forEach(n => {
@@ -2873,7 +2876,7 @@ window.outputSpreadsheet = function() {
 
 window.outputGMF = function() {
     document.getElementById('outputMenu').style.display = 'none';
-    const { fields, emGroups, occ500, occ501 } = _collectSFAFFields();
+    const { fields, emGroups, occ500, occ501, entries702 } = _collectSFAFFields();
     // GMF format: fixed-width record lines per MIL-STD-461 / IRAC GMF spec
     // Each line: field tag (3 chars) + occurrence (1 char) + value
     const lines = [];

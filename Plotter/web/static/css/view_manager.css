@@ -1145,3 +1145,44 @@ textarea.form-input {
     color: #64b5f6;
     font-weight: 600;
 }
+
+/* ── 702 Bulk Add Table ── */
+.cn-bulk-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+.cn-bulk-table thead th {
+    padding: 6px 8px;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #94a3b8;
+    border-bottom: 1px solid rgba(100,150,255,0.2);
+    text-align: left;
+}
+.cn-bulk-table tbody td {
+    padding: 4px 4px;
+    vertical-align: middle;
+}
+.cn-bulk-table .form-input {
+    padding: 5px 8px;
+    font-size: 0.82rem;
+    width: 100%;
+}
+.cn-bulk-remove {
+    background: transparent;
+    border: 1px solid rgba(239,68,68,0.3);
+    color: #f87171;
+    border-radius: 4px;
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.15s;
+    padding: 0;
+}
+.cn-bulk-remove:hover { opacity: 1; }

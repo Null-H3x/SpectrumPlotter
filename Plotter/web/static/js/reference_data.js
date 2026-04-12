@@ -9,6 +9,7 @@ const referenceData = {
     systemConfig: [],
     sfafLookup: [],
     controlNumbers: [],
+    workboxes: [],
     currentUserInstallationID: null,
 
     async init() {
@@ -67,6 +68,8 @@ const referenceData = {
             this.loadLookup(this._currentLookupField);
         } else if (tabName === 'control-numbers') {
             this.loadControlNumbers();
+        } else if (tabName === 'workboxes') {
+            this.loadWorkboxes();
         }
     },
 
@@ -1377,14 +1380,38 @@ const referenceData = {
         }
     },
 
+    updateCNRangePreview() {
+        const org   = (document.getElementById('cnRangeOrg')?.value   || '').trim();
+        const year  = (document.getElementById('cnRangeYear')?.value  || '').trim();
+        const start = parseInt(document.getElementById('cnRangeStart')?.value || '');
+        const end   = parseInt(document.getElementById('cnRangeEnd')?.value   || '');
+        const prev  = document.getElementById('cnRangePreview');
+        if (!prev) return;
+        if (org && year && !isNaN(start) && !isNaN(end) && end >= start) {
+            const count = end - start + 1;
+            prev.style.display = '';
+            prev.innerHTML = `<i class="fas fa-info-circle" style="margin-right:4px;"></i>`
+                + `Will create <strong>${count}</strong> entr${count === 1 ? 'y' : 'ies'}: `
+                + `<span style="font-family:monospace;">${org} ${year}-${start}</span>`
+                + (count > 1 ? ` → <span style="font-family:monospace;">${org} ${year}-${end}</span>` : '');
+        } else {
+            prev.style.display = 'none';
+        }
+    },
+
     showAddControlNumber() {
-        document.getElementById('cnModalTitle').innerHTML = '<i class="fas fa-hashtag"></i> Add 702 Entry';
-        document.getElementById('cnForm').reset();
+        document.getElementById('cnModalTitle').innerHTML = '<i class="fas fa-hashtag"></i> Add 702 Entries';
         document.getElementById('cnId').value = '';
-        document.getElementById('cnYear').value = new Date().getFullYear();
-        document.getElementById('cnPreview').textContent = '';
+        document.getElementById('cnRangeOrg').value   = '';
+        document.getElementById('cnRangeYear').value  = new Date().getFullYear();
+        document.getElementById('cnRangeStart').value = '';
+        document.getElementById('cnRangeEnd').value   = '';
+        document.getElementById('cnRangeDesc').value  = '';
+        document.getElementById('cnRangePreview').style.display = 'none';
+        document.getElementById('cnBulkSection').style.display = '';
+        document.getElementById('cnEditSection').style.display = 'none';
         document.getElementById('cnModal').style.display = 'block';
-        document.getElementById('cnName').focus();
+        document.getElementById('cnRangeOrg').focus();
     },
 
     editCN(id) {
@@ -1405,6 +1432,8 @@ const referenceData = {
         }
         document.getElementById('cnDescription').value = cn.description || '';
         this.updateCNPreview();
+        document.getElementById('cnBulkSection').style.display = 'none';
+        document.getElementById('cnEditSection').style.display = '';
         document.getElementById('cnModal').style.display = 'block';
     },
 
@@ -1413,37 +1442,68 @@ const referenceData = {
     },
 
     async saveCN() {
-        const id   = document.getElementById('cnId').value;
-        const name = (document.getElementById('cnName').value || '').trim();
-        const year = (document.getElementById('cnYear').value || '').trim();
-        const seq  = (document.getElementById('cnSequence').value || '').trim();
-        const number = (name && year && seq) ? `${name} ${year}-${seq}` : name;
-        const body = {
-            number,
-            description: document.getElementById('cnDescription').value.trim(),
-        };
-        if (!body.number) { alert('Organization name is required.'); return; }
-        try {
-            const method = id ? 'PUT' : 'POST';
-            const url    = id
-                ? `/api/frequency/control-numbers/${id}`
-                : '/api/frequency/control-numbers';
-            const res = await fetch(url, {
-                method,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            });
-            if (res.ok) {
-                this.showToast('702 entry saved', 'success');
-                this.closeCNModal();
-                this.loadControlNumbers();
-            } else {
-                const err = await res.json();
-                this.showToast('Error: ' + (err.error || 'Save failed'), 'error');
+        const id = document.getElementById('cnId').value;
+
+        // ── Edit mode (single entry) ──
+        if (id) {
+            const name   = (document.getElementById('cnName').value || '').trim();
+            const year   = (document.getElementById('cnYear').value || '').trim();
+            const seq    = (document.getElementById('cnSequence').value || '').trim();
+            const number = (name && year && seq) ? `${name} ${year}-${seq}` : name;
+            if (!number) { alert('Organization name is required.'); return; }
+            const body = { number, description: document.getElementById('cnDescription').value.trim() };
+            try {
+                const res = await fetch(`/api/frequency/control-numbers/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                if (res.ok) {
+                    this.showToast('702 entry updated', 'success');
+                    this.closeCNModal();
+                    this.loadControlNumbers();
+                } else {
+                    const err = await res.json();
+                    this.showToast('Error: ' + (err.error || 'Save failed'), 'error');
+                }
+            } catch (e) {
+                this.showToast('Error: ' + e.message, 'error');
             }
-        } catch (e) {
-            this.showToast('Error saving entry: ' + e.message, 'error');
+            return;
         }
+
+        // ── Range add mode ──
+        const org   = (document.getElementById('cnRangeOrg').value   || '').trim();
+        const year  = (document.getElementById('cnRangeYear').value  || '').trim();
+        const start = parseInt(document.getElementById('cnRangeStart').value || '');
+        const end   = parseInt(document.getElementById('cnRangeEnd').value   || '');
+        const desc  = (document.getElementById('cnRangeDesc').value  || '').trim();
+
+        if (!org)              { alert('Organization is required.');   return; }
+        if (!year)             { alert('Year is required.');           return; }
+        if (isNaN(start))      { alert('Sequence start is required.'); return; }
+        if (isNaN(end))        { alert('Sequence end is required.');   return; }
+        if (end < start)       { alert('Sequence end must be ≥ start.'); return; }
+        const count = end - start + 1;
+        if (count > 500 && !confirm(`This will create ${count} entries. Continue?`)) return;
+
+        let saved = 0, failed = 0;
+        for (let seq = start; seq <= end; seq++) {
+            try {
+                const res = await fetch('/api/frequency/control-numbers', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ number: `${org} ${year}-${seq}`, description: desc }),
+                });
+                if (res.ok) saved++; else failed++;
+            } catch { failed++; }
+        }
+        this.showToast(
+            `${saved} entr${saved === 1 ? 'y' : 'ies'} saved` + (failed ? `, ${failed} failed` : ''),
+            failed ? 'error' : 'success'
+        );
+        this.closeCNModal();
+        this.loadControlNumbers();
     },
 
     async deleteCN(id, number) {
@@ -1453,6 +1513,128 @@ const referenceData = {
             if (res.ok) {
                 this.showToast('702 entry deleted', 'success');
                 this.loadControlNumbers();
+            } else {
+                const err = await res.json();
+                this.showToast('Error: ' + (err.error || 'Delete failed'), 'error');
+            }
+        } catch (e) {
+            this.showToast('Error: ' + e.message, 'error');
+        }
+    },
+
+    // ── Workboxes ────────────────────────────────────────────────────────────
+
+    async loadWorkboxes() {
+        try {
+            const res = await fetch('/api/frequency/workboxes');
+            const data = await res.json();
+            this.workboxes = data.workboxes || [];
+            this.renderWorkboxes();
+        } catch (e) {
+            this.showError('wbTableBody', 'Failed to load workboxes');
+        }
+    },
+
+    filterWorkboxes(q) {
+        this._wbFilter = q.toLowerCase();
+        this.renderWorkboxes();
+    },
+
+    renderWorkboxes() {
+        const tbody = document.getElementById('wbTableBody');
+        if (!tbody) return;
+        const q = this._wbFilter || '';
+        const rows = q
+            ? this.workboxes.filter(w =>
+                w.name.toLowerCase().includes(q) ||
+                (w.description || '').toLowerCase().includes(q))
+            : this.workboxes;
+
+        if (rows.length === 0) {
+            tbody.innerHTML = `<tr class="empty-row"><td colspan="4" style="text-align:center;">
+                <i class="fas fa-inbox"></i> ${q ? 'No workboxes match your search' : 'No workboxes yet'}
+            </td></tr>`;
+            return;
+        }
+        tbody.innerHTML = rows.map(w => `
+            <tr>
+                <td><strong>${w.name}</strong></td>
+                <td>${w.description || '<span style="color:#64748b;font-style:italic;">—</span>'}</td>
+                <td><span class="status-badge ${w.is_active ? 'status-active' : 'status-inactive'}">${w.is_active ? 'Active' : 'Inactive'}</span></td>
+                <td>
+                    <button class="btn btn-sm btn-icon" onclick="referenceData.editWorkbox('${w.id}')" title="Edit">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-sm btn-icon btn-danger" onclick="referenceData.deleteWorkbox('${w.id}', ${JSON.stringify(w.name)})" title="Delete">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>`).join('');
+    },
+
+    showAddWorkbox() {
+        document.getElementById('wbModalTitle').innerHTML = '<i class="fas fa-inbox"></i> Add Workbox';
+        document.getElementById('wbId').value = '';
+        document.getElementById('wbName').value = '';
+        document.getElementById('wbDescription').value = '';
+        document.getElementById('wbIsActive').checked = true;
+        document.getElementById('wbModal').style.display = 'block';
+        document.getElementById('wbName').focus();
+    },
+
+    editWorkbox(id) {
+        const w = this.workboxes.find(x => x.id === id);
+        if (!w) return;
+        document.getElementById('wbModalTitle').innerHTML = '<i class="fas fa-inbox"></i> Edit Workbox';
+        document.getElementById('wbId').value = w.id;
+        document.getElementById('wbName').value = w.name;
+        document.getElementById('wbDescription').value = w.description || '';
+        document.getElementById('wbIsActive').checked = w.is_active;
+        document.getElementById('wbModal').style.display = 'block';
+    },
+
+    closeWBModal() {
+        document.getElementById('wbModal').style.display = 'none';
+    },
+
+    async saveWorkbox() {
+        const id = document.getElementById('wbId').value;
+        const body = {
+            name:        document.getElementById('wbName').value.trim(),
+            description: document.getElementById('wbDescription').value.trim(),
+            is_active:   document.getElementById('wbIsActive').checked,
+        };
+        if (!body.name) { alert('Workbox name is required.'); return; }
+        try {
+            const method = id ? 'PUT' : 'POST';
+            const url    = id
+                ? `/api/frequency/workboxes/${id}`
+                : '/api/frequency/workboxes';
+            const res = await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            if (res.ok) {
+                this.showToast('Workbox saved', 'success');
+                this.closeWBModal();
+                this.loadWorkboxes();
+            } else {
+                const err = await res.json();
+                this.showToast('Error: ' + (err.error || 'Save failed'), 'error');
+            }
+        } catch (e) {
+            this.showToast('Error: ' + e.message, 'error');
+        }
+    },
+
+    async deleteWorkbox(id, name) {
+        if (!confirm(`Delete workbox "${name}"?\n\nUsers assigned to this workbox will have their workbox cleared.`)) return;
+        try {
+            const res = await fetch(`/api/frequency/workboxes/${id}`, { method: 'DELETE' });
+            if (res.ok) {
+                this.showToast('Workbox deleted', 'success');
+                this.loadWorkboxes();
             } else {
                 const err = await res.json();
                 this.showToast('Error: ' + (err.error || 'Delete failed'), 'error');

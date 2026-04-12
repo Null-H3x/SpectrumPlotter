@@ -23,10 +23,14 @@ func (r *UserRepository) DB() *sqlx.DB {
 	return r.db
 }
 
-// GetUserByID retrieves a user by ID
+// GetUserByID retrieves a user by ID, joining the workbox name.
 func (r *UserRepository) GetUserByID(id uuid.UUID) (*models.User, error) {
 	var user models.User
-	query := `SELECT * FROM users WHERE id = $1 AND is_active = true`
+	query := `
+		SELECT u.*, wb.name AS workbox_name
+		FROM users u
+		LEFT JOIN workboxes wb ON wb.id = u.workbox_id
+		WHERE u.id = $1 AND u.is_active = true`
 	err := r.db.Get(&user, query, id)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -92,26 +96,29 @@ func (r *UserRepository) ListAllUsers() ([]*models.User, error) {
 	return users, err
 }
 
-// UserWithDetails extends User with joined installation and unit names for admin display.
+// UserWithDetails extends User with joined installation, unit, and workbox names for admin display.
 type UserWithDetails struct {
 	models.User
 	InstallationName *string `json:"installation_name" db:"installation_name"`
 	PrimaryUnitName  *string `json:"primary_unit_name" db:"primary_unit_name"`
 	PrimaryUnitCode  *string `json:"primary_unit_code" db:"primary_unit_code"`
+	WorkboxName      *string `json:"workbox_name" db:"workbox_name"`
 }
 
-// ListUsersWithDetails returns all users joined with installation and primary unit names.
+// ListUsersWithDetails returns all users joined with installation, primary unit, and workbox names.
 func (r *UserRepository) ListUsersWithDetails() ([]*UserWithDetails, error) {
 	var users []*UserWithDetails
 	query := `
 		SELECT u.*,
 		       i.name  AS installation_name,
 		       un.name AS primary_unit_name,
-		       un.unit_code AS primary_unit_code
+		       un.unit_code AS primary_unit_code,
+		       wb.name AS workbox_name
 		FROM users u
 		LEFT JOIN installations i ON i.id = u.installation_id
 		LEFT JOIN user_units uu ON uu.user_id = u.id AND uu.is_primary = true
 		LEFT JOIN units un ON un.id = uu.unit_id
+		LEFT JOIN workboxes wb ON wb.id = u.workbox_id
 		ORDER BY u.created_at DESC`
 	err := r.db.Select(&users, query)
 	return users, err
@@ -125,11 +132,12 @@ func (r *UserRepository) UpdateUser(user *models.User) error {
 		SET email = $1, full_name = $2, organization = $3, role = $4, is_active = $5,
 		    password_hash = COALESCE($6, password_hash),
 		    phone = $7, phone_dsn = $8, unified_command = $9, installation_id = $10,
-		    default_ism_office = $11, service_branch = $12, pay_grade = $13, updated_at = $14
-		WHERE id = $15`
+		    default_ism_office = $11, service_branch = $12, pay_grade = $13,
+		    workbox_id = $14, updated_at = $15
+		WHERE id = $16`
 	_, err := r.db.Exec(query, user.Email, user.FullName, user.Organization, user.Role, user.IsActive,
 		user.PasswordHash, user.Phone, user.PhoneDSN, user.UnifiedCommand, user.InstallationID,
-		user.DefaultISMOffice, user.ServiceBranch, user.PayGrade, user.UpdatedAt, user.ID)
+		user.DefaultISMOffice, user.ServiceBranch, user.PayGrade, user.WorkboxID, user.UpdatedAt, user.ID)
 	return err
 }
 

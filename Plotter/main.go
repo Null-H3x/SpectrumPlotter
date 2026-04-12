@@ -410,6 +410,11 @@ func main() {
 			frequency.POST("/control-numbers", frequencyHandler.CreateControlNumber)
 			frequency.PUT("/control-numbers/:id", frequencyHandler.UpdateControlNumber)
 			frequency.DELETE("/control-numbers/:id", frequencyHandler.DeleteControlNumber)
+
+			frequency.GET("/workboxes", frequencyHandler.GetWorkboxObjects)
+			frequency.POST("/workboxes", frequencyHandler.CreateWorkbox)
+			frequency.PUT("/workboxes/:id", frequencyHandler.UpdateWorkbox)
+			frequency.DELETE("/workboxes/:id", frequencyHandler.DeleteWorkbox)
 		}
 
 		// ADMIN USER MANAGEMENT ROUTES

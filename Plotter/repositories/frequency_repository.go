@@ -110,7 +110,8 @@ func (r *FrequencyRepository) GetUserISMUnit(userID uuid.UUID) (*models.Unit, er
 
 func (r *FrequencyRepository) GetAllUnits() ([]models.Unit, error) {
 	var units []models.Unit
-	query := `SELECT * FROM units WHERE is_active = true ORDER BY organization, name`
+	// ISM offices are not units (field 207); exclude unit_type = 'ISM'
+	query := `SELECT * FROM units WHERE is_active = true AND (unit_type IS NULL OR unit_type != 'ISM') ORDER BY organization, name`
 	err := r.db.Select(&units, query)
 	return units, err
 }
@@ -1218,5 +1219,45 @@ func (r *FrequencyRepository) UpdateControlNumber(cn *models.ControlNumber) erro
 
 func (r *FrequencyRepository) DeleteControlNumber(id uuid.UUID) error {
 	_, err := r.db.Exec(`DELETE FROM control_numbers WHERE id=$1`, id)
+	return err
+}
+
+// ── Workbox repository methods ────────────────────────────────────────────────
+
+func (r *FrequencyRepository) GetAllWorkboxes() ([]models.Workbox, error) {
+	var rows []models.Workbox
+	err := r.db.Select(&rows, `SELECT * FROM workboxes ORDER BY name`)
+	return rows, err
+}
+
+func (r *FrequencyRepository) GetWorkboxByID(id uuid.UUID) (*models.Workbox, error) {
+	var w models.Workbox
+	err := r.db.Get(&w, `SELECT * FROM workboxes WHERE id=$1`, id)
+	if err != nil {
+		return nil, err
+	}
+	return &w, nil
+}
+
+func (r *FrequencyRepository) CreateWorkbox(w *models.Workbox) error {
+	w.ID = uuid.New()
+	_, err := r.db.Exec(
+		`INSERT INTO workboxes (id, name, description, is_active, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, NOW(), NOW())`,
+		w.ID, w.Name, w.Description, w.IsActive,
+	)
+	return err
+}
+
+func (r *FrequencyRepository) UpdateWorkbox(w *models.Workbox) error {
+	_, err := r.db.Exec(
+		`UPDATE workboxes SET name=$2, description=$3, is_active=$4, updated_at=NOW() WHERE id=$1`,
+		w.ID, w.Name, w.Description, w.IsActive,
+	)
+	return err
+}
+
+func (r *FrequencyRepository) DeleteWorkbox(id uuid.UUID) error {
+	_, err := r.db.Exec(`DELETE FROM workboxes WHERE id=$1`, id)
 	return err
 }

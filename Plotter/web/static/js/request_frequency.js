@@ -814,6 +814,16 @@
         }
     };
 
+    // ── Guided: number of users toggle ────────────────────────────────────────
+    window.toggleNumUsersCustom = function () {
+        const sel    = document.getElementById('g_numUsers');
+        const custom = document.getElementById('g_numUsersCustom');
+        if (!sel || !custom) return;
+        const show = sel.value === '10000+';
+        custom.style.display = show ? '' : 'none';
+        if (!show) custom.value = '';
+    };
+
     // ── Guided: band selector ─────────────────────────────────────────────────
     const MANET_SUB_BANDS = new Set(['manet_uhf', 'manet_low_l', 'manet_high_l', 'manet_s', 'manet_c']);
 
@@ -1043,6 +1053,7 @@
                     ${erow('Purpose',                inp('g_purpose', 'Purpose for this request…'))}
                     ${erow('Net name',               inp('g_netName', 'Net name'))}
                     ${erow('Callsign',               inp('g_callsign', 'Callsign'))}
+                    ${row ('Number of users',        payload.num_users ? (payload.num_users === '10000+' && payload.num_users_custom ? `More than 10,000 (approx. ${Number(payload.num_users_custom).toLocaleString()})` : payload.num_users.replace('-', ' – ')) : null)}
                 </div>
                 <div class="review-section">
                     <h3><i class="fas fa-wave-square"></i> Frequency</h3>
@@ -1160,6 +1171,8 @@
             purpose:               val('g_purpose'),
             net_name:              val('g_netName') || null,
             callsign:              val('g_callsign') || null,
+            num_users:             val('g_numUsers') || null,
+            num_users_custom:      val('g_numUsers') === '10000+' ? (val('g_numUsersCustom') || null) : null,
             requested_frequency:   fMode === 'specific' ? (val('g_specificFreq') || null) : null,
             frequency_range_min:   fMode === 'band'     ? (numVal('g_freqMin') || null)  : null,
             frequency_range_max:   fMode === 'band'     ? (numVal('g_freqMax') || null)  : null,
@@ -1372,6 +1385,8 @@
             if (p.stop_buzzer)           setVal('g_stopBuzzer', p.stop_buzzer);
             if (p.net_name)              setVal('g_netName', p.net_name);
             if (p.callsign)              setVal('g_callsign', p.callsign);
+            if (p.num_users)           { setVal('g_numUsers', p.num_users); toggleNumUsersCustom(); }
+            if (p.num_users_custom)      setVal('g_numUsersCustom', p.num_users_custom);
             if (p.priority)              setVal('g_priority', p.priority);
 
             // Step 3: frequency mode + specific/band values

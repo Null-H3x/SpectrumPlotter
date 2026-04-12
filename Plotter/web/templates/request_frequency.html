@@ -605,6 +605,23 @@
                         <input type="text" id="g_callsign" class="form-control" placeholder="e.g., DRAGON 6">
                     </div>
                 </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Number of Users <span class="optional">(optional)</span></label>
+                        <select id="g_numUsers" class="form-control" onchange="toggleNumUsersCustom()">
+                            <option value="">— Select range —</option>
+                            <option value="1-10">1 – 10</option>
+                            <option value="11-30">11 – 30</option>
+                            <option value="31-100">31 – 100</option>
+                            <option value="101-300">101 – 300</option>
+                            <option value="301-1000">301 – 1,000</option>
+                            <option value="1001-3000">1,001 – 3,000</option>
+                            <option value="3001-10000">3,001 – 10,000</option>
+                            <option value="10000+">More than 10,000</option>
+                        </select>
+                        <input type="number" id="g_numUsersCustom" class="form-control" style="display:none;margin-top:6px;" placeholder="Enter amount of users to nearest 10,000" min="10000" step="10000">
+                    </div>
+                </div>
             </div>
 
             <!-- G3: What frequency? -->

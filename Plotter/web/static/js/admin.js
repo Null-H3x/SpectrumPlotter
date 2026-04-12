@@ -32,25 +32,18 @@ function updateAdminPayGradeDropdown(branch, savedValue) {
     if (savedValue) sel.value = savedValue;
 }
 
-function updateAdminISMDropdown(savedValue) {
+function updateAdminISMDropdown(savedWorkboxId) {
     const sel = document.getElementById('fieldDefaultISM');
     if (!sel) return;
-    const wbOpts = allAdminWorkboxes.map(w =>
-        `<option value="${w}">${w}</option>`
-    ).join('');
-    const installOpts = allAdminInstallations.map(i =>
-        `<option value="${i.id}">${i.name}${i.code ? ' (' + i.code + ')' : ''}</option>`
-    ).join('');
+    // Workbox options use UUID as value so workbox_id is sent to the API
+    const wbOpts = allAdminWorkboxes
+        .filter(w => w.is_active)
+        .map(w => `<option value="${w.id}">${w.name}</option>`)
+        .join('');
     sel.innerHTML = '<option value="">— None —</option>' +
-        (wbOpts      ? `<optgroup label="Workboxes / ISM Offices">${wbOpts}</optgroup>` : '') +
-        (installOpts ? `<optgroup label="Installations">${installOpts}</optgroup>` : '');
-    if (savedValue) {
-        sel.value = savedValue;
-        if (sel.value !== savedValue) {
-            const opt = document.createElement('option');
-            opt.value = savedValue; opt.textContent = savedValue;
-            sel.appendChild(opt); sel.value = savedValue;
-        }
+        (wbOpts ? `<optgroup label="Workboxes">${wbOpts}</optgroup>` : '');
+    if (savedWorkboxId) {
+        sel.value = savedWorkboxId;
     }
 }
 
@@ -82,7 +75,8 @@ async function loadAdminInstallations() {
             fetch('/api/frequency/reviewers'),
         ]);
         allAdminInstallations = instRes.ok ? (await instRes.json()).installations || [] : [];
-        allAdminWorkboxes     = wbRes.ok  ? (await wbRes.json()).workboxes || []  : [];
+        // Use the full workbox objects (with id) from the new endpoint
+        allAdminWorkboxes = wbRes.ok ? (await wbRes.json()).workbox_objects || [] : [];
     } catch (_) { /* ISM dropdown will just be empty */ }
 }
 
@@ -256,7 +250,7 @@ function openEditModal(user) {
     document.getElementById('fieldRole').value = user.role;
     document.getElementById('fieldServiceBranch').value = user.service_branch || '';
     updateAdminPayGradeDropdown(user.service_branch || '', user.pay_grade || '');
-    updateAdminISMDropdown(user.default_ism_office || '');
+    updateAdminISMDropdown(user.workbox_id || '');
     document.getElementById('passwordGroup').style.display = '';
     document.getElementById('fieldPassword').required = false;
     document.getElementById('fieldPassword').placeholder = 'Leave blank to keep current password';
@@ -294,7 +288,7 @@ async function submitUserForm(e) {
                 role: document.getElementById('fieldRole').value,
                 service_branch: document.getElementById('fieldServiceBranch').value || null,
                 pay_grade: document.getElementById('fieldPayGrade').value || null,
-                default_ism_office: document.getElementById('fieldDefaultISM').value || null,
+                workbox_id: document.getElementById('fieldDefaultISM').value || null,
             };
             if (pw) payload.password = pw;
             await apiFetch(`/api/admin/users/${editingUserId}`, {
@@ -316,7 +310,7 @@ async function submitUserForm(e) {
                     role: document.getElementById('fieldRole').value,
                     service_branch: document.getElementById('fieldServiceBranch').value || null,
                     pay_grade: document.getElementById('fieldPayGrade').value || null,
-                    default_ism_office: document.getElementById('fieldDefaultISM').value || null,
+                    workbox_id: document.getElementById('fieldDefaultISM').value || null,
                 }),
             });
             showToast('User created successfully', 'success');

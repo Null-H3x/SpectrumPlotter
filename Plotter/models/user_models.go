@@ -23,6 +23,8 @@ type User struct {
 	UnifiedCommand    *string    `json:"unified_command,omitempty" db:"unified_command"`
 	LastLogin         *time.Time `json:"last_login" db:"last_login"`
 	DefaultISMOffice  *string    `json:"default_ism_office,omitempty" db:"default_ism_office"`
+	WorkboxID         *uuid.UUID `json:"workbox_id,omitempty" db:"workbox_id"`
+	WorkboxName       *string    `json:"workbox_name,omitempty" db:"workbox_name"` // joined from workboxes
 	ServiceBranch     *string    `json:"service_branch,omitempty" db:"service_branch"`
 	PayGrade          *string    `json:"pay_grade,omitempty" db:"pay_grade"`
 	CertificateSerial *string    `json:"certificate_serial,omitempty" db:"certificate_serial"`

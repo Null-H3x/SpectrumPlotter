@@ -767,40 +767,86 @@ func (h *FrequencyHandler) GetFiveYearReviews(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"assignments": result})
 }
 
-// GetWorkboxes returns the static list of named workboxes available as routing destinations.
+// GetWorkboxes returns workboxes from the database (replaces the old hardcoded list).
 // GET /api/frequency/reviewers  (path kept for backward compatibility)
 func (h *FrequencyHandler) GetWorkboxes(c *gin.Context) {
-	workboxes := []string{
-		// Agency
-		"AFSMO",
-		// AF MAJCOMs
-		"ACC ISM",
-		"AETC ISM",
-		"AFDW ISM",
-		"AFGSC ISM",
-		"AFMC ISM",
-		"AFRC ISM",
-		"AFSOC ISM",
-		"AFSPC ISM",
-		"AMC ISM",
-		"ANG ISM",
-		"PACAF ISM",
-		"USAFE ISM",
-		// Area Frequency Coordinators
-		"GAFC",
-		"NAFC",
-		"CENTCOM AFC",
-		"EUCOM AFC",
-		"INDOPACOM AFC",
-		"NORTHCOM AFC",
-		"SOCOM AFC",
-		// Joint/Other
-		"FORSCOM AFC",
-		"USAREUR AFC",
-		"NAVEUR AFC",
-		"NAVPAC AFC",
+	wbs, err := h.service.GetAllWorkboxes()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
-	c.JSON(http.StatusOK, gin.H{"workboxes": workboxes})
+	// Keep the existing API shape (array of name strings) for backward compatibility,
+	// but also include full objects for new consumers.
+	names := make([]string, 0, len(wbs))
+	for _, w := range wbs {
+		if w.IsActive {
+			names = append(names, w.Name)
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"workboxes": names, "workbox_objects": wbs})
+}
+
+// GetWorkboxObjects returns full workbox objects for management UI.
+// GET /api/workboxes
+func (h *FrequencyHandler) GetWorkboxObjects(c *gin.Context) {
+	wbs, err := h.service.GetAllWorkboxes()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"workboxes": wbs})
+}
+
+// CreateWorkbox adds a new workbox.
+// POST /api/workboxes
+func (h *FrequencyHandler) CreateWorkbox(c *gin.Context) {
+	var w models.Workbox
+	if err := c.ShouldBindJSON(&w); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+	w.IsActive = true
+	if err := h.service.CreateWorkbox(&w); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"workbox": w})
+}
+
+// UpdateWorkbox edits an existing workbox.
+// PUT /api/workboxes/:id
+func (h *FrequencyHandler) UpdateWorkbox(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+	var w models.Workbox
+	if err := c.ShouldBindJSON(&w); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+	w.ID = id
+	if err := h.service.UpdateWorkbox(&w); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"workbox": w})
+}
+
+// DeleteWorkbox removes a workbox.
+// DELETE /api/workboxes/:id
+func (h *FrequencyHandler) DeleteWorkbox(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+	if err := h.service.DeleteWorkbox(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
 // ElevateAssignment promotes a P→A or S→T final assignment (agency-level and above)
