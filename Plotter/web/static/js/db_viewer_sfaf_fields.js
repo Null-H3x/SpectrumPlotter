@@ -910,9 +910,7 @@ Object.assign(DatabaseViewer.prototype, {
 
             modal.style.display = 'flex';
         }
-    }
-
-},
+    },
 
     async saveAllSFAFFieldChanges(recordId) {
         try {

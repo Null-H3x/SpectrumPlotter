@@ -1223,9 +1223,7 @@ Object.assign(DatabaseViewer.prototype, {
 
         // Re-render with filtered and sorted data
         this.renderEnhancedSFAFTable(records);
-    }
-
-},
+    },
 
     async loadData() {
         try {

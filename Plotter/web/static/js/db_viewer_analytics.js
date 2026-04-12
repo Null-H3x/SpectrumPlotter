@@ -2097,9 +2097,7 @@ Object.assign(DatabaseViewer.prototype, {
     getTimeSpanInDays(startDate, endDate) {
         const diffMs = endDate.getTime() - startDate.getTime();
         return Math.max(diffMs / (1000 * 60 * 60 * 24), 1); // Minimum 1 day
-    }
-
-},
+    },
 
     async loadAnalytics() {
         try {

@@ -290,9 +290,7 @@ Object.assign(DatabaseViewer.prototype, {
                 hasAgencyDiversity: [...new Set(iracNotes.flatMap(n => n.agency || []))].length >= 3
             }
         };
-    }
-
-},
+    },
 
     async loadIRACNotes() {
         try {

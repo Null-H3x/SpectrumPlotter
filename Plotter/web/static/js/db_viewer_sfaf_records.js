@@ -633,9 +633,7 @@ Object.assign(DatabaseViewer.prototype, {
             console.error('Failed to validate SFAF record:', error);
             this.showError('Failed to validate SFAF record');
         }
-    }
-
-},
+    },
 
     async editSFAF(markerId) {
         try {

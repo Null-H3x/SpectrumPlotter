@@ -439,9 +439,7 @@ Object.assign(DatabaseViewer.prototype, {
                 }, { once: true });
             }, 0);
         }
-    }
-
-},
+    },
 
     async importSampleSFAFData() {
         try {

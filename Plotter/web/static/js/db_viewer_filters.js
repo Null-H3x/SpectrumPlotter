@@ -859,9 +859,7 @@ Object.assign(DatabaseViewer.prototype, {
         if (totalCount) {
             totalCount.textContent = this.currentSFAFData ? this.currentSFAFData.length : 0;
         }
-    }
-
-},
+    },
 
     async loadFieldLabels() {
         try {
