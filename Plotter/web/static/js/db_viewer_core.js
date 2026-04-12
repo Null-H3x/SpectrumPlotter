@@ -519,4 +519,36 @@ class DatabaseViewer {
 
         console.log(`✅ Tab switched to: ${tabId}, restored ${this.selectedItems.size} selections (saved to session)`);
     }
+
+    async init() {
+        await this.loadFieldLabels();
+        this.setupEventListeners();
+        this.setupTabNavigation();
+        this.setupTableScrollIndicators();
+
+        // Check for serial filter from Table Manager
+        const filterData = sessionStorage.getItem('dbFilterSerials');
+        if (filterData) {
+            try {
+                const { unitCode, serials } = JSON.parse(filterData);
+                this.serialFilter = serials;
+                console.log(`🔍 Applying serial filter for ${unitCode}:`, serials);
+                sessionStorage.removeItem('dbFilterSerials');
+            } catch (error) {
+                console.error('Error parsing serial filter:', error);
+            }
+        }
+
+        // ✅ Apply session preferences before loading data
+        this.applySessionPreferences();
+
+        // Initialize custom views and apply default view
+        this.updateViewDropdown();
+        this.applyDefaultView();
+
+        await this.loadData();
+
+        // ✅ Save initial session state
+        this.saveCurrentState();
+    }
 }
