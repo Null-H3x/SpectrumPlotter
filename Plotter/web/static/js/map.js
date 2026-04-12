@@ -8,6 +8,10 @@
 // ==================== Base Map Configuration ====================
 
 const baseMaps = {
+    'OpenStreetMap': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 19
+    }),
     'CARTO Light': L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
         subdomains: 'abcd',
@@ -22,11 +26,21 @@ const baseMaps = {
         attribution: 'Tiles &copy; Esri',
         maxZoom: 19
     }),
+    'Esri Topo': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri',
+        maxZoom: 19
+    }),
     'Esri Satellite': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         attribution: 'Tiles &copy; Esri',
         maxZoom: 19
     })
 };
+
+// ==================== Overlay Layers ====================
+// Boundary overlays — toggled independently of base layer
+// GeoJSON-based overlays — drawn client-side for reliable black borders
+// and country label markers at any zoom level on any base layer.
+const overlayMaps = {};  // populated below after map init
 
 // ==================== Load User Settings ====================
 
@@ -34,7 +48,7 @@ const baseMaps = {
 const userSettings = SettingsManager.getSettings();
 
 // Determine initial map configuration from settings
-const initialBaseLayer = baseMaps[userSettings.map.baseLayer] || baseMaps['Esri Satellite'];
+const initialBaseLayer = baseMaps[userSettings.map.baseLayer] || baseMaps['OpenStreetMap'];
 const initialCenter = [userSettings.map.defaultCenter.lat, userSettings.map.defaultCenter.lng];
 const initialZoom = userSettings.map.defaultZoom;
 
@@ -53,9 +67,6 @@ const map = L.map('map', {
     layers: [initialBaseLayer]
 });
 
-// Add layer control
-L.control.layers(baseMaps).addTo(map);
-
 // Create layer group for drawn features
 const drawnItems = new L.FeatureGroup();
 map.addLayer(drawnItems);
@@ -64,6 +75,217 @@ map.addLayer(drawnItems);
 window.map = map;
 window.drawnItems = drawnItems;
 window.baseMaps = baseMaps;
+
+// Force Leaflet to recalculate tile layout after the DOM has fully settled.
+setTimeout(() => { map.invalidateSize(); }, 100);
+
+// ==================== Country Layers + Sidebar ====================
+
+// ISO 3166-1 numeric → English country name
+const COUNTRY_NAMES = {
+    4:'Afghanistan',8:'Albania',12:'Algeria',24:'Angola',32:'Argentina',
+    36:'Australia',40:'Austria',50:'Bangladesh',56:'Belgium',64:'Bhutan',
+    68:'Bolivia',76:'Brazil',100:'Bulgaria',116:'Cambodia',120:'Cameroon',
+    124:'Canada',152:'Chile',156:'China',170:'Colombia',178:'Republic of Congo',
+    180:'DR Congo',188:'Costa Rica',191:'Croatia',192:'Cuba',196:'Cyprus',
+    203:'Czech Republic',208:'Denmark',214:'Dominican Republic',218:'Ecuador',
+    818:'Egypt',222:'El Salvador',231:'Ethiopia',246:'Finland',250:'France',
+    266:'Gabon',276:'Germany',288:'Ghana',300:'Greece',320:'Guatemala',
+    324:'Guinea',332:'Haiti',340:'Honduras',348:'Hungary',356:'India',
+    360:'Indonesia',364:'Iran',368:'Iraq',372:'Ireland',376:'Israel',
+    380:'Italy',388:'Jamaica',392:'Japan',400:'Jordan',398:'Kazakhstan',
+    404:'Kenya',408:'North Korea',410:'South Korea',414:'Kuwait',418:'Laos',
+    422:'Lebanon',430:'Liberia',434:'Libya',440:'Lithuania',442:'Luxembourg',
+    454:'Malawi',458:'Malaysia',466:'Mali',484:'Mexico',496:'Mongolia',
+    504:'Morocco',508:'Mozambique',516:'Namibia',524:'Nepal',528:'Netherlands',
+    554:'New Zealand',562:'Niger',566:'Nigeria',578:'Norway',512:'Oman',
+    586:'Pakistan',591:'Panama',604:'Peru',608:'Philippines',616:'Poland',
+    620:'Portugal',634:'Qatar',642:'Romania',643:'Russia',682:'Saudi Arabia',
+    686:'Senegal',694:'Sierra Leone',703:'Slovakia',705:'Slovenia',
+    706:'Somalia',710:'South Africa',728:'South Sudan',724:'Spain',
+    144:'Sri Lanka',729:'Sudan',752:'Sweden',756:'Switzerland',
+    760:'Syria',158:'Taiwan',762:'Tajikistan',764:'Thailand',
+    780:'Trinidad and Tobago',788:'Tunisia',792:'Turkey',800:'Uganda',
+    804:'Ukraine',784:'UAE',826:'United Kingdom',840:'United States',
+    858:'Uruguay',860:'Uzbekistan',704:'Vietnam',887:'Yemen',
+    894:'Zambia',716:'Zimbabwe'
+};
+
+function getCountryName(numericId) {
+    return COUNTRY_NAMES[+numericId] || ('Country ' + numericId);
+}
+
+(function loadCountryLayers() {
+    const borderLayer = L.layerGroup();
+    overlayMaps['Country Borders'] = borderLayer;
+    L.control.layers(baseMaps, overlayMaps, { position: 'topright' }).addTo(map);
+    borderLayer.addTo(map);
+
+    fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
+        .then(r => r.ok ? r.json() : Promise.reject(r.status))
+        .then(topo => {
+            if (typeof topojson === 'undefined') return;
+
+            // Black border mesh (visual)
+            const mesh = topojson.mesh(topo, topo.objects.countries, (a, b) => a !== b);
+            L.geoJSON(mesh, {
+                style: { color:'#000', weight:1.5, opacity:0.85, fill:false }
+            }).addTo(borderLayer);
+
+            // Transparent click-target polygons
+            const features = topojson.feature(topo, topo.objects.countries);
+            L.geoJSON(features, {
+                style: { fillOpacity:0, color:'transparent', weight:0 },
+                onEachFeature(feat, lyr) {
+                    lyr.on('click', e => {
+                        L.DomEvent.stopPropagation(e);
+                        openCountrySidebar(getCountryName(feat.id));
+                    });
+                    lyr.on('mouseover', function() {
+                        this.setStyle({ fillColor:'#667eea', fillOpacity:0.12 });
+                    });
+                    lyr.on('mouseout', function() {
+                        this.setStyle({ fillOpacity:0 });
+                    });
+                }
+            }).addTo(map);
+        })
+        .catch(e => console.warn('Country borders unavailable:', e));
+})();
+
+// ==================== Country Capability Sidebar ====================
+
+let _csCountry = null;
+let _csTab     = 'civilian';
+let _csAdmin   = false;
+
+// Detect admin role once on load
+(async function detectAdmin() {
+    try {
+        const token = localStorage.getItem('sfaf_token') || '';
+        const res = await fetch('/api/auth/session',
+            { headers: token ? { Authorization: token } : {} });
+        if (res.ok) {
+            const d = await res.json();
+            _csAdmin = d.valid && d.user && d.user.role === 'admin';
+        }
+    } catch(_) {}
+})();
+
+function openCountrySidebar(countryName) {
+    _csCountry = countryName;
+    _csTab = 'civilian';
+    const sb = document.getElementById('countrySidebar');
+    if (!sb) return;
+    document.getElementById('csSidebarTitle').textContent = countryName;
+    document.querySelectorAll('.cs-tab-btn').forEach(b =>
+        b.classList.toggle('cs-tab-active', b.dataset.tab === 'civilian'));
+    sb.classList.add('cs-open');
+    csLoadTab('civilian');
+}
+
+function closeCountrySidebar() {
+    document.getElementById('countrySidebar').classList.remove('cs-open');
+}
+
+function csSelectTab(tab) {
+    _csTab = tab;
+    document.querySelectorAll('.cs-tab-btn').forEach(b =>
+        b.classList.toggle('cs-tab-active', b.dataset.tab === tab));
+    csLoadTab(tab);
+}
+
+async function csLoadTab(tab) {
+    const body = document.getElementById('csSidebarBody');
+    if (!body) return;
+    body.innerHTML = '<div class="cs-loading"><i class="fas fa-spinner fa-spin"></i></div>';
+    try {
+        const token = localStorage.getItem('sfaf_token') || '';
+        const res = await fetch(
+            `/api/country-capabilities?country=${encodeURIComponent(_csCountry)}`,
+            { headers: token ? { Authorization: token } : {} });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        const items = (data.capabilities || []).filter(c => c.category === tab);
+        csRenderTab(items, tab, body);
+    } catch(e) {
+        body.innerHTML = `<p class="cs-error"><i class="fas fa-exclamation-triangle"></i> ${e.message}</p>`;
+    }
+}
+
+function csRenderTab(items, tab, container) {
+    let html = '';
+
+    // ── Existing entries ──────────────────────────────────────────────────
+    if (!items.length) {
+        html += `<p class="cs-empty">No ${tab} entries for ${_csCountry}.</p>`;
+    } else {
+        items.forEach(item => {
+            html += `<div class="cs-entry" data-id="${item.id}">
+                <div class="cs-row"><span class="cs-lbl">Equipment</span><span class="cs-val">${item.equipment||'—'}</span></div>
+                <div class="cs-row"><span class="cs-lbl">Usage</span><span class="cs-val">${item.usage||'—'}</span></div>
+                <div class="cs-row"><span class="cs-lbl">Freq Range</span><span class="cs-val">${item.freq_range||'—'}</span></div>
+                <div class="cs-row"><span class="cs-lbl">Wattage</span><span class="cs-val">${item.wattage||'—'}</span></div>
+                ${_csAdmin ? `<button class="cs-del-btn" onclick="csDelete('${item.id}')"><i class="fas fa-trash-alt"></i></button>` : ''}
+            </div>`;
+        });
+    }
+
+    // ── Add Entry form — always visible at the bottom of each tab ────────
+    html += `
+    <div class="cs-add-section">
+        <div class="cs-add-header"><i class="fas fa-plus-circle"></i> Add Entry</div>
+        <div class="cs-form cs-form-inline">
+            <input class="cs-input" id="csEq"   placeholder="Equipment"       />
+            <input class="cs-input" id="csUse"  placeholder="Usage"           />
+            <input class="cs-input" id="csFreq" placeholder="Frequency Range" />
+            <input class="cs-input" id="csWat"  placeholder="Wattage"         />
+            <button class="cs-save-btn" onclick="csSave('${tab}')">
+                <i class="fas fa-check"></i> Save Entry
+            </button>
+        </div>
+    </div>`;
+
+    container.innerHTML = html;
+}
+
+async function csSave(tab) {
+    const token = localStorage.getItem('sfaf_token') || '';
+    try {
+        const res = await fetch('/api/country-capabilities', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json',
+                       ...(token ? { Authorization: token } : {}) },
+            body: JSON.stringify({
+                country:    _csCountry, category: tab,
+                equipment:  document.getElementById('csEq').value,
+                usage:      document.getElementById('csUse').value,
+                freq_range: document.getElementById('csFreq').value,
+                wattage:    document.getElementById('csWat').value
+            })
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        csLoadTab(tab);
+    } catch(e) { alert('Save failed: ' + e.message); }
+}
+
+async function csDelete(id) {
+    if (!confirm('Delete this entry?')) return;
+    const token = localStorage.getItem('sfaf_token') || '';
+    try {
+        const res = await fetch(`/api/country-capabilities/${id}`, {
+            method: 'DELETE',
+            headers: token ? { Authorization: token } : {}
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        csLoadTab(_csTab);
+    } catch(e) { alert('Delete failed: ' + e.message); }
+}
+
+map.on('click', () => {
+    if (document.getElementById('countrySidebar')?.classList.contains('cs-open'))
+        closeCountrySidebar();
+});
 
 // ==================== Marker Icons ====================
 

@@ -73,7 +73,7 @@ func friendlyImportError(err error) string {
 	case strings.Contains(msg, "connection"):
 		return "could not reach the database — please try again"
 	default:
-		return "an unexpected error occurred during import"
+		return fmt.Sprintf("database error: %s", msg)
 	}
 }
 

@@ -693,5 +693,42 @@
 <script src="/js/db_viewer_ui.js?v=1"></script>
 <script src="/js/db_viewer_managers.js?v=1"></script>
 <script src="/js/view_manager.js?v=2"></script>
+
+<!-- Capabilities panel and toggle — outside .app to avoid stacking context issues -->
+<div id="capPanel" class="cap-panel">
+    <div class="cap-panel-header">
+        <i class="fas fa-signal"></i>
+        <span>Spectrum Capabilities</span>
+    </div>
+    <div class="cap-panel-body">
+        <div class="cap-item cap-ew">
+            <span class="cap-bubble cap-bubble-red"></span>
+            <div class="cap-text">
+                <div class="cap-title">Electronic Warfare Capabilities</div>
+                <div class="cap-desc">EW systems, jamming, SIGINT, and directed energy frequency ranges</div>
+            </div>
+        </div>
+        <div class="cap-item cap-civilian">
+            <span class="cap-bubble cap-bubble-grey"></span>
+            <div class="cap-text">
+                <div class="cap-title">Civilian Frequency Capabilities</div>
+                <div class="cap-desc">Commercial, aviation, maritime, and public safety frequency ranges</div>
+            </div>
+        </div>
+    </div>
+</div>
+<button id="capPanelToggle" class="cap-panel-toggle" onclick="toggleCapPanel()" title="Spectrum Capabilities">
+    <i class="fas fa-signal"></i>
+</button>
+
+<script>
+function toggleCapPanel() {
+    const panel = document.getElementById('capPanel');
+    const toggle = document.getElementById('capPanelToggle');
+    const isOpen = panel.classList.toggle('cap-panel-open');
+    toggle.classList.toggle('cap-panel-toggle-open', isOpen);
+    toggle.title = isOpen ? 'Close panel' : 'Spectrum Capabilities';
+}
+</script>
 </body>
 </html>
