@@ -861,4 +861,18 @@ Object.assign(DatabaseViewer.prototype, {
         }
     }
 
+},
+
+    async loadFieldLabels() {
+        try {
+            const response = await fetch('/js/field_labels.json');
+            if (response.ok) {
+                this.fieldLabels = await response.json();
+            }
+        } catch (e) {
+            console.warn('field_labels.json not found, using built-in defaults');
+        }
+        if (!this.fieldLabels) this.fieldLabels = {};
+    }
+
 });

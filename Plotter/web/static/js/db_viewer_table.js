@@ -1225,4 +1225,926 @@ Object.assign(DatabaseViewer.prototype, {
         this.renderEnhancedSFAFTable(records);
     }
 
+},
+
+    async loadData() {
+        try {
+            this.showLoading(true);
+
+            switch (this.currentTab) {
+                case 'markers':
+                    await this.loadMarkers();
+                    break;
+                case 'sfaf':
+                    await this.loadSFAFRecords();
+                    break;
+                case 'irac':
+                    await this.loadIRACNotes();
+                    break;
+                case 'analytics':
+                    await this.loadAnalytics();
+                    break;
+            }
+        } catch (error) {
+            console.error('Failed to load data:', error);
+            this.showError('Failed to load data. Please try again.');
+        } finally {
+            this.showLoading(false);
+        }
+    },
+
+    async loadMarkers() {
+        // Use existing SFAF Plotter API endpoint (Source: handlers.txt, main.txt)
+        const response = await fetch('/api/markers');
+        const data = await response.json();
+
+        if (data.success) {
+            // If no markers exist, automatically switch to SFAF tab
+            if (!data.markers || data.markers.length === 0) {
+                console.log('⚠️ No markers found in database, switching to SFAF tab');
+                this.switchTab('sfaf');
+                return;
+            }
+            this.renderMarkersTable(data.markers);
+            this.updatePagination(data.markers.length);
+        } else {
+            throw new Error(data.error || 'Failed to load markers');
+        }
+    },
+
+    async loadMarkerDMSCoordinates(markerId, lat, lng) {
+        try {
+            const response = await fetch(`/api/convert-coords?lat=${lat}&lng=${lng}`);
+            const coords = await response.json();
+
+            const dmsElement = document.getElementById(`dms-${markerId}`);
+            if (dmsElement) {
+                dmsElement.innerHTML = `
+                    <div class="coord-dms-line">${coords.dms}</div>
+                    <div class="coord-compact-line">${coords.compact}</div>
+                `;
+            }
+        } catch (error) {
+            console.error(`Failed to load DMS for marker ${markerId}:`, error);
+            const dmsElement = document.getElementById(`dms-${markerId}`);
+            if (dmsElement) {
+                dmsElement.textContent = 'DMS conversion failed';
+            }
+        }
+    },
+
+    async loadMarkerSFAFCount(markerId) {
+        try {
+            const response = await fetch(`/api/sfaf/object-data/${markerId}`);
+            const data = await response.json();
+
+            const countElement = document.getElementById(`sfaf-count-${markerId}`);
+            if (countElement && data.success) {
+                const fieldCount = Object.keys(data.sfaf_fields || {}).length;
+                countElement.innerHTML = `
+                    <span class="field-count-number">${fieldCount}</span>
+                    <span class="field-count-label">fields</span>
+                `;
+            }
+        } catch (error) {
+            console.error(`Failed to load SFAF count for marker ${markerId}:`, error);
+            const countElement = document.getElementById(`sfaf-count-${markerId}`);
+            if (countElement) {
+                countElement.textContent = '0 fields';
+            }
+        }
+    },
+
+    async loadMarkerIRACCount(markerId) {
+        try {
+            const response = await fetch(`/api/sfaf/object-data/${markerId}`);
+            const data = await response.json();
+
+            const countElement = document.getElementById(`irac-count-${markerId}`);
+            if (countElement && data.success && data.marker.irac_notes) {
+                const notesCount = data.marker.irac_notes.length;
+                countElement.innerHTML = `
+                    <span class="notes-count-number">${notesCount}</span>
+                    <span class="notes-count-label">notes</span>
+                `;
+            }
+        } catch (error) {
+            console.error(`Failed to load IRAC count for marker ${markerId}:`, error);
+            const countElement = document.getElementById(`irac-count-${markerId}`);
+            if (countElement) {
+                countElement.textContent = '0 notes';
+            }
+        }
+    },
+
+    async loadSFAFRecords() {
+        // Prevent duplicate simultaneous loads
+        if (this._loadingSFAFRecords) {
+            console.log('⚠️ Already loading SFAF records, skipping duplicate call');
+            return;
+        }
+        this._loadingSFAFRecords = true;
+
+        try {
+            console.log('📊 Loading enhanced SFAF records with default view...');
+            this.showLoading(true);
+
+            // Use pagination parameters
+            const page = this.currentPage || 1;
+            const limit = this.itemsPerPage || 50;
+
+            // Load SFAF records first (includes Pool Assignments without markers)
+            const sfafResponse = await fetch(`/api/sfaf?page=${page}&limit=${limit}`);
+            if (!sfafResponse.ok) {
+                throw new Error(`SFAF API failed: ${sfafResponse.status} ${sfafResponse.statusText}`);
+            }
+
+            const sfafData = await sfafResponse.json();
+            console.log('📊 SFAF API response:', sfafData);
+
+            if (!sfafData.success) {
+                throw new Error(sfafData.error || 'Failed to load SFAF records');
+            }
+
+            // Store total database count from pagination
+            if (sfafData.pagination && sfafData.pagination.total !== undefined) {
+                this.totalDatabaseRecords = sfafData.pagination.total;
+                console.log(`✅ Set totalDatabaseRecords to: ${this.totalDatabaseRecords}`);
+            } else {
+                console.warn('⚠️ No pagination.total in API response:', sfafData.pagination);
+            }
+
+            if (!sfafData.sfafs || sfafData.sfafs.length === 0) {
+                console.log('⚠️ No SFAF records found in database');
+                this.renderEnhancedSFAFTable([]);
+                this.updateSFAFSummaryStats([]);
+                return;
+            }
+
+            console.log(`📊 Found ${sfafData.sfafs.length} SFAF records, loading markers...`);
+
+            // Load markers (may be empty for Pool Assignments)
+            let markersMap = new Map();
+            try {
+                const markersResponse = await fetch('/api/markers');
+                if (markersResponse.ok) {
+                    const markersData = await markersResponse.json();
+                    if (markersData.success && markersData.markers) {
+                        markersData.markers.forEach(marker => {
+                            markersMap.set(marker.id, marker);
+                        });
+                        console.log(`📊 Loaded ${markersMap.size} markers`);
+                    }
+                }
+            } catch (markerError) {
+                console.warn('⚠️ Failed to load markers, continuing with SFAF-only records:', markerError);
+            }
+
+            // ✅ ENHANCED: Process SFAF records (with or without markers)
+            const enhancedRecords = [];
+            let successCount = 0;
+
+            for (const sfaf of sfafData.sfafs) {
+                try {
+                    // Extract SFAF fields
+                    const sfafFields = {};
+                    Object.keys(sfaf).forEach(key => {
+                        if (key.match(/^[Ff]ield\d+$/)) {
+                            const normalizedKey = key.toLowerCase();
+                            sfafFields[normalizedKey] = sfaf[key];
+                        }
+                    });
+
+                    // Get marker data if available
+                    const marker = sfaf.marker_id ? markersMap.get(sfaf.marker_id) : null;
+
+                    // Create enhanced record
+                    const enhancedRecord = {
+                        id: sfaf.id,  // Use SFAF ID as primary ID
+                        markerId: sfaf.marker_id,  // May be null for Pool Assignments
+                        serial: sfafFields.field102 || (marker?.serial) || 'Unknown',
+                        frequency: sfafFields.field110 || (marker?.frequency) || 'Not Specified',
+                        location: 'No Coordinates',
+                        agency: sfafFields.field200 || 'TBD',
+                        markerType: marker ? (marker.type || marker.marker_type || 'imported') : 'pool_assignment',
+                        isPool: this.detectPoolAssignment(sfafFields),
+                        coordinates: {
+                            lat: marker?.lat || null,
+                            lng: marker?.lng || null
+                        },
+                        sfafFields: sfafFields,
+                        rawSFAFFields: sfafFields,
+                        completionPercentage: 0,
+                        validationStatus: 'complete',
+                        mcebCompliant: { isCompliant: false, issues: [] }
+                    };
+
+                    // Extract coordinates from marker or SFAF fields
+                    if (marker && marker.lat && marker.lng) {
+                        enhancedRecord.location = `${marker.lat.toFixed(4)}, ${marker.lng.toFixed(4)}`;
+                    } else {
+                        // Try to extract from SFAF fields
+                        const coordString = sfafFields.field303 || sfafFields.field403;
+                        if (coordString) {
+                            const coords = this.parseCoordinateString(coordString);
+                            if (coords && coords.lat && coords.lng) {
+                                enhancedRecord.coordinates = {
+                                    lat: coords.lat,
+                                    lng: coords.lng
+                                };
+                                enhancedRecord.location = `${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`;
+                            }
+                        }
+                    }
+
+                    enhancedRecord.completionPercentage = this.calculateCompletionPercentage(sfafFields);
+                    enhancedRecord.mcebCompliant = this.validateMCEBCompliance(sfafFields);
+
+                    enhancedRecords.push(enhancedRecord);
+                    successCount++;
+
+                } catch (recordError) {
+                    console.error(`❌ Failed to process SFAF ${sfaf.id}:`, recordError);
+                }
+            }
+
+            console.log(`📊 Processing complete: ${successCount} SFAF records processed`);
+            console.log('📊 Enhanced records:', enhancedRecords);
+
+            // ✅ Store all SFAF records (including Pool Assignments)
+            this.currentSFAFData = enhancedRecords;
+            this.enhancedRecords = enhancedRecords; // Store for sorting/filtering
+
+            // ✅ Apply serial filter if set (from Table Manager)
+            let filteredRecords = enhancedRecords;
+            if (this.serialFilter && this.serialFilter.length > 0) {
+                console.log('🔍 Looking for serials:', this.serialFilter);
+                console.log('🔍 Sample of record serials:', enhancedRecords.slice(0, 10).map(r => r.serial));
+
+                filteredRecords = enhancedRecords.filter(record => {
+                    // Check if record serial matches any of the unit's assigned serials
+                    return this.serialFilter.includes(record.serial);
+                });
+                console.log(`🔍 Serial filter applied: ${filteredRecords.length} of ${enhancedRecords.length} records match`);
+            }
+
+            // ✅ Apply currentFilter if set
+            if (this.currentFilter && this.currentFilter.trim() !== '') {
+                const filterLower = this.currentFilter.toLowerCase();
+                filteredRecords = filteredRecords.filter(record => {
+                    // Search across multiple fields
+                    return (
+                        (record.serial && record.serial.toLowerCase().includes(filterLower)) ||
+                        (record.frequency && record.frequency.toString().toLowerCase().includes(filterLower)) ||
+                        (record.agency && record.agency.toLowerCase().includes(filterLower)) ||
+                        (record.location && record.location.toLowerCase().includes(filterLower)) ||
+                        (record.sfafFields && record.sfafFields.field200 && record.sfafFields.field200.toLowerCase().includes(filterLower))
+                    );
+                });
+            }
+
+            // ✅ Apply pool assignment filter
+            const poolFilter = this.activeFilters?.poolAssignment;
+            if (poolFilter === 'pool') {
+                filteredRecords = filteredRecords.filter(r => r.isPool);
+            } else if (poolFilter === 'assigned') {
+                filteredRecords = filteredRecords.filter(r => !r.isPool);
+            }
+
+            // ✅ Display filtered results
+            this.renderEnhancedSFAFTable(filteredRecords);
+            this.updateSFAFSummaryStats(filteredRecords);
+
+        } catch (error) {
+            console.error('❌ Failed to load SFAF records:', error);
+            this.showError(`Failed to load SFAF records: ${error.message}`);
+
+            // ✅ Show empty state on error
+            this.renderEnhancedSFAFTable([]);
+            this.updateSFAFSummaryStats([]);
+        } finally {
+            this.showLoading(false);
+            this._loadingSFAFRecords = false; // Reset the loading flag
+        }
+    },
+
+    async editMarker(markerId) {
+        try {
+            const response = await fetch(`/api/sfaf/object-data/${markerId}`);
+            const data = await response.json();
+
+            if (data.success) {
+                this.openEditModal(data, 'marker');
+            } else {
+                throw new Error(data.error || 'Failed to load marker data');
+            }
+        } catch (error) {
+            console.error('Failed to load marker for editing:', error);
+            this.showError('Failed to load marker data for editing');
+        }
+    },
+
+    async viewMarker(markerId) {
+        try {
+            const response = await fetch(`/api/sfaf/object-data/${markerId}`);
+            const data = await response.json();
+
+            if (data.success) {
+                this.openViewModal(data);
+            } else {
+                throw new Error(data.error || 'Failed to load marker data');
+            }
+        } catch (error) {
+            console.error('Failed to load marker for viewing:', error);
+            this.showError('Failed to load marker data');
+        }
+    },
+
+    async deleteMarker(markerId) {
+        if (!confirm('Are you sure you want to delete this marker? This will also delete associated SFAF data.')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/markers/${markerId}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                console.log('✅ Marker deleted successfully');
+                await this.loadData(); // Refresh current tab data
+                this.showSuccess('Marker deleted successfully');
+            } else {
+                throw new Error(`HTTP ${response.status}`);
+            }
+        } catch (error) {
+            console.error('Failed to delete marker:', error);
+            this.showError('Failed to delete marker');
+        }
+    },
+
+    async saveMarkerChanges(markerId, formData) {
+        try {
+            const updateData = {
+                lat: parseFloat(formData.get('lat')),
+                lng: parseFloat(formData.get('lng')),
+                frequency: formData.get('frequency'),
+                notes: formData.get('notes'),
+                type: formData.get('type'),
+                is_draggable: formData.get('is_draggable') === 'true'
+            };
+
+            // Collect SFAF field updates
+            const sfafFields = {};
+            for (const [key, value] of formData.entries()) {
+                if (key.startsWith('sfaf_')) {
+                    const fieldId = key.replace('sfaf_', '');
+                    if (value.trim() !== '') {
+                        sfafFields[fieldId] = value;
+                    }
+                }
+            }
+
+            // Update marker using existing API (Source: handlers.txt)
+            const markerResponse = await fetch(`/api/markers/${markerId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updateData)
+            });
+
+            if (!markerResponse.ok) {
+                throw new Error(`HTTP ${markerResponse.status}: ${markerResponse.statusText}`);
+            }
+
+            // Update SFAF fields if any were modified (Source: handlers.txt SFAF operations)
+            if (Object.keys(sfafFields).length > 0) {
+                const sfafResponse = await fetch(`/api/sfaf`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        marker_id: markerId,
+                        fields: sfafFields
+                    })
+                });
+
+                if (!sfafResponse.ok) {
+                    console.warn('SFAF update failed, but marker update succeeded');
+                }
+            }
+
+            console.log('✅ Marker updated successfully');
+            await this.loadData(); // Refresh current tab data
+            this.showSuccess('Marker updated successfully');
+
+        } catch (error) {
+            console.error('Failed to update marker:', error);
+            this.showError('Failed to update marker: ' + error.message);
+        }
+    },
+
+    async openBulkEditModal() {
+        if (this.selectedItems.size === 0) {
+            this.showError('No markers selected');
+            return;
+        }
+
+        const modal = document.getElementById('editModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const editForm = document.getElementById('editForm');
+
+        modalTitle.textContent = `Bulk Edit ${this.selectedItems.size} Markers`;
+
+        // Create bulk edit form with common fields
+        editForm.innerHTML = `
+            <form id="bulkEditForm">
+                <div class="bulk-edit-notice">
+                    <p><strong>Note:</strong> Only fields with values will be updated. Leave fields empty to keep existing values.</p>
+                </div>
+                
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Frequency:</label>
+                        <input type="text" name="frequency" placeholder="Leave empty to keep current values">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Type:</label>
+                        <select name="type">
+                            <option value="">Keep current values</option>
+                            <option value="manual">Manual</option>
+                            <option value="imported">Imported</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Draggable:</label>
+                        <select name="is_draggable">
+                            <option value="">Keep current values</option>
+                            <option value="true">Yes</option>
+                            <option value="false">No</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group full-width">
+                        <label>Notes (will append to existing notes):</label>
+                        <textarea name="notes_append" rows="3" placeholder="Text to append to existing notes"></textarea>
+                    </div>
+                </div>
+                
+                <div class="selected-markers-preview">
+                    <h4>Selected Markers (${this.selectedItems.size})</h4>
+                    <div class="marker-list">
+                        ${Array.from(this.selectedItems).map(id => {
+            const marker = this.markers.find(m => m.id === id);
+            return marker ? `<span class="marker-tag">${marker.serial}</span>` : '';
+        }).join('')}
+                    </div>
+                </div>
+            </form>
+        `;
+
+        // Update modal footer
+        const modalFooter = modal.querySelector('.modal-footer');
+        modalFooter.innerHTML = `
+            <button type="button" class="btn btn-secondary" onclick="databaseViewer.closeModal()">Cancel</button>
+            <button type="submit" form="bulkEditForm" class="btn btn-primary">Update ${this.selectedItems.size} Markers</button>
+        `;
+
+        // Handle form submission
+        document.getElementById('bulkEditForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await this.processBulkEdit(new FormData(e.target));
+        });
+
+        modal.style.display = 'block';
+    },
+
+    async processBulkEdit(formData) {
+        const updates = {};
+
+        // Collect non-empty form values
+        if (formData.get('frequency').trim()) {
+            updates.frequency = formData.get('frequency').trim();
+        }
+
+        if (formData.get('type')) {
+            updates.type = formData.get('type');
+        }
+
+        if (formData.get('is_draggable')) {
+            updates.is_draggable = formData.get('is_draggable') === 'true';
+        }
+
+        const notesAppend = formData.get('notes_append').trim();
+
+        if (Object.keys(updates).length === 0 && !notesAppend) {
+            this.showError('No changes specified');
+            return;
+        }
+
+        try {
+            let successCount = 0;
+            let errorCount = 0;
+            const totalMarkers = this.selectedItems.size;
+
+            // Show progress
+            this.showLoading(true, `Processing ${totalMarkers} markers...`);
+
+            // Process each selected marker
+            for (const markerId of this.selectedItems) {
+                try {
+                    let markerUpdates = { ...updates };
+
+                    // Handle notes appending by getting current notes first
+                    if (notesAppend) {
+                        const markerResponse = await fetch(`/api/markers/${markerId}`);
+                        if (markerResponse.ok) {
+                            const markerData = await markerResponse.json();
+                            const currentNotes = markerData.marker.notes || '';
+                            markerUpdates.notes = currentNotes ? `${currentNotes}\n${notesAppend}` : notesAppend;
+                        }
+                    }
+
+                    // Update marker using existing API (Source: handlers.txt)
+                    const response = await fetch(`/api/markers/${markerId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(markerUpdates)
+                    });
+
+                    if (response.ok) {
+                        successCount++;
+                    } else {
+                        errorCount++;
+                        console.error(`Failed to update marker ${markerId}:`, response.status);
+                    }
+                } catch (error) {
+                    errorCount++;
+                    console.error(`Error updating marker ${markerId}:`, error);
+                }
+            }
+
+            this.showLoading(false);
+            this.closeModal();
+
+            // Show results
+            if (successCount > 0) {
+                this.showSuccess(`Successfully updated ${successCount} markers${errorCount > 0 ? ` (${errorCount} failed)` : ''}`);
+            } else {
+                this.showError(`Failed to update any markers (${errorCount} errors)`);
+            }
+
+            // Refresh data and clear selection
+            await this.loadData();
+            this.selectedItems.clear();
+            this.updateBulkActionButtons();
+
+        } catch (error) {
+            this.showLoading(false);
+            console.error('Bulk edit failed:', error);
+            this.showError('Bulk edit operation failed');
+        }
+    },
+
+    async deleteSelected() {
+        if (this.selectedItems.size === 0) {
+            this.showError('No records selected');
+            return;
+        }
+
+        const recordCount = this.selectedItems.size;
+        if (!confirm(`Delete ${recordCount} selected record${recordCount !== 1 ? 's' : ''} ` +
+                     `and all associated data?\n\n` +
+                     `This will permanently delete:\n` +
+                     `- ${recordCount} SFAF record${recordCount !== 1 ? 's' : ''}\n` +
+                     `- ${recordCount} marker${recordCount !== 1 ? 's' : ''}\n` +
+                     `- Associated geometries and IRAC notes\n\n` +
+                     `This action cannot be undone.`)) {
+            return;
+        }
+
+        try {
+            let successCount = 0;
+            let errorCount = 0;
+            const errors = [];
+            const totalRecords = this.selectedItems.size;
+            const selectedArray = Array.from(this.selectedItems);
+
+            console.log(`🗑️ Starting bulk delete of ${totalRecords} records:`, selectedArray);
+            this.showLoading(true, `Deleting ${totalRecords} record${totalRecords !== 1 ? 's' : ''}...`);
+
+            // Delete with progress tracking
+            for (let i = 0; i < selectedArray.length; i++) {
+                const recordId = selectedArray[i];
+                this.showLoading(true, `Deleting record ${i + 1} of ${totalRecords}...`);
+
+                try {
+                    console.log(`🗑️ Deleting SFAF record ${i + 1}/${totalRecords}: ${recordId}`);
+                    const response = await fetch(`/api/sfaf/${recordId}`, {
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+
+                    if (response.ok) {
+                        successCount++;
+                        console.log(`✅ Successfully deleted record ${recordId}`);
+                    } else {
+                        errorCount++;
+                        const responseText = await response.text();
+                        console.error(`❌ Failed to delete record ${recordId}: HTTP ${response.status} - ${responseText}`);
+                        errors.push({ id: recordId, error: `HTTP ${response.status}: ${responseText}` });
+                    }
+                } catch (error) {
+                    errorCount++;
+                    console.error(`❌ Error deleting record ${recordId}:`, error);
+                    errors.push({ id: recordId, error: error.message });
+                }
+            }
+
+            this.showLoading(false);
+
+            // Show results
+            if (successCount > 0 && errorCount === 0) {
+                this.showSuccess(`Successfully deleted all ${successCount} record${successCount !== 1 ? 's' : ''}`);
+            } else if (successCount > 0 && errorCount > 0) {
+                this.showWarning(`Deleted ${successCount} record${successCount !== 1 ? 's' : ''}, ` +
+                               `but ${errorCount} failed. Check console for details.`);
+                console.error('Delete errors:', errors);
+            } else {
+                this.showError(`Failed to delete any records. Check console for details.`);
+                console.error('Delete errors:', errors);
+            }
+
+            // Clear selections and refresh
+            this.selectedItems.clear();
+            this.sessionManager.clearSelectedItems(this.currentTab);
+            this.updateSelectionUI();
+            await this.loadData();
+
+        } catch (error) {
+            this.showLoading(false);
+            console.error('Bulk delete failed:', error);
+            this.showError(`Bulk delete operation failed: ${error.message}`);
+        }
+    },
+
+    async deleteAllSFAFs() {
+        const totalRecords = this.totalDatabaseRecords || 0;
+
+        if (totalRecords === 0) {
+            this.showError('No records to delete');
+            return;
+        }
+
+        if (!confirm(`⚠️ WARNING: Delete ALL ${totalRecords} SFAF records?\n\n` +
+                     `This will permanently delete:\n` +
+                     `- ALL ${totalRecords} SFAF records\n` +
+                     `- ALL associated markers\n` +
+                     `- ALL geometries and IRAC notes\n\n` +
+                     `THIS ACTION CANNOT BE UNDONE!\n\n` +
+                     `Type 'DELETE ALL' in the next prompt to confirm.`)) {
+            return;
+        }
+
+        const confirmation = prompt('Type "DELETE ALL" to confirm deletion of all records:');
+        if (confirmation !== 'DELETE ALL') {
+            this.showError('Deletion cancelled - confirmation text did not match');
+            return;
+        }
+
+        try {
+            this.showLoading(true, `Deleting all ${totalRecords} records...`);
+
+            const response = await fetch('/api/sfaf/delete-all', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to delete all records: ${response.status} ${response.statusText}`);
+            }
+
+            const result = await response.json();
+
+            this.showLoading(false);
+            this.showSuccess(`Successfully deleted all ${result.deleted_count || totalRecords} SFAF records`);
+
+            // Clear selection and reload
+            this.selectedItems.clear();
+            this.updateBulkActionButtons();
+            this.loadSFAFRecords();
+        } catch (error) {
+            this.showLoading(false);
+            console.error('Delete all failed:', error);
+            this.showError(`Failed to delete all records: ${error.message}`);
+        }
+    },
+
+    async deleteSingleRecord(recordId) {
+        const record = this.currentSFAFData.find(r => r.id === recordId);
+        const recordInfo = record ? `${record.serial || 'Unknown'}` : 'this record';
+
+        if (!confirm(`Delete ${recordInfo} and all associated data?\n\n` +
+                     `This will permanently delete:\n- SFAF record\n- Marker (if any)\n- Geometry (if any)\n` +
+                     `- IRAC notes\n\nThis action cannot be undone.`)) {
+            return;
+        }
+
+        try {
+            this.showLoading(true, 'Deleting record...');
+
+            // Delete SFAF record (which will cascade to marker if it exists)
+            const response = await fetch(`/api/sfaf/${recordId}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Delete failed: ${response.status} ${response.statusText}`);
+            }
+
+            this.showLoading(false);
+            this.showSuccess(`Successfully deleted ${recordInfo}`);
+
+            // Remove from selection if selected
+            this.selectedItems.delete(recordId);
+            this.sessionManager.saveSelectedItems(this.currentTab, this.selectedItems);
+
+            await this.loadData();
+
+        } catch (error) {
+            this.showLoading(false);
+            console.error('Delete failed:', error);
+            this.showError(`Failed to delete record: ${error.message}`);
+        }
+    },
+
+    async openAddModal() {
+        const modal = document.getElementById('editModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const editForm = document.getElementById('editForm');
+
+        modalTitle.textContent = 'Add New Marker';
+
+        editForm.innerHTML = `
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Latitude:</label>
+                    <input type="number" step="any" name="lat" required placeholder="e.g., 30.4382">
+                </div>
+                <div class="form-group">
+                    <label>Longitude:</label>
+                    <input type="number" step="any" name="lng" required placeholder="e.g., -86.7117">
+                </div>
+                <div class="form-group">
+                    <label>Frequency:</label>
+                    <input type="text" name="frequency" placeholder="e.g., 162.550">
+                </div>
+                <div class="form-group">
+                    <label>Type:</label>
+                    <select name="type" required>
+                        <option value="">Select Type</option>
+                        <option value="manual">Manual</option>
+                        <option value="imported">Imported</option>
+                    </select>
+                </div>
+                <div class="form-group full-width">
+                    <label>Notes:</label>
+                    <textarea name="notes" rows="3" placeholder="Optional notes"></textarea>
+                </div>
+            </div>
+        `;
+
+        // Update modal footer for add mode
+        const modalFooter = modal.querySelector('.modal-footer');
+        modalFooter.innerHTML = `
+            <button type="button" class="btn btn-secondary" onclick="databaseViewer.closeModal()">Cancel</button>
+            <button type="submit" form="editForm" class="btn btn-primary">Create Marker</button>
+        `;
+
+        // Handle form submission for new marker
+        editForm.onsubmit = async (e) => {
+            e.preventDefault();
+            await this.createNewMarker(new FormData(e.target));
+            this.closeModal();
+        };
+
+        modal.style.display = 'block';
+    },
+
+    async createNewMarker(formData) {
+        try {
+            const markerData = {
+                lat: parseFloat(formData.get('lat')),
+                lng: parseFloat(formData.get('lng')),
+                frequency: formData.get('frequency'),
+                notes: formData.get('notes'),
+                type: formData.get('type')
+            };
+
+            // Use existing API endpoint for marker creation (Source: handlers.txt)
+            const response = await fetch('/api/markers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(markerData)
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                this.showSuccess('Marker created successfully');
+                await this.loadData(); // Refresh current tab data
+
+                // If we're on the markers tab, highlight the new marker
+                if (this.currentTab === 'markers') {
+                    setTimeout(() => {
+                        const newRow = document.querySelector(`[data-marker-id="${result.marker.id}"]`);
+                        if (newRow) {
+                            newRow.style.backgroundColor = '#e8f5e8';
+                            setTimeout(() => {
+                                newRow.style.backgroundColor = '';
+                            }, 2000);
+                        }
+                    }, 100);
+                }
+            } else {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `HTTP ${response.status}`);
+            }
+        } catch (error) {
+            console.error('Failed to create marker:', error);
+            this.showError('Failed to create marker: ' + error.message);
+        }
+    },
+
+    async reloadAssignmentData() {
+        try {
+            this.showLoading(true);
+
+            // Load markers with comprehensive SFAF data
+            const markersResponse = await fetch('/api/markers');
+            const markersData = await markersResponse.json();
+
+            if (!markersData.success) {
+                throw new Error(markersData.error || 'Failed to load markers');
+            }
+
+            // Enhance each marker with complete SFAF and IRAC data
+            const enhancedMarkers = await Promise.all(
+                markersData.markers.map(async (marker) => {
+                    try {
+                        // Load SFAF object data (Source: db_viewer_js.txt API usage)
+                        const sfafResponse = await fetch(`/api/sfaf/object-data/${marker.id}`);
+                        const sfafData = await sfafResponse.json();
+
+                        // Load coordinate conversions
+                        const coordResponse = await fetch(`/api/convert-coords?lat=${marker.Latitude}&lng=${marker.Longitude}`);
+                        const coordData = await coordResponse.json();
+
+                        return {
+                            ...marker,
+                            sfaf_fields: sfafData.success ? sfafData.sfaf_fields : {},
+                            field_definitions: sfafData.success ? sfafData.field_defs : {},
+                            irac_notes: sfafData.success ? sfafData.marker.irac_notes : [],
+                            coordinates: {
+                                decimal: `${marker.Latitude}, ${marker.Longitude}`,
+                                dms: coordData.dms || 'N/A',
+                                compact: coordData.compact || 'N/A'
+                            }
+                        };
+                    } catch (error) {
+                        console.error(`Failed to enhance marker ${marker.id}:`, error);
+                        return {
+                            ...marker,
+                            sfaf_fields: {},
+                            field_definitions: {},
+                            irac_notes: [],
+                            coordinates: {
+                                decimal: `${marker.Latitude}, ${marker.Longitude}`,
+                                dms: 'Error',
+                                compact: 'Error'
+                            }
+                        };
+                    }
+                })
+            );
+
+            // Apply filters
+            const filteredData = this.applyFiltersToData(enhancedMarkers);
+
+            this.currentData = filteredData;
+            this.renderAssignmentTable(filteredData);
+            this.updateFilterStats();
+
+        } catch (error) {
+            console.error('Failed to reload assignment data:', error);
+            this.showError('Failed to load assignment data: ' + error.message);
+        } finally {
+            this.showLoading(false);
+        }
+    },
+
+    async deleteSelectedRecords() {
+        await this.deleteSelected();
+    }
+
 });

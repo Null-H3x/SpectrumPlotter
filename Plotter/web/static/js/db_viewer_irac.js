@@ -292,4 +292,130 @@ Object.assign(DatabaseViewer.prototype, {
         };
     }
 
+},
+
+    async loadIRACNotes() {
+        try {
+            const response = await fetch('/api/irac-notes');
+            const data = await response.json();
+
+            if (data.success && data.notes) {
+                this.renderIRACTable(data.notes);
+            }
+        } catch (error) {
+            console.error('Failed to load IRAC notes:', error);
+            this.showError('Failed to load IRAC notes');
+        }
+    },
+
+    async viewIRACNote(noteCode) {
+        try {
+            const response = await fetch(`/api/irac-notes?search=${noteCode}`);
+            const data = await response.json();
+
+            if (data.success && data.notes.length > 0) {
+                const note = data.notes.find(n => n.code === noteCode);
+                if (note) {
+                    this.openIRACNoteViewModal(note);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load IRAC note details:', error);
+            this.showError('Failed to load IRAC note details');
+        }
+    },
+
+    async removeIRACNote(associationId) {
+        if (!confirm('Remove this IRAC note association?')) return;
+
+        try {
+            const response = await fetch('/api/markers/irac-notes', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    association_id: associationId
+                })
+            });
+
+            if (response.ok) {
+                this.showSuccess('IRAC note removed successfully');
+                // Refresh the current modal if it's open
+                const modal = document.getElementById('editModal');
+                if (modal.style.display === 'block') {
+                    // Re-load the current marker data
+                    const currentMarkerId = modal.dataset.markerId;
+                    if (currentMarkerId) {
+                        await this.editMarker(currentMarkerId);
+                    }
+                }
+            } else {
+                throw new Error(`HTTP ${response.status}`);
+            }
+        } catch (error) {
+            console.error('Failed to remove IRAC note:', error);
+            this.showError('Failed to remove IRAC note');
+        }
+    },
+
+    async addIRACNoteModal() {
+        try {
+            // Load available IRAC notes (Source: handlers.txt GetIRACNotes)
+            const response = await fetch('/api/irac-notes');
+            const data = await response.json();
+
+            if (data.success) {
+                this.openIRACNoteSelectionModal(data.notes);
+            }
+        } catch (error) {
+            console.error('Failed to load IRAC notes:', error);
+            this.showError('Failed to load IRAC notes');
+        }
+    },
+
+    async submitIRACNoteAssociation(formData) {
+        const currentMarkerId = document.getElementById('editModal').dataset.markerId;
+        if (!currentMarkerId) {
+            this.showError('No marker selected');
+            return;
+        }
+
+        try {
+            const requestData = {
+                marker_id: currentMarkerId,
+                note_code: document.getElementById('iracNoteSelect').value,
+                field_number: parseInt(formData.get('field_number')),
+                occurrence_number: parseInt(formData.get('occurrence_number'))
+            };
+
+            // Use existing IRAC note association API (Source: handlers.txt)
+            const response = await fetch('/api/markers/irac-notes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestData)
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                this.showSuccess('IRAC note added successfully');
+                this.closeModal();
+
+                // Refresh the current tab data to show the new association
+                await this.loadData();
+
+                // If the marker edit modal was open, re-open it to show the new association
+                if (currentMarkerId) {
+                    setTimeout(() => {
+                        this.editMarker(currentMarkerId);
+                    }, 500);
+                }
+            } else {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `HTTP ${response.status}`);
+            }
+        } catch (error) {
+            console.error('Failed to add IRAC note association:', error);
+            this.showError('Failed to add IRAC note: ' + error.message);
+        }
+    }
+
 });

@@ -912,4 +912,70 @@ Object.assign(DatabaseViewer.prototype, {
         }
     }
 
+},
+
+    async saveAllSFAFFieldChanges(recordId) {
+        try {
+            console.log(`💾 Saving all SFAF field changes for record: ${recordId}`);
+
+            // Collect all field values from inputs
+            const fieldInputs = document.querySelectorAll('.field-input[data-field-key]');
+            const sfafFields = {};
+
+            fieldInputs.forEach(input => {
+                const fieldKey = input.dataset.fieldKey;
+                const value = input.value.trim();
+                if (value !== '') {
+                    sfafFields[fieldKey] = value;
+                }
+            });
+
+            console.log('📤 Submitting SFAF field updates:', sfafFields);
+
+            if (Object.keys(sfafFields).length === 0) {
+                this.showWarning('No fields to save');
+                return;
+            }
+
+            // Show loading state
+            this.showLoading(true, 'Saving SFAF changes...');
+
+            // Save changes via API
+            const response = await fetch(`/api/sfaf/marker/${recordId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    marker_id: recordId,
+                    sfaf_fields: sfafFields,
+                    updated_by: 'database_viewer',
+                    update_timestamp: new Date().toISOString()
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorData}`);
+            }
+
+            const result = await response.json();
+
+            if (result.success) {
+                this.showSuccess('SFAF changes saved successfully');
+
+                // Refresh the SFAF records display to show updated data
+                await this.loadSFAFRecords();
+
+                console.log('✅ SFAF changes saved successfully');
+            } else {
+                throw new Error(result.error || 'Failed to save SFAF changes');
+            }
+
+        } catch (error) {
+            console.error('❌ Failed to save SFAF changes:', error);
+            this.showError(`Failed to save changes: ${error.message}`);
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
 });

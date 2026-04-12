@@ -441,4 +441,569 @@ Object.assign(DatabaseViewer.prototype, {
         }
     }
 
+},
+
+    async importSampleSFAFData() {
+        try {
+            console.log('📥 Starting sample SFAF import with complete record creation...');
+
+            const sampleSFAFText = `
+005.     UE
+010.     M
+102.     AF  014589
+110.     K4028(4026.5)
+113.     MO
+114.     2K70J3E
+115.     W500
+200.     USAF
+300.     FL
+301.     HURLBURT
+500.     S189
+500/02.     E029
+500/03.     C010
+===
+005.     UE
+010.     M
+102.     AF  079243
+110.     K4460.5(4459.15)
+113.     MO
+114.     2K70J3E
+115.     W500
+200.     USAF
+300.     FL
+301.     HURLBURT
+500.     C010
+===
+005.     UE
+010.     M
+102.     AF  948910
+110.     K4551.5(4550)
+113.     ML
+114.     2K70J3E
+115.     W20
+200.     USAF
+300.     FL
+301.     HURLBURT
+500.     C010
+        `.trim();
+
+            const result = await this.importSFAFRecords(sampleSFAFText);
+
+            if (result.success) {
+                console.log(`✅ Sample import successful: ${result.imported} complete records imported`);
+
+                // ✅ CRITICAL: Wait for database synchronization and refresh display
+                console.log('🔄 Refreshing SFAF records display...');
+                await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for SFAF creation
+                await this.loadSFAFRecords();
+
+                this.showSuccess(`✅ Successfully imported ${result.imported} complete SFAF records with field data`);
+            } else {
+                this.showError(`❌ Sample import failed: ${result.error}`);
+            }
+
+        } catch (error) {
+            console.error('❌ Sample import failed:', error);
+            this.showError('Failed to import sample data');
+        }
+    },
+
+    async importSFAFRecords(sfafText) {
+        try {
+            console.log('📥 Starting SFAF import process...');
+
+            // Show progress indicator
+            this.showLoading(true, 'Importing SFAF records...');
+
+            // Create a Blob from the text content
+            const blob = new Blob([sfafText], { type: 'text/plain' });
+
+            // Create FormData and append the file
+            const formData = new FormData();
+            formData.append('file', blob, 'import.txt');
+
+            console.log('📤 Sending file to backend import endpoint...');
+
+            // Use the backend import endpoint that handles everything:
+            // - Parses SFAF text format (field 005 separates records)
+            // - Extracts coordinates from field 303 (DMS format)
+            // - Extracts serial from field 102
+            // - Creates markers at correct coordinates
+            // - Creates SFAF records with all fields
+            const response = await fetch('/api/sfaf/import', {
+                method: 'POST',
+                body: formData
+                // Don't set Content-Type header - browser will set it with boundary
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `Import failed: HTTP ${response.status}`);
+            }
+
+            const result = await response.json();
+            console.log('✅ Import completed:', result);
+
+            if (!result.success) {
+                throw new Error(result.error || 'Import failed');
+            }
+
+            // Log detailed results
+            const importResults = result.results;
+            console.log(`📊 Import Summary:
+- Total Records: ${importResults.total_records}
+- Successful: ${importResults.successful_count}
+- Errors: ${importResults.error_count}`);
+
+            if (importResults.errors && importResults.errors.length > 0) {
+                console.warn('⚠️ Import Errors:', importResults.errors);
+            }
+
+            // Hide progress indicator
+            this.showLoading(false);
+
+            return {
+                success: importResults.successful_count > 0,
+                imported: importResults.successful_count,
+                errors: importResults.error_count,
+                total: importResults.total_records,
+                errorMessages: importResults.errors || []
+            };
+
+        } catch (error) {
+            console.error('❌ Import failed:', error);
+
+            // Hide progress indicator on error
+            this.showLoading(false);
+
+            return {
+                success: false,
+                imported: 0,
+                errors: 1,
+                error: error.message
+            };
+        }
+    },
+
+    async exportSFAF(markerId) {
+        try {
+            const response = await fetch(`/api/sfaf/object-data/${markerId}`);
+            const data = await response.json();
+
+            if (data.success) {
+                // Create comprehensive export data using backend response (Source: handlers.txt)
+                const exportData = {
+                    marker: data.marker,
+                    coordinates: data.coordinates,
+                    sfaf_fields: data.sfaf_fields,
+                    field_definitions: data.field_defs,
+                    exported_at: new Date().toISOString(),
+                    format: 'SFAF_Database_Export_v1.0'
+                };
+
+                const dataStr = JSON.stringify(exportData, null, 2);
+                const dataBlob = new Blob([dataStr], { type: 'application/json' });
+
+                const url = URL.createObjectURL(dataBlob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `SFAF_${data.marker.serial}_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+
+                URL.revokeObjectURL(url);
+                this.showSuccess('SFAF data exported successfully');
+            }
+        } catch (error) {
+            console.error('Failed to export SFAF:', error);
+            this.showError('Failed to export SFAF data');
+        }
+    },
+
+    async exportData() {
+        try {
+            // Get current tab data
+            let exportData = {};
+            let filename = '';
+
+            switch (this.currentTab) {
+                case 'markers':
+                    const markersResponse = await fetch('/api/markers');
+                    const markersData = await markersResponse.json();
+
+                    if (markersData.success) {
+                        // Enhance marker data with coordinate formats (Source: services.txt)
+                        const enhancedMarkers = await Promise.all(
+                            markersData.markers.map(async (marker) => {
+                                try {
+                                    const coordResponse = await fetch(`/api/convert-coords?lat=${marker.lat}&lng=${marker.lng}`);
+                                    const coords = await coordResponse.json();
+
+                                    return {
+                                        ...marker,
+                                        coordinates: coords
+                                    };
+                                } catch (error) {
+                                    return marker;
+                                }
+                            })
+                        );
+
+                        exportData = {
+                            type: 'SFAF_Markers_Export',
+                            exported_at: new Date().toISOString(),
+                            total_count: enhancedMarkers.length,
+                            markers: enhancedMarkers,
+                            compliance: 'MC4EB Publication 7, Change 1',
+                            version: '1.0'
+                        };
+                        filename = `SFAF_Markers_${new Date().toISOString().split('T')[0]}.json`;
+                    }
+                    break;
+
+                case 'sfaf':
+                    // Export SFAF records with complete field definitions (Source: services.txt)
+                    exportData = {
+                        type: 'SFAF_Records_Export',
+                        exported_at: new Date().toISOString(),
+                        compliance: 'MC4EB Publication 7, Change 1',
+                        version: '1.0',
+                        records: [] // Will be populated by loading SFAF data for each marker
+                    };
+                    filename = `SFAF_Records_${new Date().toISOString().split('T')[0]}.json`;
+                    break;
+
+                case 'irac':
+                    const iracResponse = await fetch('/api/irac-notes');
+                    const iracData = await iracResponse.json();
+
+                    if (iracData.success) {
+                        exportData = {
+                            type: 'IRAC_Notes_Export',
+                            exported_at: new Date().toISOString(),
+                            total_count: iracData.notes.length,
+                            notes: iracData.notes,
+                            categories: [...new Set(iracData.notes.map(note => note.category))],
+                            compliance: 'MC4EB Publication 7, Change 1',
+                            version: '1.0'
+                        };
+                        filename = `IRAC_Notes_${new Date().toISOString().split('T')[0]}.json`;
+                    }
+                    break;
+
+                case 'analytics':
+                    // Export analytics report (Source: handlers.txt comprehensive data)
+                    const analyticsMarkers = await fetch('/api/markers');
+                    const analyticsIRAC = await fetch('/api/irac-notes');
+
+                    const [markersResult, iracResult] = await Promise.all([
+                        analyticsMarkers.json(),
+                        analyticsIRAC.json()
+                    ]);
+
+                    if (markersResult.success && iracResult.success) {
+                        const complianceReport = await this.generateComplianceReport(markersResult.markers);
+
+                        exportData = {
+                            type: 'SFAF_Analytics_Export',
+                            exported_at: new Date().toISOString(),
+                            system_overview: {
+                                total_markers: markersResult.markers.length,
+                                manual_markers: markersResult.markers.filter(m => m.type === 'manual').length,
+                                imported_markers: markersResult.markers.filter(m => m.type === 'imported').length,
+                                total_irac_notes: iracResult.notes.length
+                            },
+                            frequency_analysis: this.analyzeFrequencyDistribution(markersResult.markers),
+                            geographic_distribution: this.analyzeGeographicDistribution(markersResult.markers),
+                            compliance_report: complianceReport,
+                            compliance: 'MC4EB Publication 7, Change 1',
+                            version: '1.0'
+                        };
+                        filename = `SFAF_Analytics_${new Date().toISOString().split('T')[0]}.json`;
+                    }
+                    break;
+            }
+
+            if (Object.keys(exportData).length === 0) {
+                this.showError('No data available for export');
+                return;
+            }
+
+            // Create and download file
+            const dataStr = JSON.stringify(exportData, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            URL.revokeObjectURL(url);
+            this.showSuccess(`Data exported successfully: ${filename}`);
+
+        } catch (error) {
+            console.error('Export failed:', error);
+            this.showError('Failed to export data');
+        }
+    },
+
+    async exportComprehensiveReport() {
+        try {
+            console.log('📊 Generating comprehensive analysis report...');
+            this.showLoading(true, 'Generating comprehensive report...');
+
+            // Load all necessary data
+            const [markersResponse, iracResponse] = await Promise.all([
+                fetch('/api/markers'),
+                fetch('/api/irac-notes')
+            ]);
+
+            if (!markersResponse.ok || !iracResponse.ok) {
+                throw new Error('Failed to load data for comprehensive report');
+            }
+
+            const markersData = await markersResponse.json();
+            const iracData = await iracResponse.json();
+
+            if (!markersData.success || !iracData.success) {
+                throw new Error('API returned error response');
+            }
+
+            const markers = Array.isArray(markersData.markers) ? markersData.markers : [];
+            const iracNotes = Array.isArray(iracData.notes) ? iracData.notes : [];
+
+            // Generate comprehensive analysis
+            const geoStats = this.analyzeGeographicDistribution(markers);
+            const freqStats = this.analyzeFrequencyDistribution(markers);
+            const complianceReport = await this.generateComplianceReport(markers);
+
+            // Create comprehensive report
+            const reportData = {
+                metadata: {
+                    title: 'SFAF Plotter Comprehensive Analysis Report',
+                    generated: new Date().toISOString(),
+                    system: 'SFAF Plotter Database Viewer v1.0',
+                    compliance: 'MC4EB Publication 7, Change 1 Standards',
+                    analyst: 'Automated System Analysis',
+                    classification: 'FOR OFFICIAL USE ONLY'
+                },
+                executiveSummary: {
+                    totalMarkers: markers.length,
+                    validCoordinates: geoStats.statistics?.validCoordinates || 0,
+                    geographicSpread: geoStats.spread,
+                    primaryRegion: this.identifyGeographicRegion(geoStats.center),
+                    dataQuality: geoStats.statistics?.coordinateQuality || 'Unknown',
+                    complianceStatus: complianceReport.field500Compliance && complianceReport.field501Compliance ? 'Compliant' : 'Non-Compliant'
+                },
+                geographicAnalysis: geoStats,
+                frequencyAnalysis: freqStats,
+                complianceAnalysis: complianceReport,
+                iracAnalysis: {
+                    totalNotes: iracNotes.length,
+                    categories: [...new Set(iracNotes.map(n => n.category))],
+                    notes: iracNotes
+                },
+                recommendations: {
+                    geographic: this.generateRecommendations(geoStats, markers),
+                    dataQuality: this.generateDataQualityRecommendations(geoStats, markers),
+                    operational: this.generateOperationalRecommendations(markers, iracNotes)
+                },
+                detailedData: {
+                    markers: markers.map(marker => ({
+                        id: marker.id,
+                        serial: marker.serial || 'Unknown',
+                        latitude: marker.lat,
+                        longitude: marker.lng,
+                        frequency: marker.frequency,
+                        markerType: marker.type || marker.marker_type,
+                        createdAt: marker.created_at,
+                        updatedAt: marker.updated_at,
+                        region: marker.lat && marker.lng ?
+                            this.identifyGeographicRegion({ lat: marker.lat, lng: marker.lng }) : 'Unknown',
+                        mgrsGrid: marker.lat && marker.lng ?
+                            this.calculateMGRSGrid({ lat: marker.lat, lng: marker.lng }) : 'Unknown'
+                    })),
+
+                    timeline: this.generateDataTimeline(markers),
+
+                    statistics: {
+                        temporal: {
+                            firstEntry: markers.length > 0 ?
+                                Math.min(...markers.map(m => new Date(m.created_at).getTime())) : null,
+                            lastEntry: markers.length > 0 ?
+                                Math.max(...markers.map(m => new Date(m.created_at).getTime())) : null,
+                            averagePerDay: this.calculateDailyAverage(markers),
+                            peakActivity: this.findPeakActivityPeriod(markers),
+                            growthTrend: this.calculateGrowthTrend(markers)
+                        },
+
+                        frequency: {
+                            bands: freqStats,
+                            unique: [...new Set(markers.map(m => m.frequency).filter(f => f))],
+                            mostCommon: this.findMostCommonFrequency(markers),
+                            distribution: this.analyzeFrequencyDistribution(markers)
+                        },
+
+                        geographic: {
+                            regions: this.categorizeMarkersByRegion(markers),
+                            clusters: geoStats.statistics?.clustersDetected || [],
+                            density: geoStats.statistics?.densityAnalysis || {},
+                            boundaries: geoStats.bounds
+                        },
+
+                        quality: {
+                            coordinateCompleteness: (geoStats.statistics?.validCoordinates || 0) / Math.max(markers.length, 1),
+                            duplicateSerials: this.findDuplicateSerials(markers),
+                            invalidFrequencies: markers.filter(m => m.frequency && !this.isValidFrequencyFormat(m.frequency)),
+                            missingData: this.identifyMissingDataPatterns(markers)
+                        }
+                    },
+
+                    compliance: {
+                        mcebPublication7: complianceReport,
+                        iracCompliance: this.analyzeIRACCompliance(iracNotes),
+                        fieldValidation: this.performFieldValidation(markers),
+                        recommendations: this.generateDetailedComplianceRecommendations(markers, iracNotes)
+                    },
+
+                    technicalSpecs: {
+                        coordinateSystems: {
+                            primary: 'WGS84 Geographic',
+                            supported: ['Decimal Degrees', 'DMS', 'MGRS'],
+                            precision: '6 decimal places (±0.111m at equator)',
+                            datum: 'World Geodetic System 1984'
+                        },
+
+                        database: {
+                            version: 'PostgreSQL with PostGIS',
+                            tables: ['markers', 'sfaf_records', 'irac_notes', 'geometries'],
+                            indexes: 'Spatial and B-tree indexes optimized',
+                            backup: 'Automated daily backups configured'
+                        },
+
+                        api: {
+                            version: 'REST API v1.0',
+                            endpoints: ['/api/markers', '/api/sfaf', '/api/irac-notes', '/api/geometry'],
+                            authentication: 'Session-based authentication',
+                            rateLimit: '1000 requests per hour per IP'
+                        }
+                    }
+                }
+            };
+
+            // Generate and download comprehensive JSON report
+            const jsonReport = JSON.stringify(reportData, null, 2);
+            const jsonBlob = new Blob([jsonReport], { type: 'application/json' });
+            const jsonUrl = URL.createObjectURL(jsonBlob);
+            const jsonLink = document.createElement('a');
+            jsonLink.href = jsonUrl;
+            jsonLink.download = `SFAF_Comprehensive_Report_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(jsonLink);
+            jsonLink.click();
+            document.body.removeChild(jsonLink);
+            URL.revokeObjectURL(jsonUrl);
+
+            this.showSuccess('Comprehensive analysis report generated successfully');
+
+        } catch (error) {
+            console.error('❌ Failed to generate comprehensive report:', error);
+            this.showError(`Failed to generate comprehensive report: ${error.message}`);
+        } finally {
+            this.showLoading(false);
+        }
+    },
+
+    async exportAllToCSV() {
+        console.log('📤 Exporting all SFAF records to CSV...');
+
+        this.showLoading(true, 'Exporting all records to CSV...');
+
+        try {
+            // Use the existing backend export endpoint
+            const response = await fetch('/api/sfaf/export?format=csv');
+
+            if (!response.ok) {
+                throw new Error(`Export failed: ${response.status} ${response.statusText}`);
+            }
+
+            // Get the CSV content
+            const blob = await response.blob();
+
+            // Create download link
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `SFAF_All_Records_${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            this.showLoading(false);
+            this.showSuccess('All records exported to CSV successfully!');
+
+            // Close dropdown
+            document.getElementById('exportDropdown').style.display = 'none';
+
+        } catch (error) {
+            this.showLoading(false);
+            console.error('Export failed:', error);
+            this.showError(`Failed to export: ${error.message}`);
+        }
+    },
+
+    async exportSelectedToCSV() {
+        if (this.selectedItems.size === 0) {
+            alert('Please select at least one record to export.');
+            return;
+        }
+
+        console.log(`📤 Exporting ${this.selectedItems.size} selected records to CSV...`);
+
+        this.showLoading(true, `Exporting ${this.selectedItems.size} records to CSV...`);
+
+        try {
+            const response = await fetch('/api/sfaf/export-selected', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ids: Array.from(this.selectedItems),
+                    format: 'csv'
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Export failed: ${response.status} ${response.statusText}`);
+            }
+
+            // Get the CSV content
+            const blob = await response.blob();
+
+            // Create download link
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `SFAF_Selected_${this.selectedItems.size}_Records_${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            this.showLoading(false);
+            this.showSuccess(`${this.selectedItems.size} records exported to CSV successfully!`);
+
+            // Close dropdown
+            document.getElementById('exportDropdown').style.display = 'none';
+
+        } catch (error) {
+            this.showLoading(false);
+            console.error('Export failed:', error);
+            this.showError(`Failed to export: ${error.message}`);
+        }
+    }
+
 });

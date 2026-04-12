@@ -2099,4 +2099,634 @@ Object.assign(DatabaseViewer.prototype, {
         return Math.max(diffMs / (1000 * 60 * 60 * 24), 1); // Minimum 1 day
     }
 
+},
+
+    async loadAnalytics() {
+        try {
+            console.log('📊 Loading analytics data...');
+            this.showLoading(true);
+
+            const [markersResponse, iracResponse] = await Promise.all([
+                fetch('/api/markers'),
+                fetch('/api/irac-notes')
+            ]);
+
+            // ✅ ENHANCED: Validate response status
+            if (!markersResponse.ok) {
+                throw new Error(`Markers API failed: ${markersResponse.status} ${markersResponse.statusText}`);
+            }
+
+            if (!iracResponse.ok) {
+                throw new Error(`IRAC Notes API failed: ${iracResponse.status} ${iracResponse.statusText}`);
+            }
+
+            const markersData = await markersResponse.json();
+            const iracData = await iracResponse.json();
+
+            console.log('📊 Markers API response:', markersData);
+            console.log('📊 IRAC API response:', iracData);
+
+            // ✅ ENHANCED: Validate response structure and data
+            if (!markersData.success) {
+                throw new Error(`Markers API error: ${markersData.error || 'Unknown error'}`);
+            }
+
+            if (!iracData.success) {
+                throw new Error(`IRAC Notes API error: ${iracData.error || 'Unknown error'}`);
+            }
+
+            // ✅ CRITICAL: Ensure arrays exist and provide fallbacks
+            const markers = Array.isArray(markersData.markers) ? markersData.markers : [];
+            const iracNotes = Array.isArray(iracData.notes) ? iracData.notes : [];
+
+            console.log(`📊 Processing ${markers.length} markers and ${iracNotes.length} IRAC notes for analytics`);
+
+            // ✅ SAFE: Call renderAnalytics with validated arrays
+            await this.renderAnalytics(markers, iracNotes);
+
+            console.log('✅ Analytics data loaded successfully');
+
+        } catch (error) {
+            console.error('❌ Failed to load analytics data:', error);
+            this.showError(`Failed to load analytics data: ${error.message}`);
+
+            // ✅ FALLBACK: Render analytics with empty data to prevent UI breakdown
+            await this.renderAnalytics([], []);
+        } finally {
+            this.showLoading(false);
+        }
+    },
+
+    async renderAnalytics(markers, iracNotes) {
+        try {
+            // ✅ CRITICAL: Validate input parameters
+            if (!Array.isArray(markers)) {
+                console.warn('⚠️ Invalid markers array in renderAnalytics:', markers);
+                markers = [];
+            }
+
+            if (!Array.isArray(iracNotes)) {
+                console.warn('⚠️ Invalid iracNotes array in renderAnalytics:', iracNotes);
+                iracNotes = [];
+            }
+
+            console.log(`📊 Rendering analytics for ${markers.length} markers and ${iracNotes.length} IRAC notes`);
+
+            // ✅ SAFE: System Overview Statistics with validation
+            const systemStatsHtml = `
+            <div class="stat-item">
+                <span class="stat-label">Total Markers</span>
+                <span class="stat-value">${markers.length}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Manual Markers</span>
+                <span class="stat-value">${markers.filter(m => m && m.type === 'manual').length}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Imported Markers</span>
+                <span class="stat-value">${markers.filter(m => m && m.type === 'imported').length}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Total IRAC Notes</span>
+                <span class="stat-value">${iracNotes.length}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Average Markers per Day</span>
+                <span class="stat-value">${this.calculateDailyAverage(markers)}</span>
+            </div>
+        `;
+
+            // ✅ SAFE: Frequency Distribution Analysis with validation
+            const frequencyStats = this.analyzeFrequencyDistribution(markers);
+            const totalMarkers = Math.max(markers.length, 1); // Prevent division by zero
+
+            const frequencyChartHtml = `
+            <div class="frequency-bands">
+                <div class="band-item">
+                    <span class="band-label">VHF (30-300 MHz)</span>
+                    <div class="band-bar">
+                        <div class="band-fill" style="width: ${(frequencyStats.vhf / totalMarkers) * 100}%"></div>
+                    </div>
+                    <span class="band-count">${frequencyStats.vhf}</span>
+                </div>
+                <div class="band-item">
+                    <span class="band-label">UHF (300-3000 MHz)</span>
+                    <div class="band-bar">
+                        <div class="band-fill" style="width: ${(frequencyStats.uhf / totalMarkers) * 100}%"></div>
+                    </div>
+                    <span class="band-count">${frequencyStats.uhf}</span>
+                </div>
+                <div class="band-item">
+                    <span class="band-label">SHF (3-30 GHz)</span>
+                    <div class="band-bar">
+                        <div class="band-fill" style="width: ${(frequencyStats.shf / totalMarkers) * 100}%"></div>
+                    </div>
+                    <span class="band-count">${frequencyStats.shf}</span>
+                </div>
+                <div class="band-item">
+                    <span class="band-label">No Frequency</span>
+                    <div class="band-bar">
+                        <div class="band-fill" style="width: ${(frequencyStats.none / totalMarkers) * 100}%"></div>
+                    </div>
+                    <span class="band-count">${frequencyStats.none}</span>
+                </div>
+            </div>
+        `;
+
+            // ✅ SAFE: MC4EB Publication 7, Change 1 Compliance Report with validation
+            const complianceReport = await this.generateComplianceReport(markers);
+            const complianceHtml = `
+            <div class="compliance-grid">
+                <div class="compliance-item ${complianceReport.field500Compliance ? 'compliant' : 'non-compliant'}">
+                    <span class="compliance-label">Field 500 Compliance</span>
+                    <span class="compliance-status">${complianceReport.field500Compliance ? '✅ Compliant' : '❌ Non-Compliant'}</span>
+                    <span class="compliance-detail">Max 10 occurrences per MC4EB Pub 7 CHG 1</span>
+                </div>
+                <div class="compliance-item ${complianceReport.field501Compliance ? 'compliant' : 'non-compliant'}">
+                    <span class="compliance-label">Field 501 Compliance</span>
+                    <span class="compliance-status">${complianceReport.field501Compliance ? '✅ Compliant' : '❌ Non-Compliant'}</span>
+                    <span class="compliance-detail">Max 30 occurrences per MC4EB Pub 7 CHG 1</span>
+                </div>
+                <div class="compliance-item">
+                    <span class="compliance-label">IRAC Categories</span>
+                    <span class="compliance-value">${complianceReport.iracCategories.length}/6</span>
+                    <span class="compliance-detail">${complianceReport.iracCategories.join(', ')}</span>
+                </div>
+                <div class="compliance-item">
+                    <span class="compliance-label">Coordinate Format</span>
+                    <span class="compliance-status">✅ DMS & Compact</span>
+                    <span class="compliance-detail">Military coordinate formats supported</span>
+                </div>
+            </div>
+        `;
+
+            // ✅ SAFE: Geographic Distribution Analysis with validation
+            const geoStats = this.analyzeGeographicDistribution(markers);
+            const geoStatsHtml = `
+            <div class="geo-stats">
+                <div class="stat-item">
+                    <span class="stat-label">Geographic Spread</span>
+                    <span class="stat-value">${geoStats.spread.toFixed(2)}°</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Center Point</span>
+                    <span class="stat-value">${geoStats.center.lat.toFixed(4)}, ${geoStats.center.lng.toFixed(4)}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Northernmost</span>
+                    <span class="stat-value">${geoStats.bounds.north.toFixed(4)}°</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Southernmost</span>
+                    <span class="stat-value">${geoStats.bounds.south.toFixed(4)}°</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Easternmost</span>
+                    <span class="stat-value">${geoStats.bounds.east.toFixed(4)}°</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Westernmost</span>
+                    <span class="stat-value">${geoStats.bounds.west.toFixed(4)}°</span>
+                </div>
+            </div>
+        `;
+
+            // ✅ SAFE: Update DOM elements with comprehensive error handling
+            this.updateAnalyticsElement('systemStats', systemStatsHtml);
+            this.updateAnalyticsElement('frequencyChart', frequencyChartHtml);
+            this.updateAnalyticsElement('complianceReport', complianceHtml);
+            this.updateAnalyticsElement('geoStats', geoStatsHtml);
+
+            console.log('✅ Analytics rendering completed successfully');
+
+        } catch (error) {
+            console.error('❌ Failed to render analytics:', error);
+            this.showError(`Failed to render analytics: ${error.message}`);
+
+            // ✅ FALLBACK: Show error state in analytics
+            this.renderAnalyticsError();
+        }
+    },
+
+    async generateComplianceReport(markers) {
+        if (markers.length === 0) {
+            return { spread: 0, center: { lat: 0, lng: 0 }, bounds: { north: 0, south: 0, east: 0, west: 0 } };
+        }
+
+        // ✅ CORRECTED: Use correct property names from database
+        const lats = markers.map(m => parseFloat(m.latitude)).filter(lat => !isNaN(lat));
+        const lngs = markers.map(m => parseFloat(m.longitude)).filter(lng => !isNaN(lng));
+
+        if (lats.length === 0 || lngs.length === 0) {
+            return { spread: 0, center: { lat: 0, lng: 0 }, bounds: { north: 0, south: 0, east: 0, west: 0 } };
+        }
+
+        const report = {
+            field500Compliance: true,
+            field501Compliance: true,
+            iracCategories: [],
+            totalViolations: 0
+        };
+
+        // Check Field 500 and 501 compliance by analyzing SFAF data for each marker
+        for (const marker of markers) {
+            try {
+                const response = await fetch(`/api/sfaf/object-data/${marker.id}`);
+                const data = await response.json();
+
+                if (data.success && data.sfaf_fields) {
+                    // Count Field 500 occurrences (Source: handlers.txt field 500 max 10 validation)
+                    const field500Count = Object.keys(data.sfaf_fields)
+                        .filter(key => key.startsWith('field500')).length;
+                    if (field500Count > 10) {
+                        report.field500Compliance = false;
+                        report.totalViolations++;
+                    }
+
+                    // Count Field 501 occurrences (Source: handlers.txt field 501 max 30 validation)
+                    const field501Count = Object.keys(data.sfaf_fields)
+                        .filter(key => key.startsWith('field501')).length;
+                    if (field501Count > 30) {
+                        report.field501Compliance = false;
+                        report.totalViolations++;
+                    }
+                }
+            } catch (error) {
+                console.error(`Failed to check compliance for marker ${marker.id}:`, error);
+            }
+        }
+
+        // Analyze IRAC note categories (Source: repositories.txt IRAC notes categories)
+        try {
+            const iracResponse = await fetch('/api/irac-notes');
+            const iracData = await iracResponse.json();
+
+            if (iracData.success && iracData.notes) {
+                const categories = [...new Set(iracData.notes.map(note => note.category))];
+                report.iracCategories = categories;
+            }
+        } catch (error) {
+            console.error('Failed to load IRAC categories:', error);
+        }
+
+        return report;
+    },
+
+    async retryAnalyticsSection(sectionId) {
+        try {
+            console.log(`🔄 Retrying analytics section: ${sectionId}`);
+            this.showLoading(true, `Reloading ${sectionId}...`);
+
+            // Load fresh data
+            const [markersResponse, iracResponse] = await Promise.all([
+                fetch('/api/markers'),
+                fetch('/api/irac-notes')
+            ]);
+
+            if (!markersResponse.ok || !iracResponse.ok) {
+                throw new Error('API request failed');
+            }
+
+            const markersData = await markersResponse.json();
+            const iracData = await iracResponse.json();
+
+            if (!markersData.success || !iracData.success) {
+                throw new Error('API returned error response');
+            }
+
+            const markers = Array.isArray(markersData.markers) ? markersData.markers : [];
+            const iracNotes = Array.isArray(iracData.notes) ? iracData.notes : [];
+
+            // Re-render specific section
+            await this.renderSpecificAnalyticsSection(sectionId, markers, iracNotes);
+
+            console.log(`✅ Successfully retried analytics section: ${sectionId}`);
+            this.showSuccess(`${sectionId} section reloaded successfully`);
+
+        } catch (error) {
+            console.error(`❌ Failed to retry analytics section ${sectionId}:`, error);
+            this.showError(`Failed to reload ${sectionId} section`);
+        } finally {
+            this.showLoading(false);
+        }
+    },
+
+    async renderSpecificAnalyticsSection(sectionId, markers, iracNotes) {
+        try {
+            switch (sectionId) {
+                case 'systemstats':
+                    const systemStatsHtml = `
+                    <div class="stat-item">
+                        <span class="stat-label">Total Markers</span>
+                        <span class="stat-value">${markers.length}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Manual Markers</span>
+                        <span class="stat-value">${markers.filter(m => m && m.type === 'manual').length}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Imported Markers</span>
+                        <span class="stat-value">${markers.filter(m => m && m.type === 'imported').length}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Total IRAC Notes</span>
+                        <span class="stat-value">${iracNotes.length}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Average Markers per Day</span>
+                        <span class="stat-value">${this.calculateDailyAverage(markers)}</span>
+                    </div>
+                `;
+                    this.updateAnalyticsElement('systemStats', systemStatsHtml);
+                    break;
+
+                case 'frequencydistribution':
+                    const frequencyStats = this.analyzeFrequencyDistribution(markers);
+                    const totalMarkers = Math.max(markers.length, 1);
+                    const frequencyChartHtml = `
+                    <div class="frequency-bands">
+                        <div class="band-item">
+                            <span class="band-label">VHF (30-300 MHz)</span>
+                            <div class="band-bar">
+                                <div class="band-fill" style="width: ${(frequencyStats.vhf / totalMarkers) * 100}%"></div>
+                            </div>
+                            <span class="band-count">${frequencyStats.vhf}</span>
+                        </div>
+                        <div class="band-item">
+                            <span class="band-label">UHF (300-3000 MHz)</span>
+                            <div class="band-bar">
+                                <div class="band-fill" style="width: ${(frequencyStats.uhf / totalMarkers) * 100}%"></div>
+                            </div>
+                            <span class="band-count">${frequencyStats.uhf}</span>
+                        </div>
+                        <div class="band-item">
+                            <span class="band-label">SHF (3-30 GHz)</span>
+                            <div class="band-bar">
+                                <div class="band-fill" style="width: ${(frequencyStats.shf / totalMarkers) * 100}%"></div>
+                            </div>
+                            <span class="band-count">${frequencyStats.shf}</span>
+                        </div>
+                        <div class="band-item">
+                            <span class="band-label">No Frequency</span>
+                            <div class="band-bar">
+                                <div class="band-fill" style="width: ${(frequencyStats.none / totalMarkers) * 100}%"></div>
+                            </div>
+                            <span class="band-count">${frequencyStats.none}</span>
+                        </div>
+                    </div>
+                `;
+                    this.updateAnalyticsElement('frequencyChart', frequencyChartHtml);
+                    break;
+
+                case 'mcebcompliancereport':
+                    const complianceReport = await this.generateComplianceReport(markers);
+                    const complianceHtml = `
+                    <div class="compliance-grid">
+                        <div class="compliance-item ${complianceReport.field500Compliance ? 'compliant' : 'non-compliant'}">
+                            <span class="compliance-label">Field 500 Compliance</span>
+                            <span class="compliance-status">${complianceReport.field500Compliance ? '✅ Compliant' : '❌ Non-Compliant'}</span>
+                            <span class="compliance-detail">Max 10 occurrences per MC4EB Pub 7 CHG 1</span>
+                        </div>
+                        <div class="compliance-item ${complianceReport.field501Compliance ? 'compliant' : 'non-compliant'}">
+                            <span class="compliance-label">Field 501 Compliance</span>
+                            <span class="compliance-status">${complianceReport.field501Compliance ? '✅ Compliant' : '❌ Non-Compliant'}</span>
+                            <span class="compliance-detail">Max 30 occurrences per MC4EB Pub 7 CHG 1</span>
+                        </div>
+                        <div class="compliance-item">
+                            <span class="compliance-label">IRAC Categories</span>
+                            <span class="compliance-value">${complianceReport.iracCategories.length}/6</span>
+                            <span class="compliance-detail">${complianceReport.iracCategories.join(', ')}</span>
+                        </div>
+                        <div class="compliance-item">
+                            <span class="compliance-label">Coordinate Format</span>
+                            <span class="compliance-status">✅ DMS & Compact</span>
+                            <span class="compliance-detail">Military coordinate formats supported</span>
+                        </div>
+                    </div>
+                `;
+                    this.updateAnalyticsElement('complianceReport', complianceHtml);
+                    break;
+
+                case 'geographicdistribution':
+                    const geoStats = this.analyzeGeographicDistribution(markers);
+                    const geoStatsHtml = `
+                    <div class="geo-stats">
+                        <div class="stat-item">
+                            <span class="stat-label">Geographic Spread</span>
+                            <span class="stat-value">${geoStats.spread.toFixed(2)}°</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Center Point</span>
+                            <span class="stat-value">${geoStats.center.lat.toFixed(4)}, ${geoStats.center.lng.toFixed(4)}</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Northernmost</span>
+                            <span class="stat-value">${geoStats.bounds.north.toFixed(4)}°</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Southernmost</span>
+                            <span class="stat-value">${geoStats.bounds.south.toFixed(4)}°</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Easternmost</span>
+                            <span class="stat-value">${geoStats.bounds.east.toFixed(4)}°</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Westernmost</span>
+                            <span class="stat-value">${geoStats.bounds.west.toFixed(4)}°</span>
+                        </div>
+                    </div>
+                `;
+                    this.updateAnalyticsElement('geoStats', geoStatsHtml);
+                    break;
+
+                default:
+                    console.warn(`⚠️ Unknown analytics section: ${sectionId}`);
+            }
+        } catch (error) {
+            console.error(`❌ Failed to render analytics section ${sectionId}:`, error);
+            throw error;
+        }
+    },
+
+    async loadBasicAnalytics() {
+        try {
+            console.log('📊 Loading basic analytics fallback...');
+            this.showLoading(true, 'Loading basic statistics...');
+
+            // Try to get just marker count
+            const markersResponse = await fetch('/api/markers');
+
+            if (markersResponse.ok) {
+                const markersData = await markersResponse.json();
+                const markerCount = markersData.success ? (markersData.markers || []).length : 0;
+
+                // Render minimal analytics
+                const basicStatsHtml = `
+                <div class="basic-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Total Markers</span>
+                        <span class="stat-value">${markerCount}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">System Status</span>
+                        <span class="stat-value">✅ Operational</span>
+                    </div>
+                    <div class="stat-note">
+                        <small>Basic statistics loaded. Full analytics unavailable.</small>
+                    </div>
+                </div>
+            `;
+
+                this.updateAnalyticsElement('systemStats', basicStatsHtml);
+                this.updateAnalyticsElement('frequencyChart', this.generateBasicPlaceholder('Frequency analysis unavailable'));
+                this.updateAnalyticsElement('complianceReport', this.generateBasicPlaceholder('Compliance report unavailable'));
+                this.updateAnalyticsElement('geoStats', this.generateBasicPlaceholder('Geographic analysis unavailable'));
+
+                this.showSuccess('Basic analytics loaded successfully');
+            } else {
+                throw new Error('Unable to connect to backend services');
+            }
+
+        } catch (error) {
+            console.error('❌ Failed to load basic analytics:', error);
+            this.showError('Unable to load any analytics data');
+            this.renderAnalyticsError();
+        } finally {
+            this.showLoading(false);
+        }
+    },
+
+    async exportGeographicData() {
+        try {
+            console.log('📤 Exporting geographic data...');
+
+            const response = await fetch('/api/markers');
+            if (!response.ok) {
+                throw new Error(`Failed to fetch markers: ${response.status}`);
+            }
+
+            const markersData = await response.json();
+            if (!markersData.success) {
+                throw new Error(markersData.error || 'Failed to load markers');
+            }
+
+            const markers = Array.isArray(markersData.markers) ? markersData.markers : [];
+            const geoStats = this.analyzeGeographicDistribution(markers);
+
+            const exportData = {
+                metadata: {
+                    exportDate: new Date().toISOString(),
+                    totalMarkers: markers.length,
+                    validCoordinates: geoStats.statistics?.validCoordinates || 0,
+                    application: 'SFAF Plotter Database Viewer',
+                    version: '1.0.0'
+                },
+                geographicAnalysis: {
+                    center: geoStats.center,
+                    bounds: geoStats.bounds,
+                    spread: geoStats.spread,
+                    region: this.identifyGeographicRegion(geoStats.center),
+                    statistics: geoStats.statistics
+                },
+                markers: markers.map(marker => ({
+                    id: marker.id,
+                    serial: marker.serial || 'Unknown',
+                    latitude: marker.lat,
+                    longitude: marker.lng,
+                    frequency: marker.frequency,
+                    markerType: marker.type || marker.marker_type,
+                    createdAt: marker.created_at,
+                    region: marker.lat && marker.lng ?
+                        this.identifyGeographicRegion({ lat: marker.lat, lng: marker.lng }) : 'Unknown'
+                })),
+                coordinateFormats: {
+                    note: 'All coordinates provided in decimal degrees format',
+                    precision: 'Coordinates accurate to 4 decimal places (~11 meters)'
+                }
+            };
+
+            const dataStr = JSON.stringify(exportData, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `SFAF_Geographic_Analysis_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            URL.revokeObjectURL(url);
+            this.showSuccess('Geographic data exported successfully');
+
+        } catch (error) {
+            console.error('❌ Failed to export geographic data:', error);
+            this.showError(`Failed to export geographic data: ${error.message}`);
+        }
+    },
+
+    async viewGeographicMap() {
+        try {
+            console.log('🗺️ Opening geographic map view...');
+
+            // Construct URL with current marker data for map display
+            const params = new URLSearchParams({
+                view: 'geographic',
+                analytics: 'true',
+                source: 'database_viewer'
+            });
+
+            // Open main map page with analytics overlay
+            const mapUrl = `/?${params.toString()}`;
+            window.open(mapUrl, '_blank');
+
+        } catch (error) {
+            console.error('❌ Failed to open geographic map:', error);
+            this.showError('Failed to open geographic map view');
+        }
+    },
+
+    async generateGeographicReport() {
+        try {
+            console.log('📄 Generating geographic report...');
+            this.showLoading(true, 'Generating report...');
+
+            const response = await fetch('/api/markers');
+            if (!response.ok) {
+                throw new Error(`Failed to fetch markers: ${response.status}`);
+            }
+
+            const markersData = await response.json();
+            if (!markersData.success) {
+                throw new Error(markersData.error || 'Failed to load markers');
+            }
+
+            const markers = Array.isArray(markersData.markers) ? markersData.markers : [];
+            const geoStats = this.analyzeGeographicDistribution(markers);
+
+            // Generate comprehensive HTML report
+            const reportHtml = this.generateGeographicReportHtml(markers, geoStats);
+
+            // Create and download HTML file
+            const reportBlob = new Blob([reportHtml], { type: 'text/html' });
+            const url = URL.createObjectURL(reportBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `SFAF_Geographic_Report_${new Date().toISOString().split('T')[0]}.html`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            URL.revokeObjectURL(url);
+            this.showSuccess('Geographic report generated successfully');
+
+        } catch (error) {
+            console.error('❌ Failed to generate geographic report:', error);
+            this.showError(`Failed to generate report: ${error.message}`);
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
 });

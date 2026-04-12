@@ -635,4 +635,22 @@ Object.assign(DatabaseViewer.prototype, {
         }
     }
 
+},
+
+    async editSFAF(markerId) {
+        try {
+            const response = await fetch(`/api/sfaf/object-data/${markerId}`);
+            const data = await response.json();
+
+            if (data.success) {
+                this.openSFAFEditModal(data);
+            } else {
+                throw new Error(data.error || 'Failed to load SFAF data');
+            }
+        } catch (error) {
+            console.error('Failed to load SFAF for editing:', error);
+            this.showError('Failed to load SFAF data for editing');
+        }
+    }
+
 });
