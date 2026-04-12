@@ -456,6 +456,83 @@ func main() {
 		api.POST("/sfaf-lookup", sfafLookupHandler.Create)
 		api.PUT("/sfaf-lookup/:id", sfafLookupHandler.Update)
 		api.DELETE("/sfaf-lookup/:id", sfafLookupHandler.Delete)
+
+		// ── Country Capabilities (map sidebar) ──────────────────────────────
+		type countryCap struct {
+			ID        string `json:"id"         db:"id"`
+			Country   string `json:"country"    db:"country"`
+			Category  string `json:"category"   db:"category"`
+			Equipment string `json:"equipment"  db:"equipment"`
+			Usage     string `json:"usage"      db:"usage"`
+			FreqRange string `json:"freq_range" db:"freq_range"`
+			Wattage   string `json:"wattage"    db:"wattage"`
+			CreatedAt string `json:"created_at" db:"created_at"`
+		}
+
+		api.GET("/country-capabilities", func(c *gin.Context) {
+			country := c.Query("country")
+			if country == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "country param required"})
+				return
+			}
+			var caps []countryCap
+			if err := sqlxDB.Select(&caps,
+				`SELECT id::text, country, category, equipment, usage, freq_range, wattage,
+				        to_char(created_at, 'YYYY-MM-DD') AS created_at
+				   FROM country_capabilities
+				  WHERE country = $1
+				  ORDER BY category, created_at`, country); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			if caps == nil {
+				caps = []countryCap{}
+			}
+			c.JSON(http.StatusOK, gin.H{"capabilities": caps})
+		})
+
+		api.POST("/country-capabilities", func(c *gin.Context) {
+			var body struct {
+				Country   string `json:"country"`
+				Category  string `json:"category"`
+				Equipment string `json:"equipment"`
+				Usage     string `json:"usage"`
+				FreqRange string `json:"freq_range"`
+				Wattage   string `json:"wattage"`
+			}
+			if err := c.ShouldBindJSON(&body); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			userIDVal, _ := c.Get("userID")
+			var newID string
+			if err := sqlxDB.QueryRow(
+				`INSERT INTO country_capabilities
+				    (country,category,equipment,usage,freq_range,wattage,created_by)
+				 VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id::text`,
+				body.Country, body.Category, body.Equipment, body.Usage,
+				body.FreqRange, body.Wattage, userIDVal,
+			).Scan(&newID); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusCreated, gin.H{"id": newID})
+		})
+
+		api.DELETE("/country-capabilities/:id", func(c *gin.Context) {
+			roleVal, _ := c.Get("role")
+			if fmt.Sprintf("%v", roleVal) != "admin" {
+				c.JSON(http.StatusForbidden, gin.H{"error": "admin only"})
+				return
+			}
+			if _, err := sqlxDB.Exec(
+				`DELETE FROM country_capabilities WHERE id = $1::uuid`,
+				c.Param("id")); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"deleted": c.Param("id")})
+		})
 	}
 
 	serverAddr := fmt.Sprintf(":%s", appConfig.Server.Port)
