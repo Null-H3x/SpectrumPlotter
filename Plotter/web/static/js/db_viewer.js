@@ -13288,11 +13288,11 @@ class DatabaseViewer {
                     <option value="greater_than">Greater Than</option>
                     <option value="less_than">Less Than</option>
                 </select>
-                <input type="text" class="condition-value" placeholder="Expression" data-condition-id="${conditionId}">
                 <label class="condition-not-label" title="Negate this condition">
                     <input type="checkbox" class="condition-negate" data-condition-id="${conditionId}">
                     <span>Not</span>
                 </label>
+                <input type="text" class="condition-value" placeholder="Expression" data-condition-id="${conditionId}">
                 <button class="btn-remove-condition" onclick="databaseViewer.removeCondition('${conditionId}')">
                     <i class="fas fa-times"></i>
                 </button>
