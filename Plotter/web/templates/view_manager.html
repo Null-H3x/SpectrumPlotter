@@ -413,9 +413,12 @@
                                         <i class="fas fa-search"></i>
                                         <input type="text" id="sfafCodesSearch" placeholder="Search values..." oninput="referenceData.filterLookup(this.value)">
                                     </div>
-                                    <button class="btn btn-sm btn-primary" onclick="referenceData.showAddLookup()">
+                                    <button id="sfafLookupAddBtn" class="btn btn-sm btn-primary" onclick="referenceData.showAddLookup()">
                                         <i class="fas fa-plus"></i> Add Entry
                                     </button>
+                                    <span id="sfafLookupManagedNotice" style="display:none;font-size:0.78rem;color:#64748b;font-style:italic;">
+                                        <i class="fas fa-link"></i> Managed in the Workboxes tab
+                                    </span>
                                 </div>
                                 <div class="data-table-container" style="flex:1;overflow-y:auto;">
                                     <table class="data-table">

@@ -266,7 +266,7 @@
                         <span id="dbMatchingCount" class="stat-value">0</span>
                     </div>
                     <div class="stat-row">
-                        <span>Total Records:</span>
+                        <span id="dbTotalCountLabel">Database Records:</span>
                         <span id="dbTotalCount" class="stat-value">0</span>
                     </div>
                 </div>
@@ -320,6 +320,20 @@
 
     <!-- Query Builder Tab -->
     <div id="query-tab" class="tab-panel">
+        <div style="display:flex;gap:0;height:100%;overflow:hidden;">
+
+        <!-- History Sidebar -->
+        <div id="queryHistoryPanel" style="width:260px;min-width:260px;border-right:1px solid rgba(102,126,234,0.15);display:flex;flex-direction:column;overflow:hidden;background:rgba(15,15,35,0.4);">
+            <div style="padding:12px 14px 10px;border-bottom:1px solid rgba(102,126,234,0.12);display:flex;align-items:center;gap:8px;">
+                <span style="font-size:0.82rem;font-weight:700;color:#a78bfa;letter-spacing:0.5px;flex:1;"><i class="fas fa-history"></i> Query History</span>
+                <button class="btn btn-sm btn-secondary" onclick="databaseViewer.clearQueryHistory()" title="Clear history" style="padding:3px 7px;font-size:0.75rem;">Clear</button>
+            </div>
+            <div id="queryHistoryList" style="flex:1;overflow-y:auto;padding:4px 0;">
+                <div style="padding:16px;text-align:center;color:#607d8b;font-size:0.8rem;font-style:italic;">No history yet</div>
+            </div>
+        </div>
+
+        <div style="flex:1;overflow-y:auto;">
         <div class="query-builder-container">
             <!-- Query Builder Header -->
             <div class="query-builder-header">
@@ -441,6 +455,8 @@
                 </div>
             </div>
         </div>
+        </div><!-- /flex scroll wrapper -->
+        </div><!-- /outer flex row -->
     </div>
 
     <!-- Analytics Tab -->

@@ -33,11 +33,11 @@ func (h *FrequencyHandler) GetUserUnits(c *gin.Context) {
 		return
 	}
 
-	// Admins see all units
+	// Admins and ISM+ with ?all=true see all units (used by Table Manager)
 	var units []models.UnitWithAssignments
 	var err error
 
-	if atLeast(c, "admin") {
+	if atLeast(c, "admin") || (atLeast(c, "ism") && c.Query("all") == "true") {
 		units, err = h.service.GetAllUnitsWithAssignments()
 	} else {
 		units, err = h.service.GetUserUnitsWithAssignments(userID.(uuid.UUID))

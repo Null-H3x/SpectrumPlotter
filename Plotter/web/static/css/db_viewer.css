@@ -495,15 +495,15 @@ body {
 
 .data-table tbody tr {
     transition: all 0.2s ease;
-    background: rgba(26, 26, 46, 0.3);
+    background: rgb(26, 26, 46);
 }
 
 .data-table tbody tr:nth-child(even) {
-    background: rgba(22, 33, 62, 0.3);
+    background: rgb(22, 33, 62);
 }
 
 .data-table tbody tr:hover {
-    background: linear-gradient(90deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
+    background: linear-gradient(90deg, rgb(42, 46, 80) 0%, rgb(44, 35, 68) 100%);
 }
 
 /* Sticky First Column (Checkbox) */
@@ -511,7 +511,7 @@ body {
 .data-table td:first-child {
     position: sticky;
     left: 0;
-    background: rgba(26, 26, 46, 0.98);
+    background: rgb(26, 26, 46);
     z-index: 8;
     box-shadow: 4px 0 8px rgba(0, 0, 0, 0.2);
 }
@@ -522,7 +522,7 @@ body {
 }
 
 .data-table tr:hover td:first-child {
-    background: linear-gradient(90deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
+    background: linear-gradient(90deg, rgb(42, 46, 80) 0%, rgb(44, 35, 68) 100%);
 }
 
 /* Sticky Second Column (Serial) */
@@ -530,7 +530,7 @@ body {
 .data-table td:nth-child(2) {
     position: sticky;
     left: 60px;
-    background: rgba(26, 26, 46, 0.98);
+    background: rgb(26, 26, 46);
     z-index: 7;
     box-shadow: 4px 0 8px rgba(0, 0, 0, 0.2);
 }
@@ -541,7 +541,7 @@ body {
 }
 
 .data-table tr:hover td:nth-child(2) {
-    background: linear-gradient(90deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
+    background: linear-gradient(90deg, rgb(42, 46, 80) 0%, rgb(44, 35, 68) 100%);
 }
 
 /* Sortable Column Headers */

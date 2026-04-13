@@ -712,6 +712,10 @@ class DatabaseViewer {
                 case 'analytics':
                     await this.loadAnalytics();
                     break;
+                case 'query':
+                    // Query Builder — load SFAF data in background so stats are accurate
+                    await this.loadSFAFRecords();
+                    break;
             }
         } catch (error) {
             console.error('Failed to load data:', error);
@@ -12248,6 +12252,225 @@ class DatabaseViewer {
         }
     }
 
+    // ── Query History ─────────────────────────────────────────────────────────
+
+    _queryHistoryKey: 'sfaf_plotter_query_history',
+    _queryHistoryMax: 25,
+
+    _getQueryHistory() {
+        try {
+            return JSON.parse(localStorage.getItem(this._queryHistoryKey) || '[]');
+        } catch (_) { return []; }
+    },
+
+    _saveToQueryHistory(queries, matchCount) {
+        if (!queries || queries.length === 0) return;
+        const entry = {
+            id: `qh_${Date.now()}`,
+            timestamp: new Date().toISOString(),
+            matchCount,
+            conditions: queries.map(q => ({ field: q.field, operator: q.operator, value: q.value })),
+        };
+        const history = this._getQueryHistory();
+        // Avoid exact duplicates (same conditions as the most recent entry)
+        const last = history[0];
+        if (last && JSON.stringify(last.conditions) === JSON.stringify(entry.conditions)) return;
+
+        history.unshift(entry);
+        if (history.length > this._queryHistoryMax) history.length = this._queryHistoryMax;
+        try {
+            localStorage.setItem(this._queryHistoryKey, JSON.stringify(history));
+        } catch (_) {}
+        this.renderQueryHistory();
+    },
+
+    renderQueryHistory() {
+        const list = document.getElementById('queryHistoryList');
+        if (!list) return;
+        const history = this._getQueryHistory();
+        if (history.length === 0) {
+            list.innerHTML = '<div style="padding:16px;text-align:center;color:#607d8b;font-size:0.8rem;font-style:italic;">No history yet</div>';
+            return;
+        }
+        list.innerHTML = history.map(entry => {
+            const date = new Date(entry.timestamp);
+            const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+            const summary = entry.conditions.map(c =>
+                `<span style="font-size:0.72rem;color:#94a3b8;">${c.field} <em>${c.operator.replace('_',' ')}</em> <strong style="color:#c4b5fd;">${c.value}</strong></span>`
+            ).join('<br>');
+            return `
+                <div class="query-history-entry" onclick="databaseViewer.loadQueryFromHistory('${entry.id}')"
+                     style="padding:8px 12px;border-bottom:1px solid rgba(102,126,234,0.08);cursor:pointer;transition:background 0.15s;"
+                     onmouseover="this.style.background='rgba(102,126,234,0.1)'" onmouseout="this.style.background=''">
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+                        <span style="font-size:0.72rem;color:#64748b;">${dateStr} ${timeStr}</span>
+                        <span style="font-size:0.72rem;background:rgba(167,139,250,0.15);color:#a78bfa;border-radius:10px;padding:1px 7px;">${entry.matchCount} results</span>
+                    </div>
+                    ${summary}
+                </div>`;
+        }).join('');
+    },
+
+    loadQueryFromHistory(entryId) {
+        const history = this._getQueryHistory();
+        const entry = history.find(h => h.id === entryId);
+        if (!entry) return;
+
+        const container = document.getElementById('dbFilterQueriesContainer') || document.getElementById('queryConditionsList');
+        if (!container) return;
+        container.innerHTML = '';
+        this.dbFilterQueries = [];
+
+        entry.conditions.forEach((c, i) => {
+            const queryId = `db_query_hist_${Date.now()}_${i}`;
+            const queryHTML = `
+                <div class="filter-query" data-query-id="${queryId}">
+                    <div class="query-header">
+                        <span class="query-label">Filter ${i + 1}</span>
+                        <button class="query-remove-btn" onclick="databaseViewer.removeDBQuery('${queryId}')">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="query-body">
+                        <div class="query-row">
+                            <label>Field:</label>
+                            <select class="query-field" data-query-id="${queryId}">
+                                <option value="">Select field...</option>
+                                <option value="serial">Serial Number (100)</option>
+                                <option value="frequency">Frequency (110)</option>
+                                <option value="emission">Emission (114)</option>
+                                <option value="power">Power (115)</option>
+                                <option value="location">Location (300)</option>
+                                <option value="equipment">Equipment (340)</option>
+                                <option value="notes">Notes</option>
+                                <option value="marker_type">Type</option>
+                            </select>
+                        </div>
+                        <div class="query-row">
+                            <label>Operator:</label>
+                            <select class="query-operator" data-query-id="${queryId}">
+                                <option value="contains">Contains</option>
+                                <option value="equals">Equals</option>
+                                <option value="not_equals">Not Equals</option>
+                                <option value="starts_with">Starts With</option>
+                                <option value="ends_with">Ends With</option>
+                                <option value="greater_than">Greater Than</option>
+                                <option value="less_than">Less Than</option>
+                            </select>
+                        </div>
+                        <div class="query-row">
+                            <label>Value:</label>
+                            <input type="text" class="query-value" placeholder="Enter value" data-query-id="${queryId}">
+                            <small class="query-hint">Case-insensitive search</small>
+                        </div>
+                    </div>
+                </div>`;
+            container.insertAdjacentHTML('beforeend', queryHTML);
+            const fieldSel = container.querySelector(`.query-field[data-query-id="${queryId}"]`);
+            const opSel = container.querySelector(`.query-operator[data-query-id="${queryId}"]`);
+            const valInp = container.querySelector(`.query-value[data-query-id="${queryId}"]`);
+            if (fieldSel) fieldSel.value = c.field || '';
+            if (opSel) opSel.value = c.operator || 'contains';
+            if (valInp) valInp.value = c.value || '';
+            this.dbFilterQueries.push({ id: queryId, field: c.field, operator: c.operator, value: c.value });
+        });
+    },
+
+    clearQueryHistory() {
+        if (!confirm('Clear all query history?')) return;
+        localStorage.removeItem(this._queryHistoryKey);
+        this.renderQueryHistory();
+    },
+
+    saveQueryState() {
+        if (!this.dbFilterQueries || this.dbFilterQueries.length === 0) return;
+        // Capture current UI values before saving
+        this.dbFilterQueries.forEach(query => {
+            const fieldSelect = document.querySelector(`.query-field[data-query-id="${query.id}"]`);
+            const operatorSelect = document.querySelector(`.query-operator[data-query-id="${query.id}"]`);
+            const valueInput = document.querySelector(`.query-value[data-query-id="${query.id}"]`);
+            if (fieldSelect) query.field = fieldSelect.value;
+            if (operatorSelect) query.operator = operatorSelect.value;
+            if (valueInput) query.value = valueInput.value;
+        });
+        try {
+            localStorage.setItem('sfaf_plotter_last_query', JSON.stringify(this.dbFilterQueries));
+        } catch (_) {}
+    },
+
+    restoreQueryState() {
+        try {
+            const saved = localStorage.getItem('sfaf_plotter_last_query');
+            if (!saved) return;
+            const queries = JSON.parse(saved);
+            if (!Array.isArray(queries) || queries.length === 0) return;
+
+            const container = document.getElementById('dbFilterQueriesContainer');
+            if (!container) return;
+            container.innerHTML = '';
+            this.dbFilterQueries = [];
+
+            queries.forEach((q, i) => {
+                const queryId = `db_query_restored_${i}`;
+                const queryHTML = `
+                    <div class="filter-query" data-query-id="${queryId}">
+                        <div class="query-header">
+                            <span class="query-label">Filter ${i + 1}</span>
+                            <button class="query-remove-btn" onclick="databaseViewer.removeDBQuery('${queryId}')">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div class="query-body">
+                            <div class="query-row">
+                                <label>Field:</label>
+                                <select class="query-field" data-query-id="${queryId}">
+                                    <option value="">Select field...</option>
+                                    <option value="serial">Serial Number (100)</option>
+                                    <option value="frequency">Frequency (110)</option>
+                                    <option value="emission">Emission (114)</option>
+                                    <option value="power">Power (115)</option>
+                                    <option value="location">Location (300)</option>
+                                    <option value="equipment">Equipment (340)</option>
+                                    <option value="notes">Notes</option>
+                                    <option value="marker_type">Type</option>
+                                </select>
+                            </div>
+                            <div class="query-row">
+                                <label>Operator:</label>
+                                <select class="query-operator" data-query-id="${queryId}">
+                                    <option value="contains">Contains</option>
+                                    <option value="equals">Equals</option>
+                                    <option value="not_equals">Not Equals</option>
+                                    <option value="starts_with">Starts With</option>
+                                    <option value="ends_with">Ends With</option>
+                                    <option value="greater_than">Greater Than</option>
+                                    <option value="less_than">Less Than</option>
+                                </select>
+                            </div>
+                            <div class="query-row">
+                                <label>Value:</label>
+                                <input type="text" class="query-value" placeholder="Enter value"
+                                       data-query-id="${queryId}">
+                                <small class="query-hint">Case-insensitive search</small>
+                            </div>
+                        </div>
+                    </div>`;
+                container.insertAdjacentHTML('beforeend', queryHTML);
+
+                // Set saved values
+                const fieldSelect = container.querySelector(`.query-field[data-query-id="${queryId}"]`);
+                const operatorSelect = container.querySelector(`.query-operator[data-query-id="${queryId}"]`);
+                const valueInput = container.querySelector(`.query-value[data-query-id="${queryId}"]`);
+                if (fieldSelect) fieldSelect.value = q.field || '';
+                if (operatorSelect) operatorSelect.value = q.operator || 'contains';
+                if (valueInput) valueInput.value = q.value || '';
+
+                this.dbFilterQueries.push({ id: queryId, field: q.field, operator: q.operator, value: q.value });
+            });
+        } catch (_) {}
+    },
+
     addDBFilterQuery() {
         const queryId = `db_query_${Date.now()}`;
         const container = document.getElementById('dbFilterQueriesContainer');
@@ -12326,7 +12549,7 @@ class DatabaseViewer {
         console.log(`🗑️ Removed DB filter query: ${queryId}`);
     }
 
-    applyDBFilters() {
+    async applyDBFilters() {
         if (!this.dbFilterQueries || this.dbFilterQueries.length === 0) {
             alert('Please add at least one filter query');
             return;
@@ -12343,17 +12566,76 @@ class DatabaseViewer {
             if (valueInput) query.value = valueInput.value;
         });
 
-        // Filter the current data
+        // If we don't have all records loaded, fetch them all before filtering
+        const total = this.totalDatabaseRecords || 0;
+        if ((this.currentSFAFData || []).length < total) {
+            this.showLoading(true);
+            try {
+                const allRecords = await this._fetchAllSFAFRecords();
+                this.currentSFAFData = allRecords;
+            } catch (e) {
+                console.error('Failed to fetch all records for query:', e);
+                this.showLoading(false);
+                return;
+            }
+            this.showLoading(false);
+        }
+
         const filteredData = this.filterRecordsByQueries(this.currentSFAFData || []);
 
-        // Update the display
         this.currentData = filteredData;
         this.currentPage = 1;
         this.renderEnhancedSFAFTable(filteredData);
         this.updatePagination();
         this.updateDBQueryStats();
 
+        this.saveQueryState();
+        this._saveToQueryHistory(this.dbFilterQueries, filteredData.length);
         console.log(`✅ Applied ${this.dbFilterQueries.length} filters, found ${filteredData.length} matching records`);
+    }
+
+    async _fetchAllSFAFRecords() {
+        const pageSize = 1000;
+        let page = 1;
+        let allSFAFs = [];
+        let total = null;
+
+        // Fetch all pages
+        do {
+            const res = await fetch(`/api/sfaf?page=${page}&limit=${pageSize}`);
+            if (!res.ok) throw new Error(`SFAF API failed: ${res.status}`);
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error || 'Failed to load records');
+
+            allSFAFs = allSFAFs.concat(data.sfafs || []);
+            if (total === null) {
+                total = data.pagination?.total || data.sfafs?.length || 0;
+                this.totalDatabaseRecords = total; // keep authoritative count up to date
+            }
+            page++;
+        } while (allSFAFs.length < total);
+
+        // Enhance records the same way the main loader does
+        const enhanced = [];
+        for (const sfaf of allSFAFs) {
+            try {
+                const sfafFields = sfaf.sfaf_fields || {};
+                const enhanced_record = {
+                    id: sfaf.id,
+                    serial: sfaf.serial_number || sfaf.id,
+                    sfafFields,
+                    rawSFAFFields: sfafFields,
+                    frequency: sfafFields.field110 || '',
+                    emission: sfafFields.field114 || '',
+                    power: sfafFields.field115 || '',
+                    completionPercentage: this.calculateCompletionPercentage(sfafFields),
+                    mcebCompliant: this.validateMCEBCompliance(sfafFields),
+                    marker: sfaf.marker || null,
+                };
+                enhanced.push(enhanced_record);
+            } catch (_) { /* skip bad records */ }
+        }
+        return enhanced;
     }
 
     filterRecordsByQueries(records, queries = null) {
@@ -12550,13 +12832,21 @@ class DatabaseViewer {
     updateDBQueryStats() {
         const matchingCount = document.getElementById('dbMatchingCount');
         const totalCount = document.getElementById('dbTotalCount');
+        const totalLabel = document.getElementById('dbTotalCountLabel');
 
         if (matchingCount) {
             matchingCount.textContent = this.currentData ? this.currentData.length : 0;
         }
 
         if (totalCount) {
-            totalCount.textContent = this.currentSFAFData ? this.currentSFAFData.length : 0;
+            // Prefer the authoritative DB total; fall back to current loaded count
+            const dbTotal = this.totalDatabaseRecords;
+            const loadedCount = this.currentSFAFData ? this.currentSFAFData.length : 0;
+            totalCount.textContent = (dbTotal && dbTotal > loadedCount) ? dbTotal : loadedCount;
+        }
+
+        if (totalLabel) {
+            totalLabel.textContent = 'Database Records:';
         }
     }
 

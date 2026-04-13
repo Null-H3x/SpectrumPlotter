@@ -82,7 +82,7 @@ const referenceData = {
     async loadUnits() {
         try {
             const [unitsRes, instRes] = await Promise.all([
-                fetch('/api/frequency/units'),
+                fetch('/api/frequency/units?all=true'),
                 this.installations.length === 0 ? fetch('/api/installations') : Promise.resolve(null)
             ]);
 
@@ -108,9 +108,27 @@ const referenceData = {
         const sel = document.getElementById('unitsInstallationFilter');
         if (!sel) return;
         const current = this._installationFilter || '';
-        sel.innerHTML = '<option value="">All Installations</option>' +
-            this.installations.filter(i => i.is_active).map(i =>
-                `<option value="${i.id}"${i.id === current ? ' selected' : ''}>${i.name}</option>`
+
+        // Count units assigned per installation so we can show non-empty ones first
+        const countByInst = {};
+        this.units.forEach(u => {
+            if (u.installation_id) countByInst[u.installation_id] = (countByInst[u.installation_id] || 0) + 1;
+        });
+        const unassigned = this.units.filter(u => !u.installation_id).length;
+
+        const instOpts = this.installations
+            .filter(i => i.is_active)
+            .map(i => ({
+                ...i,
+                _count: countByInst[i.id] || 0,
+            }))
+            .sort((a, b) => b._count - a._count || a.name.localeCompare(b.name));
+
+        sel.innerHTML =
+            `<option value="">All Installations (${this.units.length})</option>` +
+            (unassigned > 0 ? `<option value="__unassigned__">— Unassigned (${unassigned}) —</option>` : '') +
+            instOpts.map(i =>
+                `<option value="${i.id}"${i.id === current ? ' selected' : ''}>${i.name}${i._count ? ` (${i._count})` : ''}</option>`
             ).join('');
     },
 
@@ -131,11 +149,14 @@ const referenceData = {
         const q = this._unitFilter || '';
         const instFilter = this._installationFilter || '';
         let list = this.units;
-        if (instFilter) {
+        if (instFilter === '__unassigned__') {
+            list = list.filter(u => !u.installation_id);
+        } else if (instFilter) {
             list = list.filter(u => u.installation_id === instFilter);
         }
         if (q) {
             list = list.filter(u =>
+                (u.name || '').toLowerCase().includes(q) ||
                 (u.unit_code || '').toLowerCase().includes(q) ||
                 (u.organization || '').toLowerCase().includes(q) ||
                 (u.location || '').toLowerCase().includes(q)
@@ -1613,12 +1634,28 @@ const referenceData = {
 
     // ── Lookup Values (existing, unchanged logic) ──
 
+    // Field numbers whose lookup values are sourced from another table
+    _workboxDrivenFields: new Set(['206']),
+
     async loadLookup(fieldCode) {
         this._currentLookupField = fieldCode;
         try {
-            const res = await fetch(`/api/sfaf-lookup?field=${fieldCode}`);
-            const data = await res.json();
-            this.sfafLookup = data.entries || [];
+            if (this._workboxDrivenFields.has(String(fieldCode))) {
+                // Field 206 (ISM Workbox): values come from the workboxes table
+                const res = await fetch('/api/frequency/workboxes');
+                const data = await res.json();
+                // Normalise to the same shape renderLookup expects
+                this.sfafLookup = (data.workboxes || []).map(w => ({
+                    _isWorkbox: true,
+                    value:      w.name,
+                    label:      w.description || '',
+                    is_active:  w.is_active,
+                }));
+            } else {
+                const res = await fetch(`/api/sfaf-lookup?field=${fieldCode}`);
+                const data = await res.json();
+                this.sfafLookup = data.entries || [];
+            }
             this.renderLookup();
         } catch (err) {
             this.showError('sfafCodesTableBody', 'Failed to load entries');
@@ -1633,6 +1670,15 @@ const referenceData = {
     renderLookup() {
         const tbody = document.getElementById('sfafCodesTableBody');
         if (!tbody) return;
+
+        const isWorkboxField = this.sfafLookup.length > 0 && this.sfafLookup[0]?._isWorkbox;
+
+        // Show/hide Add Entry button and managed-by notice
+        const addBtn = document.getElementById('sfafLookupAddBtn');
+        const managedNotice = document.getElementById('sfafLookupManagedNotice');
+        if (addBtn) addBtn.style.display = isWorkboxField ? 'none' : '';
+        if (managedNotice) managedNotice.style.display = isWorkboxField ? '' : 'none';
+
         const q = this._lookupFilter || '';
         const list = q
             ? this.sfafLookup.filter(e =>
@@ -1651,7 +1697,7 @@ const referenceData = {
             <tr>
                 <td><strong>${this._esc(e.value)}</strong></td>
                 <td>${this._esc(e.label || '')}</td>
-                <td style="text-align:center;">${e.sort_order}</td>
+                <td style="text-align:center;">${e.sort_order ?? '—'}</td>
                 <td style="text-align:center;">${e.char_limit != null ? e.char_limit : '—'}</td>
                 <td>
                     <span class="status-badge ${e.is_active ? 'status-active' : 'status-inactive'}">
@@ -1659,12 +1705,13 @@ const referenceData = {
                     </span>
                 </td>
                 <td>
+                    ${e._isWorkbox ? '' : `
                     <button class="btn btn-sm btn-icon" onclick="referenceData.editLookup('${e.id}')" title="Edit">
                         <i class="fas fa-edit"></i>
                     </button>
                     <button class="btn btn-sm btn-icon btn-danger" onclick="referenceData.deleteLookup('${e.id}')" title="Delete">
                         <i class="fas fa-trash"></i>
-                    </button>
+                    </button>`}
                 </td>
             </tr>
         `).join('');

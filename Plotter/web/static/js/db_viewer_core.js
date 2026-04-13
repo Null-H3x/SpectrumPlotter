@@ -542,6 +542,12 @@ class DatabaseViewer {
         // ✅ Apply session preferences before loading data
         this.applySessionPreferences();
 
+        // ✅ Restore last query builder state
+        this.restoreQueryState();
+
+        // ✅ Populate query history sidebar
+        this.renderQueryHistory();
+
         // Initialize custom views and apply default view
         this.updateViewDropdown();
         this.applyDefaultView();
