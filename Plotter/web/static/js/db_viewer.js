@@ -12502,14 +12502,16 @@ class DatabaseViewer {
     saveQueryToLibrary() {
         // Collect current condition values from the DOM
         const conditions = (this.queryConditions || []).map(c => {
-            const fieldSel = document.querySelector(`.condition-field[data-condition-id="${c.id}"]`);
-            const opSel   = document.querySelector(`.condition-operator[data-condition-id="${c.id}"]`);
-            const valInp  = document.querySelector(`.condition-value[data-condition-id="${c.id}"]`);
+            const fieldSel  = document.querySelector(`.condition-field[data-condition-id="${c.id}"]`);
+            const opSel     = document.querySelector(`.condition-operator[data-condition-id="${c.id}"]`);
+            const valInp    = document.querySelector(`.condition-value[data-condition-id="${c.id}"]`);
+            const negateBox = document.querySelector(`.condition-negate[data-condition-id="${c.id}"]`);
             return {
-                field:    fieldSel ? fieldSel.value : c.field,
-                operator: opSel    ? opSel.value    : c.operator,
-                value:    valInp   ? valInp.value   : c.value,
+                field:    fieldSel  ? fieldSel.value  : c.field,
+                operator: opSel     ? opSel.value     : c.operator,
+                value:    valInp    ? valInp.value    : c.value,
                 enabled:  c.enabled !== false,
+                negate:   negateBox ? negateBox.checked : (c.negate || false),
             };
         }).filter(c => c.field && c.value);
 
@@ -12610,6 +12612,10 @@ class DatabaseViewer {
             last.operator = c.operator;
             last.value    = c.value;
             last.enabled  = c.enabled !== false;
+            last.negate   = c.negate || false;
+
+            const allNegates = container.querySelectorAll('.condition-negate');
+            if (allNegates[idx] && c.negate) { allNegates[idx].checked = true; allNegates[idx].dataset.conditionId = condId; }
         });
 
         // Restore sort settings
@@ -12961,7 +12967,8 @@ class DatabaseViewer {
                         result = true;
                 }
 
-                console.log(`    Result: ${result}`);
+                if (query.negate) result = !result;
+                console.log(`    Result: ${result}${query.negate ? ' (negated)' : ''}`);
                 return result;
             });
 
@@ -13282,6 +13289,10 @@ class DatabaseViewer {
                     <option value="less_than">Less Than</option>
                 </select>
                 <input type="text" class="condition-value" placeholder="Expression" data-condition-id="${conditionId}">
+                <label class="condition-not-label" title="Negate this condition">
+                    <input type="checkbox" class="condition-negate" data-condition-id="${conditionId}">
+                    <span>Not</span>
+                </label>
                 <button class="btn-remove-condition" onclick="databaseViewer.removeCondition('${conditionId}')">
                     <i class="fas fa-times"></i>
                 </button>
@@ -13293,6 +13304,7 @@ class DatabaseViewer {
         this.queryConditions.push({
             id: conditionId,
             enabled: true,
+            negate: false,
             field: 'serial',
             operator: 'in',
             value: ''
@@ -13329,11 +13341,13 @@ class DatabaseViewer {
             const fieldSelect = document.querySelector(`.condition-field[data-condition-id="${condition.id}"]`);
             const operatorSelect = document.querySelector(`.condition-operator[data-condition-id="${condition.id}"]`);
             const valueInput = document.querySelector(`.condition-value[data-condition-id="${condition.id}"]`);
+            const negateBox = document.querySelector(`.condition-negate[data-condition-id="${condition.id}"]`);
 
             if (checkbox) condition.enabled = checkbox.checked;
             if (fieldSelect) condition.field = fieldSelect.value;
             if (operatorSelect) condition.operator = operatorSelect.value;
             if (valueInput) condition.value = valueInput.value;
+            if (negateBox) condition.negate = negateBox.checked;
         });
 
         // Filter only enabled conditions with non-empty values
