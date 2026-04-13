@@ -636,6 +636,18 @@ Object.assign(DatabaseViewer.prototype, {
                     <option value="greater_than">Greater Than</option>
                     <option value="less_than">Less Than</option>
                 </select>
+                <label class="condition-not-label"
+                       title="Negate this condition"
+                       style="flex-shrink:0;display:inline-flex;align-items:center;gap:5px;cursor:pointer;
+                              font-size:12px;color:#94a3b8;white-space:nowrap;padding:4px 8px;
+                              border:1px solid rgba(102,126,234,0.25);border-radius:4px;user-select:none;">
+                    <input type="checkbox" class="condition-negate" data-condition-id="${conditionId}"
+                           style="width:13px;height:13px;cursor:pointer;accent-color:#f87171;"
+                           onchange="this.closest('.condition-not-label').style.background=this.checked?'rgba(248,113,113,0.15)':'';
+                                     this.closest('.condition-not-label').style.borderColor=this.checked?'rgba(248,113,113,0.4)':'rgba(102,126,234,0.25)';
+                                     this.closest('.condition-not-label').style.color=this.checked?'#f87171':'#94a3b8';">
+                    <span>Not</span>
+                </label>
                 <input type="text" class="condition-value" placeholder="Expression" data-condition-id="${conditionId}">
                 <button class="btn-remove-condition" onclick="databaseViewer.removeCondition('${conditionId}')">
                     <i class="fas fa-times"></i>
@@ -648,6 +660,7 @@ Object.assign(DatabaseViewer.prototype, {
         this.queryConditions.push({
             id: conditionId,
             enabled: true,
+            negate: false,
             field: 'serial',
             operator: 'in',
             value: ''
@@ -671,7 +684,11 @@ Object.assign(DatabaseViewer.prototype, {
         }
 
         this.queryConditions = this.queryConditions.filter(c => c.id !== conditionId);
-        console.log(`🗑️ Removed condition: ${conditionId}`);
+
+        // Always keep at least one condition row
+        if (this.queryConditions.length === 0) {
+            this.addQueryCondition();
+        }
     },
 
     runQuery() {
@@ -685,18 +702,13 @@ Object.assign(DatabaseViewer.prototype, {
             const operatorSelect = document.querySelector(`.condition-operator[data-condition-id="${condition.id}"]`);
             const valueInput = document.querySelector(`.condition-value[data-condition-id="${condition.id}"]`);
 
+            const negateBox = document.querySelector(`.condition-negate[data-condition-id="${condition.id}"]`);
+
             if (checkbox) condition.enabled = checkbox.checked;
             if (fieldSelect) condition.field = fieldSelect.value;
             if (operatorSelect) condition.operator = operatorSelect.value;
             if (valueInput) condition.value = valueInput.value;
-
-            console.log(`  Condition ${condition.id}:`, {
-                enabled: condition.enabled,
-                field: condition.field,
-                operator: condition.operator,
-                value: condition.value,
-                valueLength: condition.value?.length
-            });
+            if (negateBox) condition.negate = negateBox.checked;
         });
 
         // Filter only enabled conditions with non-empty values
