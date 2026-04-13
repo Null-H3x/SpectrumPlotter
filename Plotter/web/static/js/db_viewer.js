@@ -12424,63 +12424,33 @@ class DatabaseViewer {
         const entry = history.find(h => h.id === entryId);
         if (!entry) return;
 
-        const container = document.getElementById('dbFilterQueriesContainer') || document.getElementById('queryConditionsList');
+        // Clear existing conditions and rebuild using addQueryCondition()
+        // so the rendered HTML always matches the current template (including Not checkbox).
+        const container = document.getElementById('queryConditionsList');
         if (!container) return;
         container.innerHTML = '';
-        this.dbFilterQueries = [];
+        this.queryConditions = [];
 
         entry.conditions.forEach((c, i) => {
-            const queryId = `db_query_hist_${Date.now()}_${i}`;
-            const queryHTML = `
-                <div class="filter-query" data-query-id="${queryId}">
-                    <div class="query-header">
-                        <span class="query-label">Filter ${i + 1}</span>
-                        <button class="query-remove-btn" onclick="databaseViewer.removeDBQuery('${queryId}')">
-                            <i class="fas fa-times"></i>
-                        </button>
-                    </div>
-                    <div class="query-body">
-                        <div class="query-row">
-                            <label>Field:</label>
-                            <select class="query-field" data-query-id="${queryId}">
-                                <option value="">Select field...</option>
-                                <option value="serial">Serial Number (100)</option>
-                                <option value="frequency">Frequency (110)</option>
-                                <option value="emission">Emission (114)</option>
-                                <option value="power">Power (115)</option>
-                                <option value="location">Location (300)</option>
-                                <option value="equipment">Equipment (340)</option>
-                                <option value="notes">Notes</option>
-                                <option value="marker_type">Type</option>
-                            </select>
-                        </div>
-                        <div class="query-row">
-                            <label>Operator:</label>
-                            <select class="query-operator" data-query-id="${queryId}">
-                                <option value="contains">Contains</option>
-                                <option value="equals">Equals</option>
-                                <option value="not_equals">Not Equals</option>
-                                <option value="starts_with">Starts With</option>
-                                <option value="ends_with">Ends With</option>
-                                <option value="greater_than">Greater Than</option>
-                                <option value="less_than">Less Than</option>
-                            </select>
-                        </div>
-                        <div class="query-row">
-                            <label>Value:</label>
-                            <input type="text" class="query-value" placeholder="Enter value" data-query-id="${queryId}">
-                            <small class="query-hint">Case-insensitive search</small>
-                        </div>
-                    </div>
-                </div>`;
-            container.insertAdjacentHTML('beforeend', queryHTML);
-            const fieldSel = container.querySelector(`.query-field[data-query-id="${queryId}"]`);
-            const opSel = container.querySelector(`.query-operator[data-query-id="${queryId}"]`);
-            const valInp = container.querySelector(`.query-value[data-query-id="${queryId}"]`);
-            if (fieldSel) fieldSel.value = c.field || '';
-            if (opSel) opSel.value = c.operator || 'contains';
-            if (valInp) valInp.value = c.value || '';
-            this.dbFilterQueries.push({ id: queryId, field: c.field, operator: c.operator, value: c.value });
+            this.addQueryCondition();
+            const last = this.queryConditions[this.queryConditions.length - 1];
+            if (!last) return;
+
+            const allFields   = container.querySelectorAll('.condition-field');
+            const allOps      = container.querySelectorAll('.condition-operator');
+            const allVals     = container.querySelectorAll('.condition-value');
+            const allNegates  = container.querySelectorAll('.condition-negate');
+            const idx = allFields.length - 1;
+
+            if (allFields[idx])  allFields[idx].value   = c.field    || '';
+            if (allOps[idx])     allOps[idx].value      = c.operator || 'contains';
+            if (allVals[idx])    allVals[idx].value     = c.value    || '';
+            if (allNegates[idx]) allNegates[idx].checked = c.negate  || false;
+
+            last.field    = c.field;
+            last.operator = c.operator;
+            last.value    = c.value;
+            last.negate   = c.negate || false;
         });
     },
 
