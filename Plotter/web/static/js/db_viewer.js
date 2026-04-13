@@ -13060,7 +13060,7 @@ class DatabaseViewer {
         console.log(`🗑️ Removed condition: ${conditionId}`);
     }
 
-    runQuery() {
+    async runQuery() {
         console.log('🔍 Running query...', 'Total conditions:', this.queryConditions.length);
         console.log('📊 Current SFAF Data count:', this.currentSFAFData?.length || 0);
 
@@ -13075,14 +13075,6 @@ class DatabaseViewer {
             if (fieldSelect) condition.field = fieldSelect.value;
             if (operatorSelect) condition.operator = operatorSelect.value;
             if (valueInput) condition.value = valueInput.value;
-
-            console.log(`  Condition ${condition.id}:`, {
-                enabled: condition.enabled,
-                field: condition.field,
-                operator: condition.operator,
-                value: condition.value,
-                valueLength: condition.value?.length
-            });
         });
 
         // Filter only enabled conditions with non-empty values
@@ -13091,15 +13083,26 @@ class DatabaseViewer {
             return c.enabled && hasValue;
         });
 
-        console.log('📊 Enabled conditions with values:', enabledConditions.length);
-
         if (enabledConditions.length === 0) {
             alert('Please add at least one enabled condition with a value');
             return;
         }
 
+        // Ensure all DB records are loaded before filtering
+        const total = this.totalDatabaseRecords || 0;
+        if ((this.currentSFAFData || []).length < total) {
+            this.showLoading(true);
+            try {
+                this.currentSFAFData = await this._fetchAllSFAFRecords();
+            } catch (e) {
+                console.error('Failed to fetch all records for query:', e);
+                this.showLoading(false);
+                return;
+            }
+            this.showLoading(false);
+        }
+
         // Filter data
-        console.log('🔍 Filtering records with', enabledConditions.length, 'conditions...');
         const filteredData = this.filterRecordsByQueries(this.currentSFAFData || [], enabledConditions);
         console.log('📊 Filtered results:', filteredData.length, 'records');
 
