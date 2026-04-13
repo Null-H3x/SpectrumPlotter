@@ -322,8 +322,16 @@
     <div id="query-tab" class="tab-panel">
         <div style="display:flex;gap:0;height:100%;overflow:hidden;">
 
-        <!-- History Sidebar -->
+        <!-- Sidebar: Saved Queries + History -->
         <div id="queryHistoryPanel" style="width:260px;min-width:260px;border-right:1px solid rgba(102,126,234,0.15);display:flex;flex-direction:column;overflow:hidden;background:rgba(15,15,35,0.4);">
+            <!-- Saved Queries -->
+            <div style="padding:12px 14px 10px;border-bottom:1px solid rgba(102,126,234,0.12);display:flex;align-items:center;gap:8px;">
+                <span style="font-size:0.82rem;font-weight:700;color:#60a5fa;letter-spacing:0.5px;flex:1;"><i class="fas fa-bookmark"></i> Saved Queries</span>
+            </div>
+            <div id="savedQueriesList" style="max-height:200px;overflow-y:auto;padding:4px 0;border-bottom:1px solid rgba(102,126,234,0.12);">
+                <div style="padding:16px;text-align:center;color:#607d8b;font-size:0.8rem;font-style:italic;">No saved queries</div>
+            </div>
+            <!-- History -->
             <div style="padding:12px 14px 10px;border-bottom:1px solid rgba(102,126,234,0.12);display:flex;align-items:center;gap:8px;">
                 <span style="font-size:0.82rem;font-weight:700;color:#a78bfa;letter-spacing:0.5px;flex:1;"><i class="fas fa-history"></i> Query History</span>
                 <button class="btn btn-sm btn-secondary" onclick="databaseViewer.clearQueryHistory()" title="Clear history" style="padding:3px 7px;font-size:0.75rem;">Clear</button>

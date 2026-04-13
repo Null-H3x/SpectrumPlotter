@@ -473,6 +473,13 @@ class DatabaseViewer {
             });
         }
 
+        const saveQueryBtn = document.getElementById('saveQueryBtn');
+        if (saveQueryBtn) {
+            saveQueryBtn.addEventListener('click', () => {
+                this.saveQueryToLibrary();
+            });
+        }
+
         // Sort order toggle
         const sortAscBtn = document.getElementById('sortAscBtn');
         const sortDescBtn = document.getElementById('sortDescBtn');
@@ -574,6 +581,7 @@ class DatabaseViewer {
 
         // ✅ Populate query history sidebar
         this.renderQueryHistory();
+        this.renderSavedQueries();
 
         // Initialize custom views and apply default view
         this.updateViewDropdown();
