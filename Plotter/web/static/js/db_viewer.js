@@ -2044,28 +2044,178 @@ class DatabaseViewer {
     }
 
     viewSFAFRecord(recordId) {
-        try {
-            console.log(`👀 Viewing SFAF record: ${recordId}`);
+        const record = this.currentSFAFData?.find(r => r.id === recordId);
+        if (!record) { this.showError('Record not found'); return; }
+        this._showViewFormatPicker(record);
+    }
 
-            // Find the record in current data
-            const record = this.currentSFAFData?.find(r => r.id === recordId);
-            if (!record) {
-                this.showError('Record not found');
-                return;
-            }
+    _showViewFormatPicker(record) {
+        const serial = record.serial || record.id;
+        const pickerHTML = `
+            <div style="padding:8px 0 16px;">
+                <p style="color:#94a3b8;margin:0 0 20px;font-size:0.9rem;">
+                    Serial: <strong style="color:#e2e8f0;">${serial}</strong>
+                    &nbsp;·&nbsp; ${Object.keys(record.rawSFAFFields || {}).length} fields
+                </p>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                    <button class="btn btn-secondary" style="padding:18px;display:flex;flex-direction:column;align-items:center;gap:8px;"
+                            onclick="databaseViewer._openRecordView('${record.id}','sfaf1col')">
+                        <i class="fas fa-list" style="font-size:1.4rem;color:#a78bfa;"></i>
+                        <span style="font-weight:600;">SFAF 1-Column</span>
+                        <span style="font-size:0.75rem;color:#64748b;">Single column field list</span>
+                    </button>
+                    <button class="btn btn-secondary" style="padding:18px;display:flex;flex-direction:column;align-items:center;gap:8px;"
+                            onclick="databaseViewer._openRecordView('${record.id}','sfaf3col')">
+                        <i class="fas fa-table" style="font-size:1.4rem;color:#60a5fa;"></i>
+                        <span style="font-weight:600;">SFAF 3-Column</span>
+                        <span style="font-size:0.75rem;color:#64748b;">Compact grid layout</span>
+                    </button>
+                    <button class="btn btn-secondary" style="padding:18px;display:flex;flex-direction:column;align-items:center;gap:8px;"
+                            onclick="databaseViewer._openRecordView('${record.id}','gmf')">
+                        <i class="fas fa-file-alt" style="font-size:1.4rem;color:#34d399;"></i>
+                        <span style="font-weight:600;">GMF</span>
+                        <span style="font-size:0.75rem;color:#64748b;">Government Master File text</span>
+                    </button>
+                    <button class="btn btn-secondary" style="padding:18px;display:flex;flex-direction:column;align-items:center;gap:8px;"
+                            onclick="databaseViewer._openRecordView('${record.id}','summary')">
+                        <i class="fas fa-info-circle" style="font-size:1.4rem;color:#f59e0b;"></i>
+                        <span style="font-weight:600;">Summary</span>
+                        <span style="font-size:0.75rem;color:#64748b;">Key fields &amp; metadata</span>
+                    </button>
+                </div>
+            </div>`;
+        this.showModal(`View Record — ${serial}`, pickerHTML);
+        // Store record for use by _openRecordView
+        this._pendingViewRecord = record;
+    }
 
-            console.log('📊 Record data:', record);
-            console.log('📊 rawSFAFFields:', record.rawSFAFFields);
-            console.log('📊 sfafFields:', record.sfafFields);
+    _openRecordView(recordId, format) {
+        const record = this._pendingViewRecord?.id === recordId
+            ? this._pendingViewRecord
+            : this.currentSFAFData?.find(r => r.id === recordId);
+        if (!record) return;
 
-            // Create modal content for viewing (Source: db_viewer_js.txt view functionality)
-            const modalContent = this.generateSFAFViewContent(record);
-            this.showModal('SFAF Record Details', modalContent);
-
-        } catch (error) {
-            console.error('Failed to view SFAF record:', error);
-            this.showError('Failed to view SFAF record');
+        let title, content;
+        switch (format) {
+            case 'sfaf1col': title = `SFAF 1-Column — ${record.serial}`; content = this._renderSFAF1Column(record); break;
+            case 'sfaf3col': title = `SFAF 3-Column — ${record.serial}`; content = this._renderSFAF3Column(record); break;
+            case 'gmf':      title = `GMF — ${record.serial}`;           content = this._renderGMF(record);         break;
+            case 'summary':  title = `Summary — ${record.serial}`;       content = this._renderSummaryView(record);  break;
+            default: return;
         }
+
+        // Back button prepended to content
+        const backBtn = `<button class="btn btn-secondary" style="margin-bottom:16px;font-size:0.8rem;"
+                                 onclick="databaseViewer._showViewFormatPicker(databaseViewer._pendingViewRecord)">
+                             <i class="fas fa-arrow-left"></i> Back to format picker
+                         </button>`;
+        this.showModal(title, backBtn + content);
+    }
+
+    _renderSFAF1Column(record) {
+        const fields = record.rawSFAFFields || {};
+        const sorted = Object.keys(fields).sort((a, b) => {
+            return parseInt(a.replace('field','').split('_')[0]) - parseInt(b.replace('field','').split('_')[0]);
+        });
+        if (sorted.length === 0) return `<div class="empty-state"><i class="fas fa-file-alt"></i><p>No SFAF fields defined.</p></div>`;
+
+        const rows = sorted.map(key => {
+            const num = key.replace('field','');
+            const label = this.getFieldLabelFromNumber(num);
+            return `<div style="display:flex;gap:0;border-bottom:1px solid rgba(255,255,255,0.05);padding:8px 0;">
+                        <span style="width:80px;flex-shrink:0;font-size:0.8rem;color:#64748b;font-family:monospace;">${num}</span>
+                        <span style="width:200px;flex-shrink:0;font-size:0.8rem;color:#94a3b8;">${label}</span>
+                        <span style="color:#e2e8f0;font-size:0.9rem;">${this.escapeHtml(String(fields[key] || ''))}</span>
+                    </div>`;
+        }).join('');
+
+        return `<div style="font-family:monospace;max-height:60vh;overflow-y:auto;">${rows}</div>`;
+    }
+
+    _renderSFAF3Column(record) {
+        const fields = record.rawSFAFFields || {};
+        const sorted = Object.keys(fields).sort((a, b) => {
+            return parseInt(a.replace('field','').split('_')[0]) - parseInt(b.replace('field','').split('_')[0]);
+        });
+        if (sorted.length === 0) return `<div class="empty-state"><i class="fas fa-file-alt"></i><p>No SFAF fields defined.</p></div>`;
+
+        const cells = sorted.map(key => {
+            const num = key.replace('field','');
+            const label = this.getFieldLabelFromNumber(num);
+            return `<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:6px;padding:10px 12px;">
+                        <div style="font-size:0.7rem;color:#64748b;font-family:monospace;margin-bottom:2px;">${num} · ${label}</div>
+                        <div style="color:#e2e8f0;font-size:0.85rem;word-break:break-word;">${this.escapeHtml(String(fields[key] || ''))}</div>
+                    </div>`;
+        }).join('');
+
+        return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-height:60vh;overflow-y:auto;">${cells}</div>`;
+    }
+
+    _renderGMF(record) {
+        const fields = record.rawSFAFFields || {};
+        const sorted = Object.keys(fields).sort((a, b) => {
+            return parseInt(a.replace('field','').split('_')[0]) - parseInt(b.replace('field','').split('_')[0]);
+        });
+
+        const lines = sorted.map(key => {
+            const num = key.replace('field','').replace('_','.');
+            return `${num}. ${fields[key] || ''}`;
+        });
+
+        const text = lines.join('\n');
+        return `
+            <div style="position:relative;">
+                <button class="btn btn-secondary" style="position:absolute;top:0;right:0;font-size:0.75rem;"
+                        onclick="navigator.clipboard.writeText(document.getElementById('gmfTextOutput').value).then(()=>this.textContent='Copied!')">
+                    <i class="fas fa-copy"></i> Copy
+                </button>
+                <textarea id="gmfTextOutput" readonly
+                          style="width:100%;height:55vh;background:#0d1117;color:#7ee787;font-family:'Courier New',monospace;font-size:0.85rem;
+                                 border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:12px;resize:none;"
+                >${this.escapeHtml(text)}</textarea>
+            </div>`;
+    }
+
+    _renderSummaryView(record) {
+        const pct = record.completionPercentage || 0;
+        const compliant = record.mcebCompliant?.isCompliant;
+        const fields = record.rawSFAFFields || {};
+
+        const keyFields = [
+            ['005', 'Type of Application'],['010', 'Type of Action'],
+            ['102', 'Serial Number'],['110', 'Frequency'],['113', 'Station Class'],
+            ['114', 'Emission'],['115', 'Power'],
+            ['200', 'Agency'],['201', 'Org'],['202', 'Command'],
+            ['300', 'Location'],['301', 'Coordinates'],
+        ];
+
+        const rows = keyFields.map(([num, label]) => {
+            const val = fields[`field${num}`] || '—';
+            return `<div style="display:flex;gap:12px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+                        <span style="width:180px;flex-shrink:0;color:#64748b;font-size:0.85rem;">${label}</span>
+                        <span style="color:#e2e8f0;">${this.escapeHtml(String(val))}</span>
+                    </div>`;
+        }).join('');
+
+        return `
+            <div style="margin-bottom:16px;display:flex;gap:12px;flex-wrap:wrap;">
+                <span style="background:rgba(167,139,250,0.15);color:#a78bfa;padding:4px 12px;border-radius:12px;font-size:0.8rem;">
+                    ${pct}% complete
+                </span>
+                <span style="background:${compliant ? 'rgba(52,211,153,0.15)' : 'rgba(248,113,113,0.15)'};
+                             color:${compliant ? '#34d399' : '#f87171'};padding:4px 12px;border-radius:12px;font-size:0.8rem;">
+                    ${compliant ? 'MC4EB Compliant' : 'Non-Compliant'}
+                </span>
+                <span style="background:rgba(255,255,255,0.05);color:#94a3b8;padding:4px 12px;border-radius:12px;font-size:0.8rem;">
+                    ${Object.keys(fields).length} fields
+                </span>
+            </div>
+            <div>${rows}</div>
+            ${record.mcebCompliant?.issues?.length ? `
+                <div style="margin-top:16px;padding:12px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:6px;">
+                    <div style="color:#f87171;font-size:0.8rem;font-weight:600;margin-bottom:8px;">Compliance Issues</div>
+                    ${record.mcebCompliant.issues.map(i => `<div style="color:#fca5a5;font-size:0.8rem;padding:2px 0;">${this.escapeHtml(i)}</div>`).join('')}
+                </div>` : ''}`;
     }
 
     exportSFAFRecord(recordId) {
@@ -6038,13 +6188,15 @@ class DatabaseViewer {
     }
 
     generateActionButtons(record) {
+        const deleteBtn = this.canDelete() ? `
+            <button class="table-action-btn btn-delete-record"
+                    onclick="databaseViewer.deleteSingleRecord('${record.id}')"
+                    title="Delete Record">
+                <i class="fas fa-trash-alt"></i>
+            </button>` : '';
+
         return `
         <div class="table-actions-group">
-            <button class="table-action-btn btn-edit-sfaf"
-                    onclick="databaseViewer.editSFAFRecord('${record.id}')"
-                    title="Edit SFAF Fields">
-                <i class="fas fa-edit"></i>
-            </button>
             <button class="table-action-btn btn-view-on-map"
                     onclick="databaseViewer.viewRecordOnMap('${record.id}')"
                     title="View on Map">
@@ -6052,7 +6204,7 @@ class DatabaseViewer {
             </button>
             <button class="table-action-btn btn-view-details"
                     onclick="databaseViewer.viewSFAFRecord('${record.id}')"
-                    title="View Details">
+                    title="View Record">
                 <i class="fas fa-eye"></i>
             </button>
             <button class="table-action-btn btn-export-record"
@@ -6060,11 +6212,7 @@ class DatabaseViewer {
                     title="Export SFAF">
                 <i class="fas fa-download"></i>
             </button>
-            <button class="table-action-btn btn-delete-record"
-                    onclick="databaseViewer.deleteSingleRecord('${record.id}')"
-                    title="Delete Record">
-                <i class="fas fa-trash-alt"></i>
-            </button>
+            ${deleteBtn}
         </div>
     `;
     }
@@ -6344,27 +6492,6 @@ class DatabaseViewer {
         }
     }
 
-    viewSFAFRecord(recordId) {
-        try {
-            console.log(`👀 Viewing SFAF record: ${recordId}`);
-
-            // Find the record in current data
-            const record = this.currentSFAFData?.find(r => r.id === recordId);
-            if (!record) {
-                this.showError('Record not found');
-                return;
-            }
-
-            // Create modal content for viewing
-            const modalContent = this.generateSFAFViewContent(record);
-            this.showModal('SFAF Record Details', modalContent);
-
-        } catch (error) {
-            console.error('Failed to view SFAF record:', error);
-            this.showError('Failed to view SFAF record');
-        }
-    }
-
     exportSFAFRecord(recordId) {
         try {
             console.log(`📤 Exporting SFAF record: ${recordId}`);
@@ -6401,30 +6528,6 @@ class DatabaseViewer {
             <div class="form-actions">
                 <button class="btn btn-primary" onclick="databaseViewer.saveSFAFChanges('${record.id}')">Save Changes</button>
                 <button class="btn btn-secondary" onclick="databaseViewer.closeModal()">Cancel</button>
-            </div>
-        </div>
-    `;
-    }
-
-    generateSFAFViewContent(record) {
-        return `
-        <div class="sfaf-view-content">
-            <div class="record-header">
-                <h4>${record.serial} - ${record.agency}</h4>
-                <p>Frequency: ${record.frequency} | Location: ${record.location}</p>
-            </div>
-            <div class="sfaf-fields-display">
-                <h5>SFAF Fields</h5>
-                ${Object.entries(record.rawSFAFFields || {}).map(([field, value]) => `
-                    <div class="sfaf-field-display">
-                        <span class="field-label">${field}:</span>
-                        <span class="field-value">${value}</span>
-                    </div>
-                `).join('')}
-            </div>
-            <div class="record-metadata">
-                <p>Completion: ${record.sfafCompletionPercentage || 0}%</p>
-                <p>MC4EB Compliant: ${record.mcebCompliant?.isCompliant ? '✅ Yes' : '❌ No'}</p>
             </div>
         </div>
     `;
@@ -9263,11 +9366,15 @@ class DatabaseViewer {
         console.log(`📊 Table statistics updated: ${recordCount} records displayed`);
     }
 
-    // ✅ ENHANCED: Generate SFAF view content (Source: db_viewer_js.txt view patterns)
+    // ✅ DEPRECATED: generateSFAFViewContent replaced by _showViewFormatPicker + view renderers.
+    //               Kept only because other legacy references may still call it.
     generateSFAFViewContent(record) {
-        // Store current record ID for saving
-        this.currentEditingRecordId = record.id;
+        this._pendingViewRecord = record;
+        this._showViewFormatPicker(record);
+        return ''; // modal opened directly
+    }
 
+    _generateSFAFViewContentLegacy(record) {
         return `
         <div class="sfaf-view-content">
             <div class="record-header">

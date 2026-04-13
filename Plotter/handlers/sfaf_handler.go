@@ -304,6 +304,11 @@ func (sh *SFAFHandler) UpdateSFAF(c *gin.Context) {
 
 // DeleteSFAF handles SFAF record deletion (Source: handlers.txt)
 func (sh *SFAFHandler) DeleteSFAF(c *gin.Context) {
+	if !atLeast(c, "ntia") {
+		c.JSON(http.StatusForbidden, NewErrorResponse("ntia or admin role required to delete records"))
+		return
+	}
+
 	id := c.Param("id")
 	if id == "" {
 		c.JSON(http.StatusBadRequest, NewErrorResponse("SFAF ID is required"))
@@ -325,6 +330,11 @@ func (sh *SFAFHandler) DeleteSFAF(c *gin.Context) {
 
 // DeleteAllSFAFs deletes all SFAF records from the database
 func (sh *SFAFHandler) DeleteAllSFAFs(c *gin.Context) {
+	if !atLeast(c, "ntia") {
+		c.JSON(http.StatusForbidden, NewErrorResponse("ntia or admin role required to delete records"))
+		return
+	}
+
 	// Delete all SFAFs
 	count, err := sh.sfafService.DeleteAllSFAFs()
 	if err != nil {

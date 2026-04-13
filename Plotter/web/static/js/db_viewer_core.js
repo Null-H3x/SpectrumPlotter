@@ -42,6 +42,21 @@ class DatabaseViewer {
         console.log(`✅ DatabaseViewer initialized with session preferences:`, sessionPrefs);
     }
 
+    canDelete() {
+        const deletableRoles = ['ntia', 'admin'];
+        return deletableRoles.includes(this.currentUserRole);
+    }
+
+    applyRolePermissions() {
+        if (!this.canDelete()) {
+            // Hide delete buttons from the toolbar
+            ['deleteSelectedBtn', 'deleteAllBtn'].forEach(id => {
+                const btn = document.getElementById(id);
+                if (btn) btn.style.display = 'none';
+            });
+        }
+    }
+
     setupTableScrollIndicators() {
         const tableContainers = document.querySelectorAll('.table-container');
 
@@ -521,6 +536,15 @@ class DatabaseViewer {
     }
 
     async init() {
+        // Fetch current user role for permission-gated UI elements
+        try {
+            const sessionRes = await fetch('/api/auth/session');
+            const sessionData = await sessionRes.json();
+            this.currentUserRole = sessionData.user?.role || 'operator';
+        } catch (_) {
+            this.currentUserRole = 'operator';
+        }
+
         await this.loadFieldLabels();
         this.setupEventListeners();
         this.setupTabNavigation();
@@ -538,6 +562,9 @@ class DatabaseViewer {
                 console.error('Error parsing serial filter:', error);
             }
         }
+
+        // ✅ Apply role-gated UI visibility
+        this.applyRolePermissions();
 
         // ✅ Apply session preferences before loading data
         this.applySessionPreferences();
