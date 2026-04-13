@@ -13258,8 +13258,16 @@ class DatabaseViewer {
                     <option value="greater_than">Greater Than</option>
                     <option value="less_than">Less Than</option>
                 </select>
-                <label class="condition-not-label" title="Negate this condition">
-                    <input type="checkbox" class="condition-negate" data-condition-id="${conditionId}">
+                <label class="condition-not-label"
+                       title="Negate this condition"
+                       style="flex-shrink:0;display:inline-flex;align-items:center;gap:5px;cursor:pointer;
+                              font-size:12px;color:#94a3b8;white-space:nowrap;padding:4px 8px;
+                              border:1px solid rgba(102,126,234,0.25);border-radius:4px;user-select:none;">
+                    <input type="checkbox" class="condition-negate" data-condition-id="${conditionId}"
+                           style="width:13px;height:13px;cursor:pointer;accent-color:#f87171;"
+                           onchange="this.closest('.condition-not-label').style.background=this.checked?'rgba(248,113,113,0.15)':'';
+                                     this.closest('.condition-not-label').style.borderColor=this.checked?'rgba(248,113,113,0.4)':'rgba(102,126,234,0.25)';
+                                     this.closest('.condition-not-label').style.color=this.checked?'#f87171':'#94a3b8';">
                     <span>Not</span>
                 </label>
                 <input type="text" class="condition-value" placeholder="Expression" data-condition-id="${conditionId}">
@@ -13298,7 +13306,11 @@ class DatabaseViewer {
         }
 
         this.queryConditions = this.queryConditions.filter(c => c.id !== conditionId);
-        console.log(`🗑️ Removed condition: ${conditionId}`);
+
+        // Always keep at least one condition row
+        if (this.queryConditions.length === 0) {
+            this.addQueryCondition();
+        }
     }
 
     async runQuery() {

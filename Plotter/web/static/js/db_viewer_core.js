@@ -583,6 +583,11 @@ class DatabaseViewer {
         this.renderQueryHistory();
         this.renderSavedQueries();
 
+        // ✅ Ensure at least one condition row is present in Query Builder
+        if (this.queryConditions.length === 0) {
+            this.addQueryCondition();
+        }
+
         // Initialize custom views and apply default view
         this.updateViewDropdown();
         this.applyDefaultView();
