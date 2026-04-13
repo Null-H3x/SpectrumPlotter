@@ -15,8 +15,9 @@ const referenceData = {
     async init() {
         this.setupTabs();
         await this._loadCurrentUserInstallation();
-        this.loadUnits();
-        this.loadIRACNotes();
+        const savedTab = localStorage.getItem('viewManagerTab') || 'units';
+        this.switchTab(savedTab);
+        if (savedTab === 'units') this.loadIRACNotes(); // pre-load alongside default
     },
 
     async _loadCurrentUserInstallation() {
@@ -52,6 +53,7 @@ const referenceData = {
         document.getElementById(`${tabName}-tab`)?.classList.add('active');
 
         this.currentTab = tabName;
+        localStorage.setItem('viewManagerTab', tabName);
 
         // Load data for the tab
         if (tabName === 'units' && this.units.length === 0) {
@@ -60,12 +62,12 @@ const referenceData = {
             this.loadIRACNotes();
         } else if (tabName === 'manufacturers' && this.manufacturers.length === 0) {
             this.loadManufacturers();
-        } else if (tabName === 'installations' && this.installations.length === 0) {
+        } else if (tabName === 'installations') {
             this.loadInstallations();
         } else if (tabName === 'system-config' && this.systemConfig.length === 0) {
             this.loadSystemConfig();
-        } else if (tabName === 'sfaf-codes' && this.sfafLookup.length === 0) {
-            this.loadLookup(this._currentLookupField);
+        } else if (tabName === 'sfaf-codes' && this._sfafFieldDefs.length === 0) {
+            this.loadSFAFRegistry();
         } else if (tabName === 'control-numbers') {
             this.loadControlNumbers();
         } else if (tabName === 'workboxes') {
@@ -1089,29 +1091,527 @@ const referenceData = {
     },
 
     // ============================================
-    // SFAF Codes (Field Lookup) Management
+    // SFAF Codes — Field Registry Management
     // ============================================
 
-    _currentLookupField: '010',
-    _fieldTitles: {
-        '010': 'Field 010 — Type of Action',
-        '144': 'Field 144 — Approval Authority Indicator',
-        '151': 'Field 151 — Coordination Indicator',
-        '200': 'Field 200 — Agency',
-        '201': 'Field 201 — Combatant Command',
-        '202': 'Field 202 — MAJCOM',
-        '203': 'Field 203 — Bureau',
-        '204': 'Field 204 — Sub-MAJCOM',
-        '205': 'Field 205 — NAF / Wing',
-        '206': 'Field 206 — ISM Office',
-        '209': 'Field 209 — Area AFC / Other Organizations',
-        '300': 'Field 300 — State / Area',
-        '400': 'Field 400 — Country',
-        '354': 'Field 354/454 — Antenna Name',
-        '363': 'Field 363/463 — Antenna Polarization',
-        '704': 'Field 704 — Type of Service',
-        '716': 'Field 716 — Usage Code',
+    _sfafCategories: [],
+    _sfafFieldDefs: [],
+    _sfafRequiredFields: [],
+    _sfafCategoryOpenState: {},
+    _sfafSelectedFieldId: null,
+    _sfafFieldEditMode: false,
+    _sfafFieldDefSnapshot: null,
+    _currentLookupField: null,
+
+    async loadSFAFRegistry() {
+        try {
+            const [catRes, fieldRes, reqRes] = await Promise.all([
+                fetch('/api/sfaf-categories'),
+                fetch('/api/sfaf-field-defs'),
+                fetch('/api/sfaf-required'),
+            ]);
+            const [catData, fieldData, reqData] = await Promise.all([
+                catRes.json(), fieldRes.json(), reqRes.json(),
+            ]);
+            this._sfafCategories = catData.categories || [];
+            this._sfafFieldDefs  = fieldData.fields || [];
+            this._sfafRequiredFields = reqData.required_fields || [];
+            this._renderCategoryTree();
+        } catch (err) {
+            const tree = document.getElementById('sfafCategoryTree');
+            if (tree) tree.innerHTML = `<div style="padding:16px;color:#ef5350;"><i class="fas fa-exclamation-circle"></i> Failed to load</div>`;
+        }
     },
+
+    _renderCategoryTree(filter) {
+        const tree = document.getElementById('sfafCategoryTree');
+        if (!tree) return;
+        const q = (filter || '').toLowerCase();
+        const requiredNums = new Set(this._sfafRequiredFields.filter(r => r.scope_type === 'global').map(r => r.field_number));
+
+        let html = '';
+        for (const cat of this._sfafCategories) {
+            let fields = this._sfafFieldDefs.filter(f => f.category_id === cat.id);
+            if (q) {
+                fields = fields.filter(f =>
+                    f.field_number.includes(q) ||
+                    f.title.toLowerCase().includes(q));
+            }
+            if (q && fields.length === 0) continue;
+
+            const isOpen = q ? true : (this._sfafCategoryOpenState[cat.id] !== false);
+            html += `
+            <div class="sfaf-cat-block" data-cat-id="${cat.id}">
+                <div class="sfaf-cat-header ${isOpen ? 'open' : ''}" onclick="referenceData._toggleCategory('${cat.id}', event)">
+                    <i class="fas fa-chevron-right sfaf-cat-chevron"></i>
+                    <span class="sfaf-cat-label">${this._esc(cat.name)}</span>
+                    <button class="sfaf-cat-rename-btn" onclick="referenceData.editCategory('${cat.id}', event)" title="Rename">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                </div>
+                <div class="sfaf-cat-fields ${isOpen ? 'open' : ''}">
+                    ${fields.length === 0
+                        ? `<div style="padding:4px 28px 6px;font-size:0.72rem;color:#607d8b;font-style:italic;">No fields</div>`
+                        : fields.map(f => {
+                            const isReq = requiredNums.has(f.field_number);
+                            const isActive = this._sfafSelectedFieldId === f.id;
+                            return `<div class="sfaf-field-item ${isActive ? 'active' : ''} ${isReq ? 'required' : ''}"
+                                    data-field-id="${f.id}"
+                                    onclick="referenceData.selectFieldDef('${f.id}')">
+                                <span class="sfaf-field-num">${this._esc(f.field_number)}</span>
+                                <span class="sfaf-field-title">${this._esc(f.title)}</span>
+                                <span class="sfaf-field-required-dot" title="Globally required"></span>
+                            </div>`;
+                        }).join('')
+                    }
+                </div>
+            </div>`;
+        }
+        // Uncategorised fields
+        const uncatFields = this._sfafFieldDefs.filter(f => !f.category_id);
+        if (uncatFields.length > 0 && (!q || uncatFields.some(f => f.field_number.includes(q) || f.title.toLowerCase().includes(q)))) {
+            const shown = q ? uncatFields.filter(f => f.field_number.includes(q) || f.title.toLowerCase().includes(q)) : uncatFields;
+            if (shown.length > 0) {
+                html += `<div style="padding:7px 10px 4px 12px;font-size:0.72rem;font-weight:600;color:#607d8b;text-transform:uppercase;letter-spacing:0.07em;">Uncategorised</div>`;
+                html += shown.map(f => {
+                    const isActive = this._sfafSelectedFieldId === f.id;
+                    return `<div class="sfaf-field-item ${isActive ? 'active' : ''}" data-field-id="${f.id}" onclick="referenceData.selectFieldDef('${f.id}')">
+                        <span class="sfaf-field-num">${this._esc(f.field_number)}</span>
+                        <span class="sfaf-field-title">${this._esc(f.title)}</span>
+                        <span class="sfaf-field-required-dot"></span>
+                    </div>`;
+                }).join('');
+            }
+        }
+        tree.innerHTML = html || `<div style="padding:16px;text-align:center;color:#607d8b;"><i class="fas fa-search"></i> No fields found</div>`;
+    },
+
+    _toggleCategory(catId, e) {
+        if (e && e.target.closest('.sfaf-cat-rename-btn')) return;
+        this._sfafCategoryOpenState[catId] = !(this._sfafCategoryOpenState[catId] !== false);
+        const block = document.querySelector(`.sfaf-cat-block[data-cat-id="${catId}"]`);
+        if (!block) return;
+        const hdr = block.querySelector('.sfaf-cat-header');
+        const fields = block.querySelector('.sfaf-cat-fields');
+        const isOpen = this._sfafCategoryOpenState[catId];
+        hdr.classList.toggle('open', isOpen);
+        fields.classList.toggle('open', isOpen);
+    },
+
+    filterFieldNav(q) {
+        this._renderCategoryTree(q);
+    },
+
+    sfafExpandAll() {
+        this._sfafCategories.forEach(c => { this._sfafCategoryOpenState[c.id] = true; });
+        this._renderCategoryTree(document.getElementById('sfafNavSearch')?.value || '');
+    },
+
+    sfafCollapseAll() {
+        this._sfafCategories.forEach(c => { this._sfafCategoryOpenState[c.id] = false; });
+        this._renderCategoryTree(document.getElementById('sfafNavSearch')?.value || '');
+    },
+
+    selectFieldDef(fieldId) {
+        if (this._sfafFieldEditMode) this.cancelFieldEdit();
+        this._sfafSelectedFieldId = fieldId;
+        this._renderCategoryTree(document.getElementById('sfafNavSearch')?.value || '');
+
+        const field = this._sfafFieldDefs.find(f => f.id === fieldId);
+        if (!field) return;
+
+        // Show panel
+        document.getElementById('sfafNoSelection').style.display = 'none';
+        const panel = document.getElementById('sfafFieldPanel');
+        panel.style.display = 'flex';
+
+        // Panel title
+        document.getElementById('sfafFieldPanelTitle').innerHTML =
+            `<i class="fas fa-list-ol"></i> Field ${this._esc(field.field_number)} — ${this._esc(field.title)}`;
+
+        // Show/hide Lookup sub-tab
+        const lookupTab = document.getElementById('sfafLookupSubTab');
+        if (lookupTab) lookupTab.style.display = field.has_lookup ? '' : 'none';
+
+        // Switch to info tab
+        this.switchFieldSubTab('info');
+        this._populateFieldInfo(field);
+
+        // Load required fields for this field
+        this._renderRequiredToggles(field.field_number);
+
+        // Store lookup field code
+        this._currentLookupField = field.field_number;
+    },
+
+    _populateFieldInfo(field) {
+        const setView = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = val || '—';
+        };
+        document.getElementById('sfafFieldDefId').value = field.id;
+        document.getElementById('sfafFieldDefNumber').value = field.field_number;
+        setView('sfafDefFieldNumber', field.field_number);
+        setView('sfafDefTitleView', field.title);
+        setView('sfafDefCategoryView', field.category_name || '—');
+        setView('sfafDefSpectrumView', field.spectrum_xxi_tags || '—');
+        setView('sfafDefGmfView', field.gmf_tags || '—');
+        setView('sfafDefMaxInputView', field.max_input_length || '—');
+        setView('sfafDefMaxOccView', field.max_occurrences || '—');
+        setView('sfafDefToIracView', field.to_irac || '—');
+        setView('sfafDefMCPOView', field.max_chars_per_occurrence != null ? String(field.max_chars_per_occurrence) : '—');
+        setView('sfafDefMCPLView', field.max_chars_per_line != null ? String(field.max_chars_per_line) : '—');
+        setView('sfafDefNotesView', field.notes || '—');
+        setView('sfafDefHasLookupView', field.has_lookup ? 'Yes' : 'No');
+        setView('sfafDefIsActiveView', field.is_active ? 'Active' : 'Inactive');
+    },
+
+    switchFieldSubTab(tab) {
+        document.querySelectorAll('.sfaf-sub-tab').forEach(b =>
+            b.classList.toggle('active', b.dataset.subtab === tab));
+        const panels = {
+            info:     document.getElementById('sfafInfoSubTab'),
+            lookup:   document.getElementById('sfafLookupSubTabPanel'),
+            required: document.getElementById('sfafRequiredSubTabPanel'),
+        };
+        Object.entries(panels).forEach(([key, el]) => {
+            if (!el) return;
+            el.style.display = key === tab ? (key === 'info' ? 'block' : 'flex') : 'none';
+        });
+        if (tab === 'lookup') {
+            this.sfafLookup = [];
+            this.loadLookup(this._currentLookupField);
+        }
+    },
+
+    toggleFieldEdit() {
+        if (this._sfafFieldEditMode) { this.cancelFieldEdit(); return; }
+        const field = this._sfafFieldDefs.find(f => f.id === this._sfafSelectedFieldId);
+        if (!field) return;
+        this._sfafFieldDefSnapshot = JSON.stringify(field);
+        this._sfafFieldEditMode = true;
+
+        // Populate category dropdown
+        const catSel = document.getElementById('sfafDefCategoryEdit');
+        catSel.innerHTML = `<option value="">— None —</option>` +
+            this._sfafCategories.map(c => `<option value="${c.id}" ${c.id === field.category_id ? 'selected' : ''}>${this._esc(c.name)}</option>`).join('');
+
+        // Toggle views
+        const pairs = [
+            ['sfafDefTitleView','sfafDefTitleEdit', field.title],
+            ['sfafDefCategoryView','sfafDefCategoryEdit', null],
+            ['sfafDefSpectrumView','sfafDefSpectrumEdit', field.spectrum_xxi_tags || ''],
+            ['sfafDefGmfView','sfafDefGmfEdit', field.gmf_tags || ''],
+            ['sfafDefMaxInputView','sfafDefMaxInputEdit', field.max_input_length || ''],
+            ['sfafDefMaxOccView','sfafDefMaxOccEdit', field.max_occurrences || ''],
+            ['sfafDefToIracView','sfafDefToIracEdit', field.to_irac || ''],
+            ['sfafDefMCPOView','sfafDefMCPOEdit', field.max_chars_per_occurrence != null ? String(field.max_chars_per_occurrence) : ''],
+            ['sfafDefMCPLView','sfafDefMCPLEdit', field.max_chars_per_line != null ? String(field.max_chars_per_line) : ''],
+            ['sfafDefNotesView','sfafDefNotesEdit', field.notes || ''],
+            ['sfafDefHasLookupView','sfafDefHasLookupEdit', null],
+            ['sfafDefIsActiveView','sfafDefIsActiveEdit', null],
+        ];
+        pairs.forEach(([viewId, editId, val]) => {
+            const view = document.getElementById(viewId);
+            const edit = document.getElementById(editId);
+            if (view) view.style.display = 'none';
+            if (!edit) return;
+            edit.style.display = '';
+            if (val !== null && edit.type !== 'checkbox') edit.value = val;
+        });
+        document.getElementById('sfafDefHasLookupEdit').checked = field.has_lookup;
+        document.getElementById('sfafDefIsActiveEdit').checked = field.is_active;
+        document.getElementById('sfafDefTitleReq').style.display = '';
+
+        document.getElementById('sfafFieldEditBtn').style.display = 'none';
+        document.getElementById('sfafFieldSaveBtn').style.display = '';
+        document.getElementById('sfafFieldCancelBtn').style.display = '';
+    },
+
+    cancelFieldEdit() {
+        this._sfafFieldEditMode = false;
+        const viewIds = ['sfafDefTitleView','sfafDefCategoryView','sfafDefSpectrumView','sfafDefGmfView',
+            'sfafDefMaxInputView','sfafDefMaxOccView','sfafDefToIracView','sfafDefMCPOView','sfafDefMCPLView',
+            'sfafDefNotesView','sfafDefHasLookupView','sfafDefIsActiveView'];
+        const editIds = ['sfafDefTitleEdit','sfafDefCategoryEdit','sfafDefSpectrumEdit','sfafDefGmfEdit',
+            'sfafDefMaxInputEdit','sfafDefMaxOccEdit','sfafDefToIracEdit','sfafDefMCPOEdit','sfafDefMCPLEdit',
+            'sfafDefNotesEdit','sfafDefHasLookupEdit','sfafDefIsActiveEdit'];
+        viewIds.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = ''; });
+        editIds.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+        document.getElementById('sfafDefTitleReq').style.display = 'none';
+        document.getElementById('sfafFieldEditBtn').style.display = '';
+        document.getElementById('sfafFieldSaveBtn').style.display = 'none';
+        document.getElementById('sfafFieldCancelBtn').style.display = 'none';
+    },
+
+    async saveFieldDef() {
+        const id = document.getElementById('sfafFieldDefId').value;
+        const title = document.getElementById('sfafDefTitleEdit').value.trim();
+        if (!title) { this.showToast('Title is required', 'error'); return; }
+        const catId = document.getElementById('sfafDefCategoryEdit').value || null;
+        const raw = id => { const el = document.getElementById(id); return el ? el.value.trim() || null : null; };
+        const num = id => { const v = raw(id); return v ? parseInt(v, 10) : null; };
+        const field = this._sfafFieldDefs.find(f => f.id === id);
+        const body = {
+            title,
+            category_id: catId ? catId : null,
+            spectrum_xxi_tags: raw('sfafDefSpectrumEdit'),
+            gmf_tags: raw('sfafDefGmfEdit'),
+            max_input_length: raw('sfafDefMaxInputEdit'),
+            max_occurrences: raw('sfafDefMaxOccEdit'),
+            to_irac: raw('sfafDefToIracEdit'),
+            max_chars_per_occurrence: num('sfafDefMCPOEdit'),
+            max_chars_per_line: num('sfafDefMCPLEdit'),
+            notes: raw('sfafDefNotesEdit'),
+            has_lookup: document.getElementById('sfafDefHasLookupEdit').checked,
+            is_active: document.getElementById('sfafDefIsActiveEdit').checked,
+            sort_order: field ? field.sort_order : 0,
+        };
+        try {
+            const res = await fetch(`/api/sfaf-field-defs/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                this.showToast('Error: ' + (err.error || 'Save failed'), 'error');
+                return;
+            }
+            const data = await res.json();
+            const updated = data.field;
+            // Update local cache
+            const idx = this._sfafFieldDefs.findIndex(f => f.id === id);
+            if (idx >= 0 && updated) this._sfafFieldDefs[idx] = updated;
+            this.cancelFieldEdit();
+            this._populateFieldInfo(updated || this._sfafFieldDefs.find(f => f.id === id));
+            // Refresh sidebar title
+            document.getElementById('sfafFieldPanelTitle').innerHTML =
+                `<i class="fas fa-list-ol"></i> Field ${this._esc(updated.field_number)} — ${this._esc(updated.title)}`;
+            this._renderCategoryTree(document.getElementById('sfafNavSearch')?.value || '');
+            // Update Lookup sub-tab visibility
+            const lookupTab = document.getElementById('sfafLookupSubTab');
+            if (lookupTab) lookupTab.style.display = updated.has_lookup ? '' : 'none';
+            this.showToast('Field saved', 'success');
+        } catch (err) {
+            this.showToast('Error: ' + err.message, 'error');
+        }
+    },
+
+    // ── Category CRUD ──────────────────────────
+
+    showAddCategory() {
+        document.getElementById('sfafCategoryId').value = '';
+        document.getElementById('sfafCategoryName').value = '';
+        document.getElementById('sfafCategorySortOrder').value = (this._sfafCategories.length + 1) * 10;
+        document.getElementById('sfafCategoryModalTitle').innerHTML = `<i class="fas fa-folder-plus"></i> Add Category`;
+        document.getElementById('sfafCategoryModal').style.display = 'block';
+    },
+
+    editCategory(catId, e) {
+        if (e) { e.stopPropagation(); }
+        const cat = this._sfafCategories.find(c => c.id === catId);
+        if (!cat) return;
+        document.getElementById('sfafCategoryId').value = cat.id;
+        document.getElementById('sfafCategoryName').value = cat.name;
+        document.getElementById('sfafCategorySortOrder').value = cat.sort_order;
+        document.getElementById('sfafCategoryModalTitle').innerHTML = `<i class="fas fa-folder"></i> Rename Category`;
+        document.getElementById('sfafCategoryModal').style.display = 'block';
+    },
+
+    async saveCategory() {
+        const id   = document.getElementById('sfafCategoryId').value;
+        const name = document.getElementById('sfafCategoryName').value.trim();
+        const sortOrder = parseInt(document.getElementById('sfafCategorySortOrder').value, 10) || 0;
+        if (!name) { this.showToast('Name is required', 'error'); return; }
+        try {
+            const method = id ? 'PUT' : 'POST';
+            const url    = id ? `/api/sfaf-categories/${id}` : '/api/sfaf-categories';
+            const res = await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, sort_order: sortOrder }),
+            });
+            if (!res.ok) { const err = await res.json(); this.showToast('Error: ' + (err.error || 'Failed'), 'error'); return; }
+            this.showToast(id ? 'Category renamed' : 'Category added', 'success');
+            this.closeCategoryModal();
+            await this.loadSFAFRegistry();
+        } catch (err) {
+            this.showToast('Error: ' + err.message, 'error');
+        }
+    },
+
+    closeCategoryModal() {
+        document.getElementById('sfafCategoryModal').style.display = 'none';
+    },
+
+    // ── Required fields ────────────────────────
+
+    _scopeLabels: {
+        global:          { label: 'Global — Required for all SFAFs', tag: 'GLOBAL',    cls: 'sfaf-req-scope-global' },
+        agency:          { label: 'Agency',                            tag: 'AGENCY',    cls: 'sfaf-req-scope-agency' },
+        unified_command: { label: 'Unified Command',                   tag: 'UNIF CMD',  cls: 'sfaf-req-scope-uc' },
+        majcom:          { label: 'MAJCOM',                            tag: 'MAJCOM',    cls: 'sfaf-req-scope-majcom' },
+    },
+
+    _scopeOptions: {
+        agency: [
+            { value: 'AF',   label: 'AF — Air Force' },
+            { value: 'USSF', label: 'USSF — Space Force' },
+            { value: 'USA',  label: 'USA — Army' },
+            { value: 'USN',  label: 'USN — Navy' },
+            { value: 'USMC', label: 'USMC — Marine Corps' },
+            { value: 'USCG', label: 'USCG — Coast Guard' },
+            { value: 'DoD',  label: 'DoD — Department of Defense' },
+        ],
+        unified_command: [
+            { value: 'USCENTCOM',   label: 'CENTCOM — Central Command' },
+            { value: 'USCYBERCOM', label: 'CYBERCOM — Cyber Command' },
+            { value: 'USEUCOM',    label: 'EUCOM — European Command' },
+            { value: 'USINDOPACOM',label: 'INDOPACOM — Indo-Pacific Command' },
+            { value: 'USNORTHCOM', label: 'NORTHCOM — Northern Command' },
+            { value: 'USSOCOM',    label: 'SOCOM — Special Operations Command' },
+            { value: 'USSOUTHCOM', label: 'SOUTHCOM — Southern Command' },
+            { value: 'USSPACECOM', label: 'SPACECOM — Space Command' },
+            { value: 'USSTRATCOM', label: 'STRATCOM — Strategic Command' },
+            { value: 'USTRANSCOM', label: 'TRANSCOM — Transportation Command' },
+        ],
+    },
+
+    _renderRequiredToggles(fieldNumber) {
+        const container = document.getElementById('sfafRequiredToggles');
+        if (!container) return;
+
+        // Build MAJCOM options from cached units
+        const majcomOpts = this.units
+            .filter(u => u.unit_type === 'MAJCOM' && u.unit_code)
+            .sort((a, b) => a.unit_code.localeCompare(b.unit_code))
+            .map(u => ({ value: u.unit_code, label: `${u.unit_code} — ${u.name}` }));
+
+        const html = Object.entries(this._scopeLabels).map(([scopeType, meta]) => {
+            const scopeReqs = this._sfafRequiredFields.filter(
+                r => r.field_number === fieldNumber && r.scope_type === scopeType);
+            if (scopeType === 'global') {
+                const isReq = scopeReqs.length > 0;
+                const rowId = scopeReqs[0]?.id || '';
+                return `<div class="sfaf-req-row">
+                    <span class="sfaf-req-scope-tag ${meta.cls}">${meta.tag}</span>
+                    <label for="sfafReq_${scopeType}">${meta.label}</label>
+                    <input type="checkbox" id="sfafReq_${scopeType}" ${isReq ? 'checked' : ''}
+                        data-field="${fieldNumber}" data-scope="${scopeType}" data-scope-value=""
+                        data-row-id="${rowId}"
+                        onchange="referenceData.toggleRequiredField(this)">
+                </div>`;
+            }
+
+            // For non-global scopes: list of existing entries + filterable select to add
+            const rows = scopeReqs.map(r => `
+                <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
+                    <span style="flex:1;font-size:0.82rem;padding:4px 8px;background:rgba(100,150,255,0.06);border-radius:4px;color:#cdd6e0;">
+                        ${this._esc(r.scope_value)}
+                    </span>
+                    <button class="btn btn-sm btn-icon btn-danger" onclick="referenceData.removeRequiredField('${r.id}')" title="Remove">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>`).join('');
+
+            const alreadyAdded = new Set(scopeReqs.map(r => r.scope_value));
+            const opts = (scopeType === 'majcom' ? majcomOpts : this._scopeOptions[scopeType] || [])
+                .filter(o => !alreadyAdded.has(o.value));
+            const selectOpts = opts.length
+                ? opts.map(o => `<option value="${this._esc(o.value)}">${this._esc(o.label)}</option>`).join('')
+                : `<option value="" disabled>All options added</option>`;
+
+            return `<div class="sfaf-req-row" style="flex-direction:column;align-items:stretch;gap:8px;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span class="sfaf-req-scope-tag ${meta.cls}">${meta.tag}</span>
+                    <span style="flex:1;font-size:0.85rem;color:#cdd6e0;">${meta.label}</span>
+                </div>
+                <div id="sfafReqList_${scopeType}">${rows || '<div style="color:#607d8b;font-size:0.8rem;font-style:italic;">No entries</div>'}</div>
+                <div style="display:flex;gap:6px;">
+                    <select id="sfafReqInput_${scopeType}" class="form-input" style="flex:1;padding:4px 8px;font-size:0.8rem;">
+                        <option value="">— Select ${meta.label} —</option>
+                        ${selectOpts}
+                    </select>
+                    <button class="btn btn-sm btn-primary" onclick="referenceData.addRequiredField('${fieldNumber}','${scopeType}')">
+                        <i class="fas fa-plus"></i> Add
+                    </button>
+                </div>
+            </div>`;
+        }).join('');
+        container.innerHTML = html;
+    },
+
+    async toggleRequiredField(checkbox) {
+        const { field, scope, scopeValue, rowId } = checkbox.dataset;
+        if (checkbox.checked) {
+            try {
+                const res = await fetch('/api/sfaf-required', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ field_number: field, scope_type: scope, scope_value: scopeValue || '' }),
+                });
+                if (!res.ok) throw new Error((await res.json()).error || 'Failed');
+                const data = await res.json();
+                this._sfafRequiredFields.push(data.required_field);
+                checkbox.dataset.rowId = data.required_field.id;
+                this._renderCategoryTree(document.getElementById('sfafNavSearch')?.value || '');
+                this.showToast('Required field set', 'success');
+            } catch (err) {
+                checkbox.checked = false;
+                this.showToast('Error: ' + err.message, 'error');
+            }
+        } else {
+            if (!rowId) return;
+            try {
+                const res = await fetch(`/api/sfaf-required/${rowId}`, { method: 'DELETE' });
+                if (!res.ok) throw new Error((await res.json()).error || 'Failed');
+                this._sfafRequiredFields = this._sfafRequiredFields.filter(r => r.id !== rowId);
+                checkbox.dataset.rowId = '';
+                this._renderCategoryTree(document.getElementById('sfafNavSearch')?.value || '');
+                this.showToast('Required field removed', 'success');
+            } catch (err) {
+                checkbox.checked = true;
+                this.showToast('Error: ' + err.message, 'error');
+            }
+        }
+    },
+
+    async addRequiredField(fieldNumber, scopeType) {
+        const input = document.getElementById(`sfafReqInput_${scopeType}`);
+        const scopeValue = input ? input.value.trim() : '';
+        if (!scopeValue) { this.showToast('Enter a scope value', 'error'); return; }
+        try {
+            const res = await fetch('/api/sfaf-required', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ field_number: fieldNumber, scope_type: scopeType, scope_value: scopeValue }),
+            });
+            if (!res.ok) throw new Error((await res.json()).error || 'Failed');
+            const data = await res.json();
+            this._sfafRequiredFields.push(data.required_field);
+            if (input) input.value = '';
+            this._renderRequiredToggles(fieldNumber);
+            this.showToast('Added', 'success');
+        } catch (err) {
+            this.showToast('Error: ' + err.message, 'error');
+        }
+    },
+
+    async removeRequiredField(rowId) {
+        const row = this._sfafRequiredFields.find(r => r.id === rowId);
+        try {
+            const res = await fetch(`/api/sfaf-required/${rowId}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error((await res.json()).error || 'Failed');
+            this._sfafRequiredFields = this._sfafRequiredFields.filter(r => r.id !== rowId);
+            if (row) this._renderRequiredToggles(row.field_number);
+            this.showToast('Removed', 'success');
+        } catch (err) {
+            this.showToast('Error: ' + err.message, 'error');
+        }
+    },
+
+    // ── Lookup Values (existing, unchanged logic) ──
 
     async loadLookup(fieldCode) {
         this._currentLookupField = fieldCode;
@@ -1123,21 +1623,6 @@ const referenceData = {
         } catch (err) {
             this.showError('sfafCodesTableBody', 'Failed to load entries');
         }
-    },
-
-    selectLookupField(fieldCode) {
-        this._currentLookupField = fieldCode;
-        this.sfafLookup = [];
-        document.getElementById('sfafCodesSearch').value = '';
-        this._lookupFilter = '';
-        // Update sidebar active state
-        document.querySelectorAll('.sfaf-field-btn').forEach(b => {
-            b.classList.toggle('active', b.dataset.field === fieldCode);
-        });
-        // Update title
-        const title = this._fieldTitles[fieldCode] || `Field ${fieldCode}`;
-        document.getElementById('sfafCodesTitle').innerHTML = `<i class="fas fa-list-ol"></i> ${title}`;
-        this.loadLookup(fieldCode);
     },
 
     filterLookup(q) {
@@ -1156,17 +1641,18 @@ const referenceData = {
             : this.sfafLookup;
 
         if (list.length === 0) {
-            tbody.innerHTML = `<tr class="empty-row"><td colspan="5" style="text-align:center;">
-                <i class="fas fa-inbox"></i> ${q ? 'No entries match your search' : 'No entries found'}
+            tbody.innerHTML = `<tr class="empty-row"><td colspan="6" style="text-align:center;">
+                <i class="fas fa-inbox"></i> ${q ? 'No entries match your search' : 'No lookup values yet'}
             </td></tr>`;
             return;
         }
 
         tbody.innerHTML = list.map(e => `
             <tr>
-                <td><strong>${e.value}</strong></td>
-                <td>${e.label || '-'}</td>
+                <td><strong>${this._esc(e.value)}</strong></td>
+                <td>${this._esc(e.label || '')}</td>
                 <td style="text-align:center;">${e.sort_order}</td>
+                <td style="text-align:center;">${e.char_limit != null ? e.char_limit : '—'}</td>
                 <td>
                     <span class="status-badge ${e.is_active ? 'status-active' : 'status-inactive'}">
                         ${e.is_active ? 'Active' : 'Inactive'}
@@ -1185,26 +1671,30 @@ const referenceData = {
     },
 
     showAddLookup() {
-        const title = this._fieldTitles[this._currentLookupField] || `Field ${this._currentLookupField}`;
-        document.getElementById('sfafLookupModalTitle').innerHTML = `<i class="fas fa-list-ol"></i> Add Entry — ${title}`;
+        const field = this._sfafFieldDefs.find(f => f.field_number === this._currentLookupField);
+        const title = field ? `Field ${field.field_number} — ${field.title}` : `Field ${this._currentLookupField}`;
+        document.getElementById('sfafLookupModalTitle').innerHTML = `<i class="fas fa-list-ol"></i> Add Entry — ${this._esc(title)}`;
         document.getElementById('sfafLookupForm').reset();
         document.getElementById('sfafLookupId').value = '';
         document.getElementById('sfafLookupFieldCode').value = this._currentLookupField;
         document.getElementById('sfafLookupIsActive').checked = true;
         document.getElementById('sfafLookupSortOrder').value = '0';
+        document.getElementById('sfafLookupCharLimit').value = '';
         document.getElementById('sfafLookupModal').style.display = 'block';
     },
 
     editLookup(id) {
         const e = this.sfafLookup.find(x => x.id === id);
         if (!e) return;
-        const title = this._fieldTitles[e.field_code] || `Field ${e.field_code}`;
-        document.getElementById('sfafLookupModalTitle').innerHTML = `<i class="fas fa-list-ol"></i> Edit Entry — ${title}`;
+        const field = this._sfafFieldDefs.find(f => f.field_number === e.field_code);
+        const title = field ? `Field ${field.field_number} — ${field.title}` : `Field ${e.field_code}`;
+        document.getElementById('sfafLookupModalTitle').innerHTML = `<i class="fas fa-list-ol"></i> Edit Entry — ${this._esc(title)}`;
         document.getElementById('sfafLookupId').value = e.id;
         document.getElementById('sfafLookupFieldCode').value = e.field_code;
         document.getElementById('sfafLookupValue').value = e.value;
         document.getElementById('sfafLookupLabel').value = e.label || '';
         document.getElementById('sfafLookupSortOrder').value = e.sort_order;
+        document.getElementById('sfafLookupCharLimit').value = e.char_limit != null ? e.char_limit : '';
         document.getElementById('sfafLookupIsActive').checked = e.is_active;
         document.getElementById('sfafLookupModal').style.display = 'block';
     },
@@ -1215,17 +1705,19 @@ const referenceData = {
         const value = document.getElementById('sfafLookupValue').value.trim();
         const label = document.getElementById('sfafLookupLabel').value.trim() || null;
         const sortOrder = parseInt(document.getElementById('sfafLookupSortOrder').value, 10) || 0;
+        const charLimitRaw = document.getElementById('sfafLookupCharLimit').value.trim();
+        const charLimit = charLimitRaw !== '' ? parseInt(charLimitRaw, 10) : null;
         const isActive = document.getElementById('sfafLookupIsActive').checked;
 
         if (!value) { alert('Value is required'); return; }
 
         const body = id
-            ? { value, label, sort_order: sortOrder, is_active: isActive }
-            : { field_code: fieldCode, value, label, sort_order: sortOrder };
+            ? { value, label, sort_order: sortOrder, is_active: isActive, char_limit: charLimit }
+            : { field_code: fieldCode, value, label, sort_order: sortOrder, char_limit: charLimit };
 
         try {
             const method = id ? 'PUT' : 'POST';
-            const url = id ? `/api/sfaf-lookup/${id}` : '/api/sfaf-lookup';
+            const url    = id ? `/api/sfaf-lookup/${id}` : '/api/sfaf-lookup';
             const res = await fetch(url, {
                 method,
                 headers: { 'Content-Type': 'application/json' },
@@ -1264,6 +1756,11 @@ const referenceData = {
 
     closeLookupModal() {
         document.getElementById('sfafLookupModal').style.display = 'none';
+    },
+
+    _esc(s) {
+        if (!s) return '';
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     },
 
     // ============================================
@@ -1524,15 +2021,50 @@ const referenceData = {
 
     // ── Workboxes ────────────────────────────────────────────────────────────
 
+    _currentWBId: null,      // workbox whose members panel is open
+    _wbIsmUsers: [],         // cached ISM-role users for the add-member dropdown
+
     async loadWorkboxes() {
         try {
-            const res = await fetch('/api/frequency/workboxes');
-            const data = await res.json();
+            // Load workboxes and installations in parallel; ISM users loaded once for member panel
+            const [wbRes, instRes, usersRes] = await Promise.all([
+                fetch('/api/frequency/workboxes'),
+                this.installations.length === 0 ? fetch('/api/installations') : Promise.resolve(null),
+                fetch('/api/admin/users'),
+            ]);
+
+            const data = await wbRes.json();
             this.workboxes = data.workboxes || [];
+
+            if (instRes) {
+                const instData = await instRes.json();
+                this.installations = instData.installations || [];
+            }
+
+            if (usersRes.ok) {
+                const ud = await usersRes.json();
+                // Keep only ISM-role users for the member add dropdown
+                this._wbIsmUsers = (ud.users || []).filter(u => u.role === 'ism');
+            }
+
+            this._populateWBInstallationDropdown();
             this.renderWorkboxes();
         } catch (e) {
             this.showError('wbTableBody', 'Failed to load workboxes');
         }
+    },
+
+    _populateWBInstallationDropdown() {
+        const sel = document.getElementById('wbInstallation');
+        if (!sel) return;
+        const current = sel.value;
+        sel.innerHTML = '<option value="">— None / Agency-level —</option>' +
+            this.installations
+                .slice()
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map(i => `<option value="${i.id}">${i.name}</option>`)
+                .join('');
+        if (current) sel.value = current;
     },
 
     filterWorkboxes(q) {
@@ -1547,21 +2079,29 @@ const referenceData = {
         const rows = q
             ? this.workboxes.filter(w =>
                 w.name.toLowerCase().includes(q) ||
-                (w.description || '').toLowerCase().includes(q))
+                (w.description || '').toLowerCase().includes(q) ||
+                (w.installation_name || '').toLowerCase().includes(q))
             : this.workboxes;
 
         if (rows.length === 0) {
-            tbody.innerHTML = `<tr class="empty-row"><td colspan="4" style="text-align:center;">
+            tbody.innerHTML = `<tr class="empty-row"><td colspan="6" style="text-align:center;">
                 <i class="fas fa-inbox"></i> ${q ? 'No workboxes match your search' : 'No workboxes yet'}
             </td></tr>`;
             return;
         }
         tbody.innerHTML = rows.map(w => `
-            <tr>
+            <tr class="${this._currentWBId === w.id ? 'row-selected' : ''}" style="cursor:pointer;"
+                onclick="referenceData.showWBMembersPanel('${w.id}')">
                 <td><strong>${w.name}</strong></td>
                 <td>${w.description || '<span style="color:#64748b;font-style:italic;">—</span>'}</td>
+                <td>${w.installation_name ? `<span style="font-size:0.82rem;">${w.installation_name}</span>` : '<span style="color:#64748b;font-style:italic;">—</span>'}</td>
+                <td style="text-align:center;">
+                    ${w.member_count > 0
+                        ? `<span class="status-badge status-active" style="font-size:0.75rem;">${w.member_count}</span>`
+                        : '<span style="color:#64748b;">0</span>'}
+                </td>
                 <td><span class="status-badge ${w.is_active ? 'status-active' : 'status-inactive'}">${w.is_active ? 'Active' : 'Inactive'}</span></td>
-                <td>
+                <td onclick="event.stopPropagation();">
                     <button class="btn btn-sm btn-icon" onclick="referenceData.editWorkbox('${w.id}')" title="Edit">
                         <i class="fas fa-edit"></i>
                     </button>
@@ -1573,10 +2113,12 @@ const referenceData = {
     },
 
     showAddWorkbox() {
+        this._populateWBInstallationDropdown();
         document.getElementById('wbModalTitle').innerHTML = '<i class="fas fa-inbox"></i> Add Workbox';
         document.getElementById('wbId').value = '';
         document.getElementById('wbName').value = '';
         document.getElementById('wbDescription').value = '';
+        document.getElementById('wbInstallation').value = '';
         document.getElementById('wbIsActive').checked = true;
         document.getElementById('wbModal').style.display = 'block';
         document.getElementById('wbName').focus();
@@ -1585,10 +2127,12 @@ const referenceData = {
     editWorkbox(id) {
         const w = this.workboxes.find(x => x.id === id);
         if (!w) return;
+        this._populateWBInstallationDropdown();
         document.getElementById('wbModalTitle').innerHTML = '<i class="fas fa-inbox"></i> Edit Workbox';
         document.getElementById('wbId').value = w.id;
         document.getElementById('wbName').value = w.name;
         document.getElementById('wbDescription').value = w.description || '';
+        document.getElementById('wbInstallation').value = w.installation_id || '';
         document.getElementById('wbIsActive').checked = w.is_active;
         document.getElementById('wbModal').style.display = 'block';
     },
@@ -1599,10 +2143,12 @@ const referenceData = {
 
     async saveWorkbox() {
         const id = document.getElementById('wbId').value;
+        const instVal = document.getElementById('wbInstallation').value;
         const body = {
-            name:        document.getElementById('wbName').value.trim(),
-            description: document.getElementById('wbDescription').value.trim(),
-            is_active:   document.getElementById('wbIsActive').checked,
+            name:            document.getElementById('wbName').value.trim(),
+            description:     document.getElementById('wbDescription').value.trim(),
+            installation_id: instVal || null,
+            is_active:       document.getElementById('wbIsActive').checked,
         };
         if (!body.name) { alert('Workbox name is required.'); return; }
         try {
@@ -1634,6 +2180,7 @@ const referenceData = {
             const res = await fetch(`/api/frequency/workboxes/${id}`, { method: 'DELETE' });
             if (res.ok) {
                 this.showToast('Workbox deleted', 'success');
+                if (this._currentWBId === id) this.closeWBMembersPanel();
                 this.loadWorkboxes();
             } else {
                 const err = await res.json();
@@ -1642,6 +2189,162 @@ const referenceData = {
         } catch (e) {
             this.showToast('Error: ' + e.message, 'error');
         }
+    },
+
+    // ── Workbox Members Panel ─────────────────────────────────────────────────
+
+    async showWBMembersPanel(workboxId) {
+        this._currentWBId = workboxId;
+        const wb = this.workboxes.find(w => w.id === workboxId);
+
+        const panel = document.getElementById('wbMembersPanel');
+        panel.style.display = 'flex';
+
+        const title = document.getElementById('wbMembersPanelTitle');
+        title.innerHTML = `<i class="fas fa-users"></i> ${wb ? wb.name : 'Members'}`;
+
+        // Highlight the selected row
+        this.renderWorkboxes();
+
+        // Populate the user dropdown (ISM users not already primary in this workbox)
+        this._refreshWBMemberUserSelect(workboxId);
+
+        // Load current members
+        await this.loadWorkboxMembers(workboxId);
+    },
+
+    _refreshWBMemberUserSelect(workboxId) {
+        const sel = document.getElementById('wbMemberUserSelect');
+        if (!sel) return;
+        sel.innerHTML = '<option value="">Select user…</option>' +
+            this._wbIsmUsers
+                .slice()
+                .sort((a, b) => (a.full_name || a.email).localeCompare(b.full_name || b.email))
+                .map(u => `<option value="${u.id}">${u.full_name || u.email}</option>`)
+                .join('');
+    },
+
+    async loadWorkboxMembers(workboxId) {
+        const list = document.getElementById('wbMembersList');
+        if (!list) return;
+        list.innerHTML = '<div style="padding:20px;text-align:center;color:#607d8b;"><i class="fas fa-spinner fa-spin"></i></div>';
+        try {
+            const res = await fetch(`/api/frequency/workboxes/${workboxId}/members`);
+            if (!res.ok) throw new Error('Failed to fetch members');
+            const data = await res.json();
+            const members = data.members || [];
+
+            if (members.length === 0) {
+                list.innerHTML = '<div style="padding:16px;text-align:center;color:#607d8b;font-size:0.85rem;">No members assigned</div>';
+                return;
+            }
+
+            list.innerHTML = members.map(m => `
+                <div class="wb-member-row" style="display:flex;align-items:center;gap:8px;padding:6px 16px;border-bottom:1px solid rgba(100,150,255,0.06);">
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:0.85rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                            ${m.user_name || m.user_email}
+                            ${m.is_primary ? '<span style="font-size:0.7rem;background:#1e40af;color:#93c5fd;border-radius:4px;padding:1px 5px;margin-left:4px;">primary</span>' : ''}
+                        </div>
+                        <div style="font-size:0.75rem;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${m.user_email}</div>
+                    </div>
+                    ${!m.is_primary ? `
+                    <button class="btn btn-sm btn-icon" title="Set as primary"
+                        onclick="referenceData.setWBMemberPrimary('${workboxId}', '${m.user_id}')">
+                        <i class="fas fa-star"></i>
+                    </button>` : ''}
+                    <button class="btn btn-sm btn-icon btn-danger" title="Remove"
+                        onclick="referenceData.removeWorkboxMember('${workboxId}', '${m.user_id}', ${JSON.stringify(m.user_name || m.user_email)})">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>`).join('');
+        } catch (e) {
+            list.innerHTML = `<div style="padding:16px;text-align:center;color:#ef4444;font-size:0.85rem;">Error loading members</div>`;
+        }
+    },
+
+    async addWorkboxMember() {
+        const workboxId = this._currentWBId;
+        if (!workboxId) return;
+        const sel = document.getElementById('wbMemberUserSelect');
+        const userId = sel?.value;
+        if (!userId) { alert('Select a user first.'); return; }
+        const isPrimary = document.getElementById('wbMemberIsPrimary')?.checked || false;
+
+        try {
+            const res = await fetch(`/api/frequency/workboxes/${workboxId}/members`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, is_primary: isPrimary }),
+            });
+            if (res.ok) {
+                sel.value = '';
+                if (document.getElementById('wbMemberIsPrimary'))
+                    document.getElementById('wbMemberIsPrimary').checked = false;
+                await this.loadWorkboxMembers(workboxId);
+                // Refresh list to update member counts
+                const wbRes = await fetch('/api/frequency/workboxes');
+                const wbData = await wbRes.json();
+                this.workboxes = wbData.workboxes || [];
+                this.renderWorkboxes();
+                this.showToast('Member added', 'success');
+            } else {
+                const err = await res.json();
+                this.showToast('Error: ' + (err.error || 'Add failed'), 'error');
+            }
+        } catch (e) {
+            this.showToast('Error: ' + e.message, 'error');
+        }
+    },
+
+    async setWBMemberPrimary(workboxId, userId) {
+        try {
+            // Re-add as primary — backend upserts with is_primary=true
+            const res = await fetch(`/api/frequency/workboxes/${workboxId}/members`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, is_primary: true }),
+            });
+            if (res.ok) {
+                await this.loadWorkboxMembers(workboxId);
+                this.showToast('Primary updated', 'success');
+            } else {
+                const err = await res.json();
+                this.showToast('Error: ' + (err.error || 'Update failed'), 'error');
+            }
+        } catch (e) {
+            this.showToast('Error: ' + e.message, 'error');
+        }
+    },
+
+    async removeWorkboxMember(workboxId, userId, userName) {
+        if (!confirm(`Remove ${userName} from this workbox?`)) return;
+        try {
+            const res = await fetch(`/api/frequency/workboxes/${workboxId}/members/${userId}`, {
+                method: 'DELETE',
+            });
+            if (res.ok) {
+                await this.loadWorkboxMembers(workboxId);
+                // Refresh member counts
+                const wbRes = await fetch('/api/frequency/workboxes');
+                const wbData = await wbRes.json();
+                this.workboxes = wbData.workboxes || [];
+                this.renderWorkboxes();
+                this.showToast('Member removed', 'success');
+            } else {
+                const err = await res.json();
+                this.showToast('Error: ' + (err.error || 'Remove failed'), 'error');
+            }
+        } catch (e) {
+            this.showToast('Error: ' + e.message, 'error');
+        }
+    },
+
+    closeWBMembersPanel() {
+        this._currentWBId = null;
+        const panel = document.getElementById('wbMembersPanel');
+        if (panel) panel.style.display = 'none';
+        this.renderWorkboxes(); // clear row highlight
     },
 };
 

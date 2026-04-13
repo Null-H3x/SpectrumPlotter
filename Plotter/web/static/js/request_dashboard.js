@@ -2763,12 +2763,14 @@ function _collectSFAFFields() {
             else delete fields[num];
         }
     });
-    // Emission groups (113-116) — use first group IDs; additional groups appended
+    // Emission groups (113–118) — use first group IDs; additional groups appended
     const emGroups = [...document.querySelectorAll('#emission-groups .emission-group')].map(g => ({
         113: (g.querySelector('#sfaf_113, [data-field="sfaf_113"]') || {}).value || '',
         114: (g.querySelector('#sfaf_114, [data-field="sfaf_114"]') || {}).value || '',
         115: (g.querySelector('#sfaf_115, [data-field="sfaf_115"]') || {}).value || '',
         116: (g.querySelector('#sfaf_116, [data-field="sfaf_116"]') || {}).value || '',
+        117: (g.querySelector('#sfaf_117, [data-field="sfaf_117"]') || {}).value || '',
+        118: (g.querySelector('#sfaf_118, [data-field="sfaf_118"]') || {}).value || '',
     }));
     // 500 / 501 multi-occurrence
     const occ500    = [...document.querySelectorAll('#sfaf-500-entries input')].map(i => i.value.trim()).filter(Boolean);
@@ -2799,30 +2801,172 @@ const SFAF_LABELS = {
     '716':'Spectrum Use', '801':'POC Action', '803':'POC Requester',
 };
 
+// Build plain-text SFAF 1-column content (uppercase, NNN.     VALUE, numerical order)
+function _buildSFAF1ColText() {
+    const { fields, emGroups, occ500, occ501, entries702 } = _collectSFAFFields();
+
+    // Helper: parse a field key like "103" or "103_2" into [mainNum, subNum]
+    // Keys come from form IDs: sfaf_103 → "103" (subNum=0), sfaf_103_2 → "103_2" (subNum=2)
+    // Display sub-occurrence as /02, /03… matching SFAF format (first occ has no suffix)
+    function parseKey(k) {
+        const parts = k.split('_');
+        return [parseInt(parts[0], 10), parts.length > 1 ? parseInt(parts[1], 10) : 0];
+    }
+
+    const entries = [];
+
+    // ── Field 005 (Security Classification) ─────────────────────────────────
+    // Stored as two separate selects: sfaf_005_1 (level) + sfaf_005_2 (handling)
+    // Must combine into a single "UA"-style value on one line.
+    const cls = (fields['005_1'] || '') + (fields['005_2'] || '');
+    if (cls.trim()) {
+        entries.push({ sortA: 5, sortB: 0, label: `005.     ${cls.toUpperCase()}` });
+    }
+
+    // ── All other single-value fields ───────────────────────────────────────
+    // Skip 005_1/2 (handled above) and emission group fields (handled below).
+    const emFieldNums = new Set(['113','114','115','116','117','118']);
+    for (const [k, v] of Object.entries(fields)) {
+        if (k === '005_1' || k === '005_2') continue;
+        if (emFieldNums.has(k)) continue;
+        const [a, b] = parseKey(k);
+        // First occurrence (b=0) → bare number; sub-occurrences → /02, /03, …
+        const display = b === 0
+            ? String(a).padStart(3, '0')
+            : `${String(a).padStart(3,'0')}/${String(b).padStart(2,'0')}`;
+        entries.push({ sortA: a, sortB: b, label: `${display}.     ${String(v).toUpperCase()}` });
+    }
+
+    // ── Emission groups (113–118) ────────────────────────────────────────────
+    // First group: no occurrence suffix.  Second group: /02.  Third: /03, etc.
+    emGroups.forEach((g, i) => {
+        const sfx = i === 0 ? '' : `/${String(i + 1).padStart(2, '0')}`;
+        [
+            [113, g['113']], [114, g['114']], [115, g['115']],
+            [116, g['116']], [117, g['117']], [118, g['118']],
+        ].forEach(([n, v]) => {
+            if (!v) return;
+            entries.push({
+                sortA: n, sortB: i,
+                label: `${String(n).padStart(3,'0')}${sfx}.     ${String(v).toUpperCase()}`,
+            });
+        });
+    });
+
+    // ── Multi-occurrence fields: 500, 501, 702 ───────────────────────────────
+    // Same rule: first occurrence bare, subsequent /02, /03, …
+    occ500.forEach((v, i) => {
+        const sfx = i === 0 ? '' : `/${String(i + 1).padStart(2, '0')}`;
+        entries.push({ sortA: 500, sortB: i, label: `500${sfx}.     ${String(v).toUpperCase()}` });
+    });
+    occ501.forEach((v, i) => {
+        const sfx = i === 0 ? '' : `/${String(i + 1).padStart(2, '0')}`;
+        entries.push({ sortA: 501, sortB: i, label: `501${sfx}.     ${String(v).toUpperCase()}` });
+    });
+    entries702.forEach((e, i) => {
+        const sfx = i === 0 ? '' : `/${String(i + 1).padStart(2, '0')}`;
+        const val = e.number + (e.description ? '  ' + e.description : '');
+        entries.push({ sortA: 702, sortB: i, label: `702${sfx}.     ${String(val).toUpperCase()}` });
+    });
+
+    // Sort numerically: primary by field number, secondary by sub-occurrence index
+    entries.sort((a, b) => a.sortA !== b.sortA ? a.sortA - b.sortA : a.sortB - b.sortB);
+
+    return entries.map(e => e.label).join('\n');
+}
+
 window.outputSFAF1Col = function() {
     document.getElementById('outputMenu').style.display = 'none';
-    const { fields, emGroups, occ500, occ501, entries702 } = _collectSFAFFields();
-    const lines = [];
-    // Build ordered field list
-    const allNums = Object.keys(fields).sort((a, b) => parseFloat(a) - parseFloat(b));
-    allNums.forEach(num => {
-        // Emission group fields are handled separately
-        if (['113','114','115','116'].includes(num)) return;
-        lines.push(`${num.padEnd(6)}${SFAF_LABELS[num] ? SFAF_LABELS[num] + ': ' : ''}${fields[num]}`);
-    });
-    // Emission groups
-    emGroups.forEach((g, i) => {
-        const prefix = emGroups.length > 1 ? ` [Group ${i+1}]` : '';
-        if (g['113']) lines.push(`113${prefix.padEnd(3)}Station Class: ${g['113']}`);
-        if (g['114']) lines.push(`114${prefix.padEnd(3)}Emission Designator: ${g['114']}`);
-        if (g['115']) lines.push(`115${prefix.padEnd(3)}Power: ${g['115']}`);
-        if (g['116']) lines.push(`116${prefix.padEnd(3)}Power Type: ${g['116']}`);
-    });
-    occ500.forEach(v => lines.push(`500   IRAC Notes: ${v}`));
-    occ501.forEach(v => lines.push(`501   Notes: ${v}`));
-    entries702.forEach(e => lines.push(`702   Control/Request Number: ${e.number}${e.description ? ' — ' + e.description : ''}`));
-    _openTextOutput('SFAF — 1 Column', lines.join('\n'));
+
+    // Build content now so the modal can reference it on confirm
+    const content = _buildSFAF1ColText();
+
+    // Show View / Print / File selection modal
+    _showSFAF1ColModal(content);
 };
+
+function _showSFAF1ColModal(content) {
+    // Remove any existing instance
+    const existing = document.getElementById('sfaf1ColModal');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'sfaf1ColModal';
+    modal.style.cssText = `
+        position:fixed;inset:0;background:rgba(0,0,0,.6);
+        display:flex;align-items:center;justify-content:center;z-index:20000;
+    `;
+    modal.innerHTML = `
+        <div style="background:#1e293b;border:1px solid #334155;border-radius:10px;
+                    padding:28px 32px;min-width:320px;max-width:420px;color:#e2e8f0;
+                    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+            <h3 style="margin:0 0 18px;font-size:16px;color:#93c5fd;">SFAF 1-Column Output</h3>
+            <p style="margin:0 0 16px;font-size:13px;color:#94a3b8;">Choose output destination:</p>
+            <label style="display:block;margin-bottom:12px;cursor:pointer;">
+                <input type="radio" name="sfaf1out" value="view" checked style="margin-right:8px;">
+                View &mdash; open in a new browser window
+            </label>
+            <label style="display:block;margin-bottom:12px;cursor:pointer;">
+                <input type="radio" name="sfaf1out" value="print" style="margin-right:8px;">
+                Print &mdash; send to printer / print dialog
+            </label>
+            <label style="display:block;margin-bottom:20px;cursor:pointer;">
+                <input type="radio" name="sfaf1out" value="file" style="margin-right:8px;">
+                File &mdash; download as .txt file
+            </label>
+            <div style="display:flex;gap:10px;justify-content:flex-end;">
+                <button id="sfaf1ColCancel"
+                    style="padding:7px 18px;border:1px solid #475569;border-radius:6px;
+                           background:transparent;color:#94a3b8;cursor:pointer;font-size:13px;">
+                    Cancel
+                </button>
+                <button id="sfaf1ColConfirm"
+                    style="padding:7px 18px;border:none;border-radius:6px;
+                           background:#3b82f6;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">
+                    Continue
+                </button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const close = () => modal.remove();
+
+    document.getElementById('sfaf1ColCancel').addEventListener('click', close);
+    modal.addEventListener('click', e => { if (e.target === modal) close(); });
+    document.addEventListener('keydown', function esc(e) {
+        if (e.key === 'Escape') { close(); document.removeEventListener('keydown', esc); }
+    });
+
+    document.getElementById('sfaf1ColConfirm').addEventListener('click', () => {
+        const choice = modal.querySelector('input[name="sfaf1out"]:checked')?.value || 'view';
+        close();
+
+        if (choice === 'view') {
+            _openTextOutput('SFAF — 1 Column', content);
+
+        } else if (choice === 'print') {
+            const pw = window.open('', '_blank', 'width=800,height=600');
+            if (!pw) { showAlert('Allow pop-ups to print.', 'warning'); return; }
+            pw.document.write(`<!DOCTYPE html><html><head><title>SFAF — 1 Column</title>
+<style>
+body{font-family:monospace;font-size:12px;margin:20px;}
+pre{white-space:pre-wrap;word-break:break-all;}
+@media print{body{margin:10mm;}}
+</style></head><body><pre>${content.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</pre></body></html>`);
+            pw.document.close();
+            pw.focus();
+            pw.print();
+
+        } else if (choice === 'file') {
+            // Derive a filename from serial number if visible in the form
+            const serialEl = document.getElementById('sfaf_102');
+            const serial = serialEl?.value?.trim().replace(/[^A-Z0-9_\-]/gi, '_') || 'sfaf_export';
+            _downloadFile(`${serial}_1col.txt`, 'text/plain;charset=utf-8', content);
+        }
+    });
+}
 
 window.outputSFAF3Col = function() {
     document.getElementById('outputMenu').style.display = 'none';
@@ -4393,6 +4537,16 @@ window.addEmissionGroup = function() {
             <div class="form-group">
                 <label>116 — Power Type</label>
                 <input type="text" data-field="sfaf_116" class="form-control" placeholder="e.g. ERP, TPO, EIRP">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>117 — Effective Radiated Power</label>
+                <input type="text" data-field="sfaf_117" class="form-control" placeholder="e.g. 44, 30, 100">
+            </div>
+            <div class="form-group">
+                <label>118 — Power/ERP Augmentation</label>
+                <input type="text" data-field="sfaf_118" class="form-control" placeholder="e.g. E, M">
             </div>
         </div>`;
     container.appendChild(group);

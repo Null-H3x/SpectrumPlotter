@@ -494,21 +494,21 @@ func (r *FrequencyRepository) GetUserFrequencyRequests(userID uuid.UUID) ([]mode
 	return requests, err
 }
 
-// GetPendingRequests returns pending/under_review requests visible to the caller's workbox.
+// GetPendingRequests returns pending/under_review requests visible to the caller's workboxes.
 // Unrouted requests (routed_to_workbox IS NULL) are visible to all ISMs.
-// Routed requests are only visible to the destination workbox.
-func (r *FrequencyRepository) GetPendingRequests(callerWorkbox *string) ([]models.FrequencyRequest, error) {
+// Routed requests are visible to any workbox in the caller's assigned set.
+func (r *FrequencyRepository) GetPendingRequests(callerWorkboxes []string) ([]models.FrequencyRequest, error) {
 	var requests []models.FrequencyRequest
 	var query string
 	var args []interface{}
 
-	if callerWorkbox != nil {
+	if len(callerWorkboxes) > 0 {
 		query = `
 			SELECT * FROM frequency_requests
 			WHERE status IN ('pending', 'under_review')
-			  AND (routed_to_workbox IS NULL OR routed_to_workbox = $1)
+			  AND (routed_to_workbox IS NULL OR routed_to_workbox = ANY($1))
 			ORDER BY priority DESC, created_at`
-		args = []interface{}{*callerWorkbox}
+		args = []interface{}{callerWorkboxes}
 	} else {
 		query = `
 			SELECT * FROM frequency_requests
@@ -521,8 +521,8 @@ func (r *FrequencyRepository) GetPendingRequests(callerWorkbox *string) ([]model
 }
 
 // BulkRouteRequests sets routed_to_workbox on the given request IDs.
-// callerWorkbox restricts updates to requests the caller currently holds authority over.
-func (r *FrequencyRepository) BulkRouteRequests(ids []uuid.UUID, workbox *string, callerWorkbox *string) (int64, error) {
+// callerWorkboxes restricts updates to requests any of the caller's workboxes hold authority over.
+func (r *FrequencyRepository) BulkRouteRequests(ids []uuid.UUID, workbox *string, callerWorkboxes []string) (int64, error) {
 	if len(ids) == 0 {
 		return 0, nil
 	}
@@ -535,10 +535,10 @@ func (r *FrequencyRepository) BulkRouteRequests(ids []uuid.UUID, workbox *string
 		args = append(args, id)
 	}
 	authorityClause := ""
-	if callerWorkbox != nil {
-		args = append(args, *callerWorkbox)
+	if len(callerWorkboxes) > 0 {
+		args = append(args, callerWorkboxes)
 		authorityClause = fmt.Sprintf(
-			" AND (edit_authority_workbox = $%d OR edit_authority_workbox IS NULL)",
+			" AND (edit_authority_workbox = ANY($%d) OR edit_authority_workbox IS NULL)",
 			len(args))
 	}
 	query := fmt.Sprintf(`
@@ -897,16 +897,19 @@ func (r *FrequencyRepository) GetSubmittedAssignments(userID uuid.UUID) ([]model
 	return assignments, err
 }
 
-// GetInboundAssignments returns active P/S assignments routed to the given workbox.
+// GetInboundAssignments returns active P/S assignments routed to any of the given workboxes.
 // These appear in the receiving workbox's Action Items.
-func (r *FrequencyRepository) GetInboundAssignments(workbox string) ([]models.FrequencyAssignment, error) {
+func (r *FrequencyRepository) GetInboundAssignments(workboxes []string) ([]models.FrequencyAssignment, error) {
 	var assignments []models.FrequencyAssignment
+	if len(workboxes) == 0 {
+		return assignments, nil
+	}
 	err := r.db.Select(&assignments, `
 		SELECT * FROM frequency_assignments
 		WHERE sfaf_record_type IN ('P', 'S')
 		  AND is_active = true
-		  AND routed_to_workbox = $1
-		ORDER BY created_at DESC`, workbox)
+		  AND routed_to_workbox = ANY($1)
+		ORDER BY created_at DESC`, workboxes)
 	return assignments, err
 }
 
@@ -1001,9 +1004,9 @@ func (r *FrequencyRepository) CleanupOrphanedAssignments() (int64, error) {
 
 // BulkRouteAssignments sets routed_to_workbox on the given P/S proposal IDs.
 // Passing nil for workbox clears the routing (unroutes).
-// callerWorkbox restricts updates to records where edit_authority_workbox matches;
-// pass nil to bypass the check (admin).
-func (r *FrequencyRepository) BulkRouteAssignments(ids []uuid.UUID, workbox *string, callerWorkbox *string) (int64, error) {
+// callerWorkboxes restricts updates to records where edit_authority_workbox is in the caller's set;
+// pass nil/empty to bypass the check (admin).
+func (r *FrequencyRepository) BulkRouteAssignments(ids []uuid.UUID, workbox *string, callerWorkboxes []string) (int64, error) {
 	if len(ids) == 0 {
 		return 0, nil
 	}
@@ -1016,11 +1019,11 @@ func (r *FrequencyRepository) BulkRouteAssignments(ids []uuid.UUID, workbox *str
 		args = append(args, id)
 	}
 	authorityClause := ""
-	if callerWorkbox != nil {
-		args = append(args, *callerWorkbox)
-		// Allow routing if caller holds edit authority OR if edit_authority_workbox is NULL
-		// (records created before authority tracking was added).
-		authorityClause = fmt.Sprintf(" AND (edit_authority_workbox = $%d OR edit_authority_workbox IS NULL)", len(args))
+	if len(callerWorkboxes) > 0 {
+		args = append(args, callerWorkboxes)
+		authorityClause = fmt.Sprintf(
+			" AND (edit_authority_workbox = ANY($%d) OR edit_authority_workbox IS NULL)",
+			len(args))
 	}
 	query := fmt.Sprintf(`
 		UPDATE frequency_assignments
@@ -1226,13 +1229,29 @@ func (r *FrequencyRepository) DeleteControlNumber(id uuid.UUID) error {
 
 func (r *FrequencyRepository) GetAllWorkboxes() ([]models.Workbox, error) {
 	var rows []models.Workbox
-	err := r.db.Select(&rows, `SELECT * FROM workboxes ORDER BY name`)
+	err := r.db.Select(&rows, `
+		SELECT w.*,
+		       i.name AS installation_name,
+		       COUNT(a.user_id) AS member_count
+		FROM workboxes w
+		LEFT JOIN installations i ON i.id = w.installation_id
+		LEFT JOIN user_workbox_assignments a ON a.workbox_id = w.id
+		GROUP BY w.id, i.name
+		ORDER BY w.name`)
 	return rows, err
 }
 
 func (r *FrequencyRepository) GetWorkboxByID(id uuid.UUID) (*models.Workbox, error) {
 	var w models.Workbox
-	err := r.db.Get(&w, `SELECT * FROM workboxes WHERE id=$1`, id)
+	err := r.db.Get(&w, `
+		SELECT w.*,
+		       i.name AS installation_name,
+		       COUNT(a.user_id) AS member_count
+		FROM workboxes w
+		LEFT JOIN installations i ON i.id = w.installation_id
+		LEFT JOIN user_workbox_assignments a ON a.workbox_id = w.id
+		WHERE w.id = $1
+		GROUP BY w.id, i.name`, id)
 	if err != nil {
 		return nil, err
 	}
@@ -1242,17 +1261,17 @@ func (r *FrequencyRepository) GetWorkboxByID(id uuid.UUID) (*models.Workbox, err
 func (r *FrequencyRepository) CreateWorkbox(w *models.Workbox) error {
 	w.ID = uuid.New()
 	_, err := r.db.Exec(
-		`INSERT INTO workboxes (id, name, description, is_active, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, NOW(), NOW())`,
-		w.ID, w.Name, w.Description, w.IsActive,
+		`INSERT INTO workboxes (id, name, description, installation_id, is_active, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`,
+		w.ID, w.Name, w.Description, w.InstallationID, w.IsActive,
 	)
 	return err
 }
 
 func (r *FrequencyRepository) UpdateWorkbox(w *models.Workbox) error {
 	_, err := r.db.Exec(
-		`UPDATE workboxes SET name=$2, description=$3, is_active=$4, updated_at=NOW() WHERE id=$1`,
-		w.ID, w.Name, w.Description, w.IsActive,
+		`UPDATE workboxes SET name=$2, description=$3, installation_id=$4, is_active=$5, updated_at=NOW() WHERE id=$1`,
+		w.ID, w.Name, w.Description, w.InstallationID, w.IsActive,
 	)
 	return err
 }
@@ -1260,4 +1279,116 @@ func (r *FrequencyRepository) UpdateWorkbox(w *models.Workbox) error {
 func (r *FrequencyRepository) DeleteWorkbox(id uuid.UUID) error {
 	_, err := r.db.Exec(`DELETE FROM workboxes WHERE id=$1`, id)
 	return err
+}
+
+// GetWorkboxMembers returns all users assigned to a workbox.
+func (r *FrequencyRepository) GetWorkboxMembers(workboxID uuid.UUID) ([]models.UserWorkboxAssignment, error) {
+	var rows []models.UserWorkboxAssignment
+	err := r.db.Select(&rows, `
+		SELECT a.*, u.full_name AS user_name, u.email AS user_email, u.role AS user_role,
+		       w.name AS workbox_name
+		FROM user_workbox_assignments a
+		JOIN users u ON u.id = a.user_id
+		JOIN workboxes w ON w.id = a.workbox_id
+		WHERE a.workbox_id = $1
+		ORDER BY a.is_primary DESC, u.full_name`, workboxID)
+	return rows, err
+}
+
+// GetUserWorkboxAssignments returns all workbox assignments for a user.
+func (r *FrequencyRepository) GetUserWorkboxAssignments(userID uuid.UUID) ([]models.UserWorkboxAssignment, error) {
+	var rows []models.UserWorkboxAssignment
+	err := r.db.Select(&rows, `
+		SELECT a.*, w.name AS workbox_name
+		FROM user_workbox_assignments a
+		JOIN workboxes w ON w.id = a.workbox_id
+		WHERE a.user_id = $1
+		ORDER BY a.is_primary DESC, w.name`, userID)
+	return rows, err
+}
+
+// GetUserWorkboxNames returns all active workbox names a user is assigned to.
+// Used for routing visibility: a user sees requests routed to ANY of their workboxes.
+func (r *FrequencyRepository) GetUserWorkboxNames(userID uuid.UUID) ([]string, error) {
+	var names []string
+	err := r.db.Select(&names, `
+		SELECT w.name
+		FROM user_workbox_assignments a
+		JOIN workboxes w ON w.id = a.workbox_id
+		WHERE a.user_id = $1 AND w.is_active = true
+		ORDER BY a.is_primary DESC, w.name`, userID)
+	return names, err
+}
+
+// GetUserPrimaryWorkboxName returns the name of the user's primary workbox, or nil.
+// Used for edit-authority attribution on new SFAFs/proposals.
+func (r *FrequencyRepository) GetUserPrimaryWorkboxName(userID uuid.UUID) (*string, error) {
+	var name string
+	err := r.db.Get(&name, `
+		SELECT w.name
+		FROM user_workbox_assignments a
+		JOIN workboxes w ON w.id = a.workbox_id
+		WHERE a.user_id = $1 AND a.is_primary = true AND w.is_active = true
+		LIMIT 1`, userID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &name, nil
+}
+
+// AddWorkboxMember assigns a user to a workbox.
+// If is_primary=true, clears any existing primary first.
+func (r *FrequencyRepository) AddWorkboxMember(userID, workboxID uuid.UUID, isPrimary bool) error {
+	tx, err := r.db.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if isPrimary {
+		// Clear existing primary for this user
+		if _, err := tx.Exec(`UPDATE user_workbox_assignments SET is_primary=false WHERE user_id=$1`, userID); err != nil {
+			return err
+		}
+		// Keep users.workbox_id in sync
+		if _, err := tx.Exec(`UPDATE users SET workbox_id=$1 WHERE id=$2`, workboxID, userID); err != nil {
+			return err
+		}
+	}
+
+	_, err = tx.Exec(`
+		INSERT INTO user_workbox_assignments (user_id, workbox_id, is_primary)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id, workbox_id) DO UPDATE SET is_primary = EXCLUDED.is_primary`,
+		userID, workboxID, isPrimary)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// RemoveWorkboxMember removes a user from a workbox.
+func (r *FrequencyRepository) RemoveWorkboxMember(userID, workboxID uuid.UUID) error {
+	tx, err := r.db.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var wasPrimary bool
+	_ = tx.Get(&wasPrimary, `SELECT is_primary FROM user_workbox_assignments WHERE user_id=$1 AND workbox_id=$2`, userID, workboxID)
+
+	if _, err := tx.Exec(`DELETE FROM user_workbox_assignments WHERE user_id=$1 AND workbox_id=$2`, userID, workboxID); err != nil {
+		return err
+	}
+	// If this was the primary, clear users.workbox_id
+	if wasPrimary {
+		if _, err := tx.Exec(`UPDATE users SET workbox_id=NULL WHERE id=$1`, userID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }

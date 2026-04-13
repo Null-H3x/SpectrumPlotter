@@ -15,6 +15,7 @@ type SFAFFieldLookup struct {
 	Label     *string   `json:"label,omitempty" db:"label"`
 	SortOrder int       `json:"sort_order" db:"sort_order"`
 	IsActive  bool      `json:"is_active" db:"is_active"`
+	CharLimit *int      `json:"char_limit,omitempty" db:"char_limit"`
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 }
 
@@ -23,6 +24,7 @@ type CreateSFAFLookupRequest struct {
 	Value     string  `json:"value" binding:"required"`
 	Label     *string `json:"label"`
 	SortOrder int     `json:"sort_order"`
+	CharLimit *int    `json:"char_limit"`
 }
 
 type UpdateSFAFLookupRequest struct {
@@ -30,4 +32,5 @@ type UpdateSFAFLookupRequest struct {
 	Label     *string `json:"label"`
 	SortOrder int     `json:"sort_order"`
 	IsActive  bool    `json:"is_active"`
+	CharLimit *int    `json:"char_limit"`
 }

@@ -800,12 +800,17 @@ func (h *FrequencyHandler) GetWorkboxObjects(c *gin.Context) {
 // CreateWorkbox adds a new workbox.
 // POST /api/workboxes
 func (h *FrequencyHandler) CreateWorkbox(c *gin.Context) {
-	var w models.Workbox
-	if err := c.ShouldBindJSON(&w); err != nil {
+	var req models.CreateWorkboxRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
 		return
 	}
-	w.IsActive = true
+	w := models.Workbox{
+		Name:           req.Name,
+		Description:    req.Description,
+		InstallationID: req.InstallationID,
+		IsActive:       true,
+	}
 	if err := h.service.CreateWorkbox(&w); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -821,12 +826,18 @@ func (h *FrequencyHandler) UpdateWorkbox(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
-	var w models.Workbox
-	if err := c.ShouldBindJSON(&w); err != nil {
+	var req models.UpdateWorkboxRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
 		return
 	}
-	w.ID = id
+	w := models.Workbox{
+		ID:             id,
+		Name:           req.Name,
+		Description:    req.Description,
+		InstallationID: req.InstallationID,
+		IsActive:       req.IsActive,
+	}
 	if err := h.service.UpdateWorkbox(&w); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -847,6 +858,78 @@ func (h *FrequencyHandler) DeleteWorkbox(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
+}
+
+// GetWorkboxMembers returns users assigned to a workbox.
+// GET /api/workboxes/:id/members
+func (h *FrequencyHandler) GetWorkboxMembers(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+	members, err := h.service.GetWorkboxMembers(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"members": members})
+}
+
+// AddWorkboxMember assigns a user to a workbox.
+// POST /api/workboxes/:id/members
+func (h *FrequencyHandler) AddWorkboxMember(c *gin.Context) {
+	workboxID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid workbox id"})
+		return
+	}
+	var req models.AssignWorkboxMemberRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request: " + err.Error()})
+		return
+	}
+	if err := h.service.AddWorkboxMember(req.UserID, workboxID, req.IsPrimary); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// RemoveWorkboxMember removes a user from a workbox.
+// DELETE /api/workboxes/:id/members/:user_id
+func (h *FrequencyHandler) RemoveWorkboxMember(c *gin.Context) {
+	workboxID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid workbox id"})
+		return
+	}
+	userID, err := uuid.Parse(c.Param("user_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+	if err := h.service.RemoveWorkboxMember(userID, workboxID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// GetUserWorkboxAssignments returns all workboxes a user is assigned to.
+// GET /api/users/:id/workboxes
+func (h *FrequencyHandler) GetUserWorkboxAssignments(c *gin.Context) {
+	userID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+	assignments, err := h.service.GetUserWorkboxAssignments(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"workboxes": assignments})
 }
 
 // ElevateAssignment promotes a P→A or S→T final assignment (agency-level and above)

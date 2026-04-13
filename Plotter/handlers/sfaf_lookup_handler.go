@@ -50,6 +50,7 @@ func (h *SFAFLookupHandler) Create(c *gin.Context) {
 		Value:     req.Value,
 		Label:     req.Label,
 		SortOrder: req.SortOrder,
+		CharLimit: req.CharLimit,
 	}
 	if err := h.repo.Create(entry); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create entry: " + err.Error()})
@@ -76,6 +77,7 @@ func (h *SFAFLookupHandler) Update(c *gin.Context) {
 		Label:     req.Label,
 		SortOrder: req.SortOrder,
 		IsActive:  req.IsActive,
+		CharLimit: req.CharLimit,
 	}
 	if err := h.repo.Update(entry); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update entry: " + err.Error()})

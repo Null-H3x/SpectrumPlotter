@@ -218,10 +218,10 @@ func (s *FrequencyService) CreateFrequencyAssignment(
 		recordType = "A"
 	}
 
-	// Resolve initial edit authority from creator's ISM unit.
+	// Resolve initial edit authority from creator's primary workbox.
 	var editAuthorityWorkbox *string
-	if ismUnit, err := s.repo.GetUserISMUnit(createdBy); err == nil {
-		editAuthorityWorkbox = &ismUnit.Name
+	if name, err := s.repo.GetUserPrimaryWorkboxName(createdBy); err == nil {
+		editAuthorityWorkbox = name
 	}
 
 	// Create assignment
@@ -338,8 +338,8 @@ func (s *FrequencyService) SubmitFrequencyRequest(
 		}
 	}
 	if editAuthorityWorkbox == nil {
-		if ismUnit, ismErr := s.repo.GetUserISMUnit(requestedBy); ismErr == nil {
-			editAuthorityWorkbox = &ismUnit.Name
+		if name, ismErr := s.repo.GetUserPrimaryWorkboxName(requestedBy); ismErr == nil {
+			editAuthorityWorkbox = name
 		}
 	}
 
@@ -420,11 +420,11 @@ func (s *FrequencyService) ReviewFrequencyRequest(
 		return nil, err
 	}
 
-	// When marking under_review, claim edit authority for the caller's workbox.
+	// When marking under_review, claim edit authority for the caller's primary workbox.
 	var editAuth *string
 	if status == "under_review" {
-		if ismUnit, ismErr := s.repo.GetUserISMUnit(reviewedBy); ismErr == nil {
-			editAuth = &ismUnit.Name
+		if name, ismErr := s.repo.GetUserPrimaryWorkboxName(reviewedBy); ismErr == nil {
+			editAuth = name
 		}
 	}
 
@@ -481,8 +481,8 @@ func (s *FrequencyService) ResubmitFrequencyRequest(requestID, userID uuid.UUID,
 		}
 	}
 	if workbox == nil {
-		if ismUnit, err := s.repo.GetUserISMUnit(userID); err == nil {
-			workbox = &ismUnit.Name
+		if name, err := s.repo.GetUserPrimaryWorkboxName(userID); err == nil {
+			workbox = name
 		}
 	}
 	return s.repo.ResubmitFrequencyRequest(requestID, userID, input, workbox)
@@ -510,11 +510,8 @@ func (s *FrequencyService) GetUserRequestsWithDetails(userID uuid.UUID) ([]model
 }
 
 func (s *FrequencyService) GetPendingRequestsWithDetails(callerID uuid.UUID) ([]models.FrequencyRequestWithDetails, error) {
-	var callerWorkbox *string
-	if ismUnit, err := s.repo.GetUserISMUnit(callerID); err == nil {
-		callerWorkbox = &ismUnit.Name
-	}
-	requests, err := s.repo.GetPendingRequests(callerWorkbox)
+	callerWorkboxes, _ := s.repo.GetUserWorkboxNames(callerID)
+	requests, err := s.repo.GetPendingRequests(callerWorkboxes)
 	if err != nil {
 		return nil, err
 	}
@@ -552,8 +549,8 @@ func (s *FrequencyService) GetPendingRequestsWithDetails(callerID uuid.UUID) ([]
 			}
 		}
 		if editAuthority == nil {
-			if ismUnit, err := s.repo.GetUserISMUnit(request.RequestedBy); err == nil {
-				editAuthority = &ismUnit.Name
+			if name, err := s.repo.GetUserPrimaryWorkboxName(request.RequestedBy); err == nil {
+				editAuthority = name
 			}
 		}
 
@@ -629,14 +626,14 @@ func (s *FrequencyService) GetSubmittedAssignments(userID uuid.UUID) ([]models.F
 	return result, nil
 }
 
-// GetInboundAssignments returns P/S assignments routed to the given user's ISM workbox.
+// GetInboundAssignments returns P/S assignments routed to any of the user's workboxes.
 // These populate the Action Items workbox sub-tab alongside pending requests.
 func (s *FrequencyService) GetInboundAssignments(userID uuid.UUID) ([]models.FrequencyAssignmentWithDetails, error) {
-	ismUnit, err := s.repo.GetUserISMUnit(userID)
-	if err != nil {
-		return nil, nil // user has no ISM unit — return empty, not an error
+	workboxNames, _ := s.repo.GetUserWorkboxNames(userID)
+	if len(workboxNames) == 0 {
+		return nil, nil // user has no workbox assignments — return empty, not an error
 	}
-	assignments, err := s.repo.GetInboundAssignments(ismUnit.Name)
+	assignments, err := s.repo.GetInboundAssignments(workboxNames)
 	if err != nil {
 		return nil, err
 	}
@@ -767,27 +764,29 @@ func (s *FrequencyService) RetractProposalAssignment(assignmentID, createdBy uui
 // Only the workbox that currently holds edit authority may distribute a record.
 // Admins bypass the check.
 func (s *FrequencyService) BulkRouteAssignments(ids []uuid.UUID, workbox *string, callerID uuid.UUID, isAdmin bool) (int64, error) {
-	var callerWorkbox *string
+	var callerWorkboxes []string
 	if !isAdmin {
-		if ismUnit, err := s.repo.GetUserISMUnit(callerID); err == nil {
-			callerWorkbox = &ismUnit.Name
-		}
+		callerWorkboxes, _ = s.repo.GetUserWorkboxNames(callerID)
 	}
-	return s.repo.BulkRouteAssignments(ids, workbox, callerWorkbox)
+	return s.repo.BulkRouteAssignments(ids, workbox, callerWorkboxes)
 }
 
 // BulkRouteRequests sets routed_to_workbox on the given frequency request IDs.
 func (s *FrequencyService) BulkRouteRequests(ids []uuid.UUID, workbox *string, callerID uuid.UUID, isAdmin bool) (int64, error) {
-	var callerWorkbox *string
+	var callerWorkboxes []string
 	if !isAdmin {
-		if ismUnit, err := s.repo.GetUserISMUnit(callerID); err == nil {
-			callerWorkbox = &ismUnit.Name
-		}
+		callerWorkboxes, _ = s.repo.GetUserWorkboxNames(callerID)
 	}
-	return s.repo.BulkRouteRequests(ids, workbox, callerWorkbox)
+	return s.repo.BulkRouteRequests(ids, workbox, callerWorkboxes)
 }
 
 // DeleteFrequencyRequest permanently removes a cancelled/denied request.
+// GetUserWorkboxNames returns all workbox names for a user. Used by the workbox handler.
+func (s *FrequencyService) GetUserWorkboxNames(userID uuid.UUID) ([]string, error) {
+	return s.repo.GetUserWorkboxNames(userID)
+}
+
+// GetUserISMUnit is kept for backward compatibility; prefer GetUserWorkboxNames for visibility.
 func (s *FrequencyService) GetUserISMUnit(userID uuid.UUID) (*models.Unit, error) {
 	return s.repo.GetUserISMUnit(userID)
 }
@@ -876,4 +875,20 @@ func (s *FrequencyService) UpdateWorkbox(w *models.Workbox) error {
 
 func (s *FrequencyService) DeleteWorkbox(id uuid.UUID) error {
 	return s.repo.DeleteWorkbox(id)
+}
+
+func (s *FrequencyService) GetWorkboxMembers(workboxID uuid.UUID) ([]models.UserWorkboxAssignment, error) {
+	return s.repo.GetWorkboxMembers(workboxID)
+}
+
+func (s *FrequencyService) GetUserWorkboxAssignments(userID uuid.UUID) ([]models.UserWorkboxAssignment, error) {
+	return s.repo.GetUserWorkboxAssignments(userID)
+}
+
+func (s *FrequencyService) AddWorkboxMember(userID, workboxID uuid.UUID, isPrimary bool) error {
+	return s.repo.AddWorkboxMember(userID, workboxID, isPrimary)
+}
+
+func (s *FrequencyService) RemoveWorkboxMember(userID, workboxID uuid.UUID) error {
+	return s.repo.RemoveWorkboxMember(userID, workboxID)
 }

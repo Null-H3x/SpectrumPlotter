@@ -35,15 +35,97 @@ function updateAdminPayGradeDropdown(branch, savedValue) {
 function updateAdminISMDropdown(savedWorkboxId) {
     const sel = document.getElementById('fieldDefaultISM');
     if (!sel) return;
-    // Workbox options use UUID as value so workbox_id is sent to the API
+    // Used only in create mode — UUID value so workbox_id is tracked
     const wbOpts = allAdminWorkboxes
         .filter(w => w.is_active)
         .map(w => `<option value="${w.id}">${w.name}</option>`)
         .join('');
     sel.innerHTML = '<option value="">— None —</option>' +
         (wbOpts ? `<optgroup label="Workboxes">${wbOpts}</optgroup>` : '');
-    if (savedWorkboxId) {
-        sel.value = savedWorkboxId;
+    if (savedWorkboxId) sel.value = savedWorkboxId;
+
+    // Also populate the add-workbox dropdown in edit mode
+    const addSel = document.getElementById('adminWBAddSelect');
+    if (addSel) {
+        addSel.innerHTML = '<option value="">Add workbox…</option>' +
+            allAdminWorkboxes
+                .filter(w => w.is_active)
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map(w => `<option value="${w.id}">${w.name}</option>`)
+                .join('');
+    }
+}
+
+async function adminLoadWBAssignments(userId) {
+    const list = document.getElementById('adminWBAssignList');
+    if (!list) return;
+    list.innerHTML = '<div style="padding:8px 10px;color:#64748b;font-size:0.82rem;"><i class="fas fa-spinner fa-spin"></i></div>';
+    try {
+        const res = await fetch(`/api/frequency/users/${userId}/workboxes`);
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        const assignments = data.workboxes || [];
+        if (assignments.length === 0) {
+            list.innerHTML = '<div style="padding:8px 10px;color:#64748b;font-size:0.82rem;font-style:italic;">No workboxes assigned</div>';
+            return;
+        }
+        list.innerHTML = assignments.map(a => {
+            const wbName = a.workbox_name || a.workbox_id;
+            return `
+            <div style="display:flex;align-items:center;gap:6px;padding:5px 10px;border-bottom:1px solid rgba(100,150,255,0.06);">
+                <span style="flex:1;font-size:0.82rem;">${wbName}${a.is_primary ? ' <span style="font-size:0.7rem;background:#1e40af;color:#93c5fd;border-radius:4px;padding:1px 5px;">primary</span>' : ''}</span>
+                <button type="button" style="background:none;border:none;color:#ef4444;cursor:pointer;padding:2px 4px;font-size:0.8rem;" title="Remove"
+                    onclick="adminRemoveWorkboxAssignment('${a.workbox_id}', ${JSON.stringify(wbName)})">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>`;
+        }).join('');
+    } catch (_) {
+        list.innerHTML = '<div style="padding:8px 10px;color:#ef4444;font-size:0.82rem;">Failed to load</div>';
+    }
+}
+
+async function adminAddWorkboxAssignment() {
+    if (!editingUserId) return;
+    const sel = document.getElementById('adminWBAddSelect');
+    const workboxId = sel?.value;
+    if (!workboxId) return;
+    const isPrimary = document.getElementById('adminWBIsPrimary')?.checked || false;
+    try {
+        const res = await fetch(`/api/frequency/workboxes/${workboxId}/members`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: editingUserId, is_primary: isPrimary }),
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            showToast('Error: ' + (err.error || 'Add failed'), 'error');
+            return;
+        }
+        if (sel) sel.value = '';
+        if (document.getElementById('adminWBIsPrimary'))
+            document.getElementById('adminWBIsPrimary').checked = false;
+        await adminLoadWBAssignments(editingUserId);
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    }
+}
+
+async function adminRemoveWorkboxAssignment(workboxId, workboxName) {
+    if (!editingUserId) return;
+    if (!confirm(`Remove ${workboxName} from this user?`)) return;
+    try {
+        const res = await fetch(`/api/frequency/workboxes/${workboxId}/members/${editingUserId}`, {
+            method: 'DELETE',
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            showToast('Error: ' + (err.error || 'Remove failed'), 'error');
+            return;
+        }
+        await adminLoadWBAssignments(editingUserId);
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
     }
 }
 
@@ -217,6 +299,11 @@ function openCreateModal() {
     document.getElementById('submitBtn').innerHTML = '<i class="fas fa-save"></i> Create User';
     updateAdminPayGradeDropdown('', null);
     updateAdminISMDropdown(null);
+    // Create mode: show single dropdown, hide assignments panel
+    const cg = document.getElementById('wbCreateGroup');
+    const eg = document.getElementById('wbEditGroup');
+    if (cg) cg.style.display = '';
+    if (eg) eg.style.display = 'none';
     attachPhoneFormatters('fieldPhone', 'fieldPhoneDSN');
     document.getElementById('userModal').style.display = 'flex';
 }
@@ -255,6 +342,13 @@ function openEditModal(user) {
     document.getElementById('fieldPassword').required = false;
     document.getElementById('fieldPassword').placeholder = 'Leave blank to keep current password';
     document.getElementById('submitBtn').innerHTML = '<i class="fas fa-save"></i> Save Changes';
+    // Edit mode: show assignments panel, hide single create dropdown
+    const cg = document.getElementById('wbCreateGroup');
+    const eg = document.getElementById('wbEditGroup');
+    if (cg) cg.style.display = 'none';
+    if (eg) eg.style.display = '';
+    // Load current workbox assignments for this user
+    adminLoadWBAssignments(user.id);
     attachPhoneFormatters('fieldPhone', 'fieldPhoneDSN');
     document.getElementById('userModal').style.display = 'flex';
 }
@@ -288,7 +382,7 @@ async function submitUserForm(e) {
                 role: document.getElementById('fieldRole').value,
                 service_branch: document.getElementById('fieldServiceBranch').value || null,
                 pay_grade: document.getElementById('fieldPayGrade').value || null,
-                workbox_id: document.getElementById('fieldDefaultISM').value || null,
+                // workbox_id intentionally omitted — managed via assignments panel
             };
             if (pw) payload.password = pw;
             await apiFetch(`/api/admin/users/${editingUserId}`, {
@@ -297,7 +391,7 @@ async function submitUserForm(e) {
             });
             showToast('User updated successfully', 'success');
         } else {
-            await apiFetch('/api/admin/users', {
+            const created = await apiFetch('/api/admin/users', {
                 method: 'POST',
                 body: JSON.stringify({
                     username: document.getElementById('fieldUsername').value,
@@ -310,9 +404,19 @@ async function submitUserForm(e) {
                     role: document.getElementById('fieldRole').value,
                     service_branch: document.getElementById('fieldServiceBranch').value || null,
                     pay_grade: document.getElementById('fieldPayGrade').value || null,
-                    workbox_id: document.getElementById('fieldDefaultISM').value || null,
                 }),
             });
+            // If an initial workbox was selected, create the primary assignment now
+            const initialWorkboxId = document.getElementById('fieldDefaultISM')?.value;
+            if (initialWorkboxId && created.user?.id) {
+                try {
+                    await fetch(`/api/frequency/workboxes/${initialWorkboxId}/members`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ user_id: created.user.id, is_primary: true }),
+                    });
+                } catch (_) { /* non-fatal */ }
+            }
             showToast('User created successfully', 'success');
         }
         closeModal();

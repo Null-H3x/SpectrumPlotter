@@ -44,19 +44,19 @@ func (r *SFAFLookupRepository) GetByID(id uuid.UUID) (*models.SFAFFieldLookup, e
 
 func (r *SFAFLookupRepository) Create(entry *models.SFAFFieldLookup) error {
 	return r.db.QueryRowx(`
-		INSERT INTO sfaf_field_lookup (field_code, value, label, sort_order)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO sfaf_field_lookup (field_code, value, label, sort_order, char_limit)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, is_active, created_at`,
-		entry.FieldCode, entry.Value, entry.Label, entry.SortOrder,
+		entry.FieldCode, entry.Value, entry.Label, entry.SortOrder, entry.CharLimit,
 	).Scan(&entry.ID, &entry.IsActive, &entry.CreatedAt)
 }
 
 func (r *SFAFLookupRepository) Update(entry *models.SFAFFieldLookup) error {
 	_, err := r.db.Exec(`
 		UPDATE sfaf_field_lookup
-		SET value = $1, label = $2, sort_order = $3, is_active = $4
-		WHERE id = $5`,
-		entry.Value, entry.Label, entry.SortOrder, entry.IsActive, entry.ID)
+		SET value = $1, label = $2, sort_order = $3, is_active = $4, char_limit = $5
+		WHERE id = $6`,
+		entry.Value, entry.Label, entry.SortOrder, entry.IsActive, entry.CharLimit, entry.ID)
 	return err
 }
 

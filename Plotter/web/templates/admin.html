@@ -431,11 +431,28 @@
                                 <option value="">— Select Branch First —</option>
                             </select>
                         </div>
-                        <div class="form-group">
+                        <!-- Create mode: single workbox dropdown -->
+                        <div class="form-group" id="wbCreateGroup">
                             <label><i class="fas fa-inbox"></i> Workbox <span style="font-size:0.8em;color:#94a3b8;font-weight:400;">(ISM+ only)</span></label>
                             <select id="fieldDefaultISM" class="form-select">
                                 <option value="">— None —</option>
                             </select>
+                        </div>
+                        <!-- Edit mode: multi-workbox assignments panel -->
+                        <div class="form-group" id="wbEditGroup" style="display:none;">
+                            <label><i class="fas fa-inbox"></i> Workbox Assignments <span style="font-size:0.8em;color:#94a3b8;font-weight:400;">(ISM+ only)</span></label>
+                            <div id="adminWBAssignList" style="border:1px solid rgba(100,150,255,0.2);border-radius:6px;min-height:32px;margin-bottom:6px;max-height:120px;overflow-y:auto;">
+                                <div style="padding:8px 10px;color:#64748b;font-size:0.82rem;">Loading…</div>
+                            </div>
+                            <div style="display:flex;gap:6px;align-items:center;">
+                                <select id="adminWBAddSelect" class="form-select" style="flex:1;font-size:0.82rem;padding:4px 8px;">
+                                    <option value="">Add workbox…</option>
+                                </select>
+                                <label style="display:flex;align-items:center;gap:4px;font-size:0.78rem;color:#94a3b8;white-space:nowrap;">
+                                    <input type="checkbox" id="adminWBIsPrimary"> Primary
+                                </label>
+                                <button type="button" class="btn-secondary" style="padding:4px 10px;font-size:0.82rem;" onclick="adminAddWorkboxAssignment()"><i class="fas fa-plus"></i></button>
+                            </div>
                         </div>
                     </div>
                     <div class="form-row">

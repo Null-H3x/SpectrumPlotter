@@ -73,6 +73,9 @@ func main() {
 	sessionRepo := repositories.NewSessionRepository(sqlxDB)
 	accountReqRepo := repositories.NewAccountRequestRepository(sqlxDB)
 	sfafLookupRepo := repositories.NewSFAFLookupRepository(sqlxDB)
+	sfafCategoryRepo := repositories.NewSFAFFieldCategoryRepository(sqlxDB)
+	sfafFieldDefRepo := repositories.NewSFAFFieldDefinitionRepository(sqlxDB)
+	sfafRequiredRepo := repositories.NewSFAFRequiredFieldRepository(sqlxDB)
 	serialNumberRepo := repositories.NewSerialNumberRepository(sqlxDB)
 
 	// Initialize services
@@ -108,6 +111,9 @@ func main() {
 	systemConfigHandler := handlers.NewSystemConfigHandler(systemConfigRepo)
 	installationHandler := handlers.NewInstallationHandler(installationRepo)
 	sfafLookupHandler := handlers.NewSFAFLookupHandler(sfafLookupRepo)
+	sfafCategoryHandler := handlers.NewSFAFFieldCategoryHandler(sfafCategoryRepo)
+	sfafFieldDefHandler := handlers.NewSFAFFieldDefinitionHandler(sfafFieldDefRepo)
+	sfafRequiredHandler := handlers.NewSFAFRequiredFieldHandler(sfafRequiredRepo)
 	serialNumberHandler := handlers.NewSerialNumberHandler(serialNumberRepo, frequencyRepo)
 	authHandler := handlers.NewAuthHandler(authService, userRepo)
 	adminHandler := handlers.NewAdminHandler(authService, userRepo, accountReqRepo, frequencyRepo)
@@ -415,6 +421,10 @@ func main() {
 			frequency.POST("/workboxes", frequencyHandler.CreateWorkbox)
 			frequency.PUT("/workboxes/:id", frequencyHandler.UpdateWorkbox)
 			frequency.DELETE("/workboxes/:id", frequencyHandler.DeleteWorkbox)
+			frequency.GET("/workboxes/:id/members", frequencyHandler.GetWorkboxMembers)
+			frequency.POST("/workboxes/:id/members", frequencyHandler.AddWorkboxMember)
+			frequency.DELETE("/workboxes/:id/members/:user_id", frequencyHandler.RemoveWorkboxMember)
+			frequency.GET("/users/:id/workboxes", frequencyHandler.GetUserWorkboxAssignments)
 		}
 
 		// ADMIN USER MANAGEMENT ROUTES
@@ -456,6 +466,19 @@ func main() {
 		api.POST("/sfaf-lookup", sfafLookupHandler.Create)
 		api.PUT("/sfaf-lookup/:id", sfafLookupHandler.Update)
 		api.DELETE("/sfaf-lookup/:id", sfafLookupHandler.Delete)
+
+		api.GET("/sfaf-categories", sfafCategoryHandler.GetAll)
+		api.POST("/sfaf-categories", sfafCategoryHandler.Create)
+		api.PUT("/sfaf-categories/:id", sfafCategoryHandler.Update)
+		api.DELETE("/sfaf-categories/:id", sfafCategoryHandler.Delete)
+
+		api.GET("/sfaf-field-defs", sfafFieldDefHandler.GetAll)
+		api.PUT("/sfaf-field-defs/:id", sfafFieldDefHandler.Update)
+
+		api.GET("/sfaf-required", sfafRequiredHandler.GetAll)
+		api.POST("/sfaf-required", sfafRequiredHandler.Create)
+		api.DELETE("/sfaf-required/:id", sfafRequiredHandler.Delete)
+		api.DELETE("/sfaf-required", sfafRequiredHandler.DeleteByScope)
 
 		// ── Country Capabilities (map sidebar) ──────────────────────────────
 		type countryCap struct {
