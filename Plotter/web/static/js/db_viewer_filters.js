@@ -695,6 +695,11 @@ Object.assign(DatabaseViewer.prototype, {
         }
     },
 
+    restoreQueryState() {
+        // No-op stub — query builder state is not persisted across sessions.
+        // This method must exist so init() does not crash before addQueryCondition() runs.
+    },
+
     runQuery() {
         console.log('🔍 Running query...', 'Total conditions:', this.queryConditions.length);
         console.log('📊 Current SFAF Data count:', this.currentSFAFData?.length || 0);
