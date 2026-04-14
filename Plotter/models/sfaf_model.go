@@ -1938,6 +1938,7 @@ type SFAFGeo struct {
 	*SFAF
 	Latitude  float64
 	Longitude float64
+	HasCoords bool // true when a matched marker record with coordinates was found
 }
 
 // SFAFStatistics represents comprehensive statistics for SFAF records (Source: handlers.txt)

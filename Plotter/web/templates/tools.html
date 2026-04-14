@@ -362,23 +362,32 @@
                     <input type="text" id="ew-emission-desig" placeholder="e.g. 16K0F3E" />
                 </div>
                 <div class="form-group">
-                    <label>Polarization</label>
-                    <input type="text" id="ew-polarization" placeholder="e.g. H, V, C" />
+                    <label>Polarization (Field 363)</label>
+                    <select id="ew-polarization">
+                        <option value="V">V – Vertical (default)</option>
+                        <option value="H">H – Horizontal</option>
+                        <option value="L">L – Left-hand circular</option>
+                        <option value="R">R – Right-hand circular</option>
+                        <option value="F">F – 45-degree linear</option>
+                        <option value="T">T – H + V</option>
+                        <option value="D">D – Rotating</option>
+                        <option value="E">E – Elliptical</option>
+                    </select>
                 </div>
                 <div class="form-group">
-                    <label>Power (W)</label>
-                    <input type="text" id="ew-power" placeholder="e.g. 100" />
+                    <label>Power (Field 115)</label>
+                    <input type="text" id="ew-power" placeholder="e.g. W50, K2, W100" />
                 </div>
                 <div class="form-group">
-                    <label>Antenna Gain (dBi)</label>
-                    <input type="text" id="ew-antenna-gain" placeholder="e.g. 6" />
+                    <label>Antenna Gain (dBi, Field 357)</label>
+                    <input type="number" id="ew-antenna-gain" placeholder="e.g. 6" step="0.1" />
                 </div>
                 <div class="form-group">
-                    <label>Jamming Sector (°)</label>
-                    <input type="text" id="ew-jamming-sector" placeholder="e.g. 360" />
+                    <label>Jamming Sector (Field 362)</label>
+                    <input type="text" id="ew-jamming-sector" placeholder="ND, 045, or 045 to 110" />
                 </div>
                 <div class="form-group">
-                    <label>Antenna Height (m)</label>
+                    <label>Antenna Height (m, Field 359)</label>
                     <input type="text" id="ew-antenna-height" placeholder="e.g. 5" />
                 </div>
             </div>
@@ -419,6 +428,11 @@
                         <option value="S">SECRET</option>
                         <option value="TS">TOP SECRET</option>
                     </select>
+                </div>
+                <div class="form-group">
+                    <label>I-Threshold (dBW)</label>
+                    <input type="number" id="ew-threshold" value="-120" step="1"
+                           title="Interference threshold in dBW. Conflicts declared when received interference power exceeds this value. Default -120 dBW." />
                 </div>
             </div>
         </div>
@@ -464,10 +478,12 @@
                             <tr>
                                 <th>Serial</th>
                                 <th>Frequency</th>
-                                <th>Station Class</th>
+                                <th>Stn Class</th>
                                 <th>Agency</th>
                                 <th>Location</th>
-                                <th>Distance (km)</th>
+                                <th>Dist (km)</th>
+                                <th title="Received interference power (dBW)">I (dBW)</th>
+                                <th title="Interference Conflict Margin — positive values are conflicts">ICM (dB)</th>
                             </tr>
                         </thead>
                         <tbody id="tbody-assignment"></tbody>
@@ -482,10 +498,12 @@
                             <tr>
                                 <th>Serial</th>
                                 <th>Frequency</th>
-                                <th>Station Class</th>
+                                <th>Stn Class</th>
                                 <th>Agency</th>
                                 <th>Location</th>
-                                <th>Distance (km)</th>
+                                <th>Dist (km)</th>
+                                <th>I (dBW)</th>
+                                <th>ICM (dB)</th>
                             </tr>
                         </thead>
                         <tbody id="tbody-jrfl"></tbody>
@@ -503,10 +521,12 @@
                             <tr>
                                 <th>Serial</th>
                                 <th>Frequency</th>
-                                <th>Station Class</th>
+                                <th>Stn Class</th>
                                 <th>Agency</th>
                                 <th>Location</th>
-                                <th>Distance (km)</th>
+                                <th>Dist (km)</th>
+                                <th>I (dBW)</th>
+                                <th>ICM (dB)</th>
                             </tr>
                         </thead>
                         <tbody id="tbody-ceoi"></tbody>
@@ -520,6 +540,31 @@
             <i class="fas fa-check-circle" style="color:#22c55e;"></i>
             <p style="color:#22c55e; font-weight:600; margin-bottom:4px;">No Conflicts Found</p>
             <p id="ew-no-conflict-detail"></p>
+        </div>
+
+        <!-- Flagged records (no coordinates — cannot be fully analyzed) -->
+        <div id="ew-flagged-section" style="display:none; margin-top:20px;">
+            <div style="border-top:2px dashed #334155; margin-bottom:14px; padding-top:14px;">
+                <span style="font-size:12px; color:#64748b; text-transform:uppercase; letter-spacing:0.05em;">
+                    <i class="fas fa-flag" style="color:#f59e0b; margin-right:6px;"></i>
+                    Flagged — No Coordinates (<span id="flagged-count">0</span> records) — Manual Review Required
+                </span>
+            </div>
+            <div class="conflict-table-wrap">
+                <table class="conflict-table">
+                    <thead>
+                        <tr>
+                            <th>Serial</th>
+                            <th>Frequency</th>
+                            <th>Stn Class</th>
+                            <th>Agency</th>
+                            <th>Location</th>
+                            <th>Reason</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody-flagged"></tbody>
+                </table>
+            </div>
         </div>
 
     </div><!-- /tool-ew-deconfliction -->
@@ -543,17 +588,35 @@ function selectResultTab(id, btn) {
 
 function buildConflictRows(conflicts) {
     if (!conflicts || conflicts.length === 0) {
-        return '<tr><td colspan="6"><div class="empty-state" style="padding:24px;"><i class="fas fa-check-circle" style="color:#22c55e;font-size:22px;margin-bottom:6px;display:block;"></i><p style="color:#22c55e;">No conflicts</p></div></td></tr>';
+        return '<tr><td colspan="8"><div class="empty-state" style="padding:24px;"><i class="fas fa-check-circle" style="color:#22c55e;font-size:22px;margin-bottom:6px;display:block;"></i><p style="color:#22c55e;">No conflicts</p></div></td></tr>';
     }
-    return conflicts.map(c => `
-        <tr>
+    return conflicts.map(c => {
+        const icmColor = c.icm >= 10 ? '#f87171' : c.icm >= 0 ? '#fb923c' : '#64748b';
+        const icmStr = (c.icm !== undefined && c.icm !== null) ? (c.icm >= 0 ? '+' : '') + c.icm.toFixed(1) + ' dB' : '—';
+        const pwrStr = (c.received_power_dbw !== undefined && c.received_power_dbw !== null) ? c.received_power_dbw.toFixed(1) + ' dBW' : '—';
+        return `<tr>
             <td>${escHtml(c.serial)}</td>
             <td><span class="freq-badge">${escHtml(c.frequency)}</span></td>
             <td>${escHtml(c.station_class)}</td>
             <td>${escHtml(c.agency)}</td>
             <td>${escHtml(c.location)}</td>
             <td>${c.distance_km > 0 ? c.distance_km.toFixed(1) + ' km' : '—'}</td>
-        </tr>`).join('');
+            <td style="font-family:monospace;font-size:12px;">${pwrStr}</td>
+            <td style="font-family:monospace;font-size:12px;color:${icmColor};font-weight:600;">${icmStr}</td>
+        </tr>`;
+    }).join('');
+}
+
+function buildFlaggedRows(records) {
+    if (!records || records.length === 0) return '';
+    return records.map(c => `<tr>
+        <td>${escHtml(c.serial)}</td>
+        <td><span class="freq-badge">${escHtml(c.frequency)}</span></td>
+        <td>${escHtml(c.station_class)}</td>
+        <td>${escHtml(c.agency)}</td>
+        <td>${escHtml(c.location)}</td>
+        <td style="color:#f59e0b;font-size:12px;">${escHtml(c.flag_reason)}</td>
+    </tr>`).join('');
 }
 
 function escHtml(s) {
@@ -592,7 +655,7 @@ async function runEWDeconfliction() {
         freq_low:        freqLow,
         freq_high:       document.getElementById('ew-freq-high').value.trim(),
         emission_desig:  document.getElementById('ew-emission-desig').value.trim(),
-        polarization:    document.getElementById('ew-polarization').value.trim(),
+        polarization:    document.getElementById('ew-polarization').value,
         power:           document.getElementById('ew-power').value.trim(),
         antenna_gain:    document.getElementById('ew-antenna-gain').value.trim(),
         jamming_sector:  document.getElementById('ew-jamming-sector').value.trim(),
@@ -604,6 +667,7 @@ async function runEWDeconfliction() {
         radius_km:       parseFloat(document.getElementById('ew-radius-km').value) || 0,
         mission_date:    document.getElementById('ew-mission-date').value,
         classification:  document.getElementById('ew-classification').value,
+        threshold_dbw:   parseFloat(document.getElementById('ew-threshold').value) || -120,
     };
 
     try {
@@ -618,7 +682,9 @@ async function runEWDeconfliction() {
         }
         const data = await resp.json();
         renderEWResults(data);
-        statusMsg.textContent = `Scanned ${data.total_scanned} records.`;
+        const flagCount = (data.flagged_records || []).length;
+        statusMsg.textContent = `Scanned ${data.total_scanned} records` +
+            (flagCount ? ` · ${flagCount} flagged (no coords)` : '') + '.';
         statusMsg.style.color = '#64748b';
     } catch (e) {
         statusMsg.textContent = 'Error: ' + e.message;
@@ -634,17 +700,25 @@ function renderEWResults(data) {
     const jrflCount   = (data.jrfl_conflicts || []).length;
     const ceoisCount  = (data.ceoi_conflicts || []).length;
     const total = assignCount + jrflCount + ceoisCount;
+    const flagCount   = (data.flagged_records || []).length;
 
-    // Update freq display
+    // Update freq/threshold display
     const freqDisplay = document.getElementById('ew-freq-display');
     if (data.jammer_freq_mhz && data.jammer_freq_mhz[0] !== undefined) {
         const lo = data.jammer_freq_mhz[0].toFixed(4);
         const hi = data.jammer_freq_mhz[1].toFixed(4);
-        freqDisplay.textContent = lo === hi
+        const thr = (data.threshold_dbw !== undefined) ? ` · Threshold: ${data.threshold_dbw} dBW` : '';
+        freqDisplay.textContent = (lo === hi
             ? `Jammer frequency: ${lo} MHz`
-            : `Jammer frequency range: ${lo} – ${hi} MHz`;
+            : `Jammer frequency range: ${lo} – ${hi} MHz`) + thr;
         freqDisplay.classList.add('visible');
     }
+
+    // Flagged records
+    const flagSection = document.getElementById('ew-flagged-section');
+    document.getElementById('flagged-count').textContent = flagCount;
+    document.getElementById('tbody-flagged').innerHTML = buildFlaggedRows(data.flagged_records);
+    flagSection.style.display = flagCount > 0 ? 'block' : 'none';
 
     // Populate tables
     document.getElementById('tbody-assignment').innerHTML = buildConflictRows(data.assignment_conflicts);

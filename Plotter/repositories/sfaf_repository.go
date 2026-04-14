@@ -584,51 +584,82 @@ func (r *SFAFRepository) CreateSFAFField(field *models.SFAFField) error {
 	return err
 }
 
+// GetAllWithMarkers returns all SFAF records joined with their marker coordinates via LEFT JOIN.
+// Records without a marker get HasCoords=false and Latitude/Longitude=0.
 func (r *SFAFRepository) GetAllWithMarkers() ([]*models.SFAFGeo, error) {
 	query := `
-        SELECT 
+        SELECT
             s.id, s.marker_id, s.created_at, s.updated_at,
-            s.field005, s.field006, s.field007, s.field010, s.field013, s.field014, s.field015, s.field016, s.field017, s.field018, s.field019, s.field020,
-            s.field102, s.field103, s.field105, s.field106, s.field107, s.field108, s.field110, s.field111, s.field112, s.field113, s.field114, s.field115, s.field116, s.field117, s.field118,
-            -- ... all other SFAF fields from repositories.txt ...
-            s.field999,
-            m.serial, m.frequency, m.latitude, m.longitude, m.notes
-        FROM sfafs s 
-        INNER JOIN markers m ON s.marker_id = m.id
+            COALESCE(s.field005,''), COALESCE(s.field006,''), COALESCE(s.field007,''), COALESCE(s.field010,''), COALESCE(s.field013,''), COALESCE(s.field014,''), COALESCE(s.field015,''), COALESCE(s.field016,''), COALESCE(s.field017,''), COALESCE(s.field018,''), COALESCE(s.field019,''), COALESCE(s.field020,''),
+            COALESCE(s.field102,''), COALESCE(s.field103,''), COALESCE(s.field105,''), COALESCE(s.field106,''), COALESCE(s.field107,''), COALESCE(s.field108,''), COALESCE(s.field110,''), COALESCE(s.field111,''), COALESCE(s.field112,''), COALESCE(s.field113,''), COALESCE(s.field114,''), COALESCE(s.field115,''), COALESCE(s.field116,''), COALESCE(s.field117,''), COALESCE(s.field118,''),
+            COALESCE(s.field130,''), COALESCE(s.field131,''), s.field140, s.field141, s.field142, s.field143, COALESCE(s.field144,''), COALESCE(s.field145,''), COALESCE(s.field146,''), COALESCE(s.field147,''), COALESCE(s.field151,''), COALESCE(s.field152,''),
+            COALESCE(s.field200,''), COALESCE(s.field201,''), COALESCE(s.field202,''), COALESCE(s.field203,''), COALESCE(s.field204,''), COALESCE(s.field205,''), COALESCE(s.field206,''), COALESCE(s.field207,''), COALESCE(s.field208,''), COALESCE(s.field209,''),
+            COALESCE(s.field300,''), COALESCE(s.field301,''), COALESCE(s.field302,''), COALESCE(s.field303,''), COALESCE(s.field304,''), COALESCE(s.field306,''),
+            s.field315, s.field316, s.field317, COALESCE(s.field318,''), s.field319, s.field321,
+            COALESCE(s.field340,''), COALESCE(s.field341,''), COALESCE(s.field342,''), COALESCE(s.field343,''), COALESCE(s.field344,''), COALESCE(s.field345,''), COALESCE(s.field346,''), COALESCE(s.field347,''), COALESCE(s.field348,''), COALESCE(s.field349,''),
+            COALESCE(s.field354,''), COALESCE(s.field355,''), s.field356, s.field357, s.field358, s.field359, s.field360, s.field361, COALESCE(s.field362,''), COALESCE(s.field363,''), s.field364, s.field365, COALESCE(s.field373,''), COALESCE(s.field374,''),
+            COALESCE(s.field400,''), COALESCE(s.field401,''), COALESCE(s.field403,''), COALESCE(s.field406,''), COALESCE(s.field407,''), COALESCE(s.field408,''), s.field415, s.field416, s.field417, COALESCE(s.field418,''), s.field419,
+            COALESCE(s.field440,''), COALESCE(s.field442,''), COALESCE(s.field443,''),
+            COALESCE(s.field453,''), COALESCE(s.field454,''), COALESCE(s.field455,''), s.field456, s.field457, s.field458, s.field459, s.field460, s.field461, COALESCE(s.field462,''), COALESCE(s.field463,''), s.field470, s.field471, s.field472, COALESCE(s.field473,''),
+            COALESCE(s.field500,''), COALESCE(s.field501,''), COALESCE(s.field502,''), COALESCE(s.field503,''), COALESCE(s.field504,''), COALESCE(s.field506,''), COALESCE(s.field511,''), COALESCE(s.field512,''), COALESCE(s.field513,''), COALESCE(s.field520,''), COALESCE(s.field521,''), COALESCE(s.field530,''), COALESCE(s.field531,''),
+            COALESCE(s.field701,''), COALESCE(s.field702,''), COALESCE(s.field704,''), COALESCE(s.field707,''), COALESCE(s.field710,''), COALESCE(s.field711,''), COALESCE(s.field716,''),
+            COALESCE(s.field801,''), COALESCE(s.field803,''), COALESCE(s.field804,''), s.field805, COALESCE(s.field806,''),
+            COALESCE(s.field901,''), COALESCE(s.field903,''), s.field904, COALESCE(s.field905,''), COALESCE(s.field906,''), COALESCE(s.field907,''), COALESCE(s.field910,''), s.field911, COALESCE(s.field924,''), s.field926, s.field927, s.field928,
+            COALESCE(s.field952,''), COALESCE(s.field953,''), COALESCE(s.field956,''), s.field957, COALESCE(s.field958,''), COALESCE(s.field959,''), COALESCE(s.field963,''), s.field964, s.field965,
+            COALESCE(s.field982,''), COALESCE(s.field983,''), COALESCE(s.field984,''), COALESCE(s.field985,''), COALESCE(s.field986,''), COALESCE(s.field987,''), COALESCE(s.field988,''), COALESCE(s.field989,''), COALESCE(s.field990,''), COALESCE(s.field991,''), COALESCE(s.field992,''), COALESCE(s.field993,''), COALESCE(s.field994,''), COALESCE(s.field995,''), COALESCE(s.field996,''), COALESCE(s.field997,''), COALESCE(s.field998,''), COALESCE(s.field999,''),
+            (m.id IS NOT NULL) AS has_marker,
+            COALESCE(m.latitude,  0.0) AS marker_lat,
+            COALESCE(m.longitude, 0.0) AS marker_lng
+        FROM sfafs s
+        LEFT JOIN markers m ON s.marker_id = m.id
         ORDER BY s.created_at DESC`
 
 	rows, err := r.db.Query(query)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query SFAF records with markers: %w", err)
+		return nil, fmt.Errorf("failed to query SFAF records for EW analysis: %w", err)
 	}
 	defer rows.Close()
 
 	var sfafs []*models.SFAFGeo
 	for rows.Next() {
 		var sfaf models.SFAF
-		var markerSerial, markerFreq, markerNotes string
+		var hasMarker bool
 		var markerLat, markerLng float64
 
-		// Scan SFAF fields and marker data (Source: repositories.txt scan pattern)
 		err := rows.Scan(
 			&sfaf.ID, &sfaf.MarkerID, &sfaf.CreatedAt, &sfaf.UpdatedAt,
 			&sfaf.Field005, &sfaf.Field006, &sfaf.Field007, &sfaf.Field010, &sfaf.Field013, &sfaf.Field014, &sfaf.Field015, &sfaf.Field016, &sfaf.Field017, &sfaf.Field018, &sfaf.Field019, &sfaf.Field020,
-			// ... continue with all SFAF fields from repositories.txt ...
-			&sfaf.Field999,
-			&markerSerial, &markerFreq, &markerLat, &markerLng, &markerNotes,
+			&sfaf.Field102, &sfaf.Field103, &sfaf.Field105, &sfaf.Field106, &sfaf.Field107, &sfaf.Field108, &sfaf.Field110, &sfaf.Field111, &sfaf.Field112, &sfaf.Field113, &sfaf.Field114, &sfaf.Field115, &sfaf.Field116, &sfaf.Field117, &sfaf.Field118,
+			&sfaf.Field130, &sfaf.Field131, &sfaf.Field140, &sfaf.Field141, &sfaf.Field142, &sfaf.Field143, &sfaf.Field144, &sfaf.Field145, &sfaf.Field146, &sfaf.Field147, &sfaf.Field151, &sfaf.Field152,
+			&sfaf.Field200, &sfaf.Field201, &sfaf.Field202, &sfaf.Field203, &sfaf.Field204, &sfaf.Field205, &sfaf.Field206, &sfaf.Field207, &sfaf.Field208, &sfaf.Field209,
+			&sfaf.Field300, &sfaf.Field301, &sfaf.Field302, &sfaf.Field303, &sfaf.Field304, &sfaf.Field306,
+			&sfaf.Field315, &sfaf.Field316, &sfaf.Field317, &sfaf.Field318, &sfaf.Field319, &sfaf.Field321,
+			&sfaf.Field340, &sfaf.Field341, &sfaf.Field342, &sfaf.Field343, &sfaf.Field344, &sfaf.Field345, &sfaf.Field346, &sfaf.Field347, &sfaf.Field348, &sfaf.Field349,
+			&sfaf.Field354, &sfaf.Field355, &sfaf.Field356, &sfaf.Field357, &sfaf.Field358, &sfaf.Field359, &sfaf.Field360, &sfaf.Field361, &sfaf.Field362, &sfaf.Field363, &sfaf.Field364, &sfaf.Field365, &sfaf.Field373, &sfaf.Field374,
+			&sfaf.Field400, &sfaf.Field401, &sfaf.Field403, &sfaf.Field406, &sfaf.Field407, &sfaf.Field408, &sfaf.Field415, &sfaf.Field416, &sfaf.Field417, &sfaf.Field418, &sfaf.Field419,
+			&sfaf.Field440, &sfaf.Field442, &sfaf.Field443,
+			&sfaf.Field453, &sfaf.Field454, &sfaf.Field455, &sfaf.Field456, &sfaf.Field457, &sfaf.Field458, &sfaf.Field459, &sfaf.Field460, &sfaf.Field461, &sfaf.Field462, &sfaf.Field463, &sfaf.Field470, &sfaf.Field471, &sfaf.Field472, &sfaf.Field473,
+			&sfaf.Field500, &sfaf.Field501, &sfaf.Field502, &sfaf.Field503, &sfaf.Field504, &sfaf.Field506, &sfaf.Field511, &sfaf.Field512, &sfaf.Field513, &sfaf.Field520, &sfaf.Field521, &sfaf.Field530, &sfaf.Field531,
+			&sfaf.Field701, &sfaf.Field702, &sfaf.Field704, &sfaf.Field707, &sfaf.Field710, &sfaf.Field711, &sfaf.Field716,
+			&sfaf.Field801, &sfaf.Field803, &sfaf.Field804, &sfaf.Field805, &sfaf.Field806,
+			&sfaf.Field901, &sfaf.Field903, &sfaf.Field904, &sfaf.Field905, &sfaf.Field906, &sfaf.Field907, &sfaf.Field910, &sfaf.Field911, &sfaf.Field924, &sfaf.Field926, &sfaf.Field927, &sfaf.Field928,
+			&sfaf.Field952, &sfaf.Field953, &sfaf.Field956, &sfaf.Field957, &sfaf.Field958, &sfaf.Field959, &sfaf.Field963, &sfaf.Field964, &sfaf.Field965,
+			&sfaf.Field982, &sfaf.Field983, &sfaf.Field984, &sfaf.Field985, &sfaf.Field986, &sfaf.Field987, &sfaf.Field988, &sfaf.Field989, &sfaf.Field990, &sfaf.Field991, &sfaf.Field992, &sfaf.Field993, &sfaf.Field994, &sfaf.Field995, &sfaf.Field996, &sfaf.Field997, &sfaf.Field998, &sfaf.Field999,
+			&hasMarker, &markerLat, &markerLng,
 		)
-
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan SFAF record with marker: %w", err)
+			return nil, fmt.Errorf("failed to scan SFAF/marker row: %w", err)
 		}
-
-		_ = markerSerial
-		_ = markerFreq
-		_ = markerNotes
-
-		sfafs = append(sfafs, &models.SFAFGeo{SFAF: &sfaf, Latitude: markerLat, Longitude: markerLng})
+		sfafs = append(sfafs, &models.SFAFGeo{
+			SFAF:      &sfaf,
+			Latitude:  markerLat,
+			Longitude: markerLng,
+			HasCoords: hasMarker,
+		})
 	}
-
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("row iteration error in GetAllWithMarkers: %w", err)
+	}
 	return sfafs, nil
 }
 
