@@ -1079,6 +1079,7 @@ Object.assign(DatabaseViewer.prototype, {
         console.log('🎨 Rendering query results...');
         this.renderQueryResults();
         this.updateQueryStats();
+        this._saveToQueryHistory(enabledConditions, sortedData.length);
 
         console.log(`✅ Query executed: ${enabledConditions.length} conditions, ${sortedData.length} results`);
     },
