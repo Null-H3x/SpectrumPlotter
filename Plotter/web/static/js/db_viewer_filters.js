@@ -236,13 +236,17 @@ Object.assign(DatabaseViewer.prototype, {
                     <div class="query-row">
                         <label>Operator:</label>
                         <select class="query-operator" data-query-id="${queryId}">
-                            <option value="contains">Contains</option>
-                            <option value="equals">Equals</option>
-                            <option value="not_equals">Not Equals</option>
-                            <option value="starts_with">Starts With</option>
-                            <option value="ends_with">Ends With</option>
-                            <option value="greater_than">Greater Than</option>
-                            <option value="less_than">Less Than</option>
+                            <option value="equals">= (Begins With)</option>
+                            <option value="exact_equals">== (Exactly Equals)</option>
+                            <option value="not_equals">&lt;&gt; (Not Equal / Does Not Begin With)</option>
+                            <option value="less_than">&lt; (Less Than)</option>
+                            <option value="greater_than">&gt; (Greater Than)</option>
+                            <option value="less_than_eq">&lt;= (Less Than or Equals)</option>
+                            <option value="greater_than_eq">&gt;= (Greater Than or Equals)</option>
+                            <option value="in">In (In Set — comma-separated begins-with)</option>
+                            <option value="between">.. (Between — use value1..value2)</option>
+                            <option value="contained_in">$ (Contained In — field within expr)</option>
+                            <option value="contains">$$ (Contains — field contains expr)</option>
                         </select>
                     </div>
                     <div class="query-row">
@@ -335,16 +339,30 @@ Object.assign(DatabaseViewer.prototype, {
             }))
         });
 
-        const filtered = records.filter(record => {
-            // All queries must pass (AND logic)
-            const matches = filterQueries.every(query => {
-                if (!query.field || !query.value) {
-                    console.log('⚠️ Skipping empty query:', query);
+        // Split conditions into AND groups separated by OR connectors
+        const buildGroups = (queries) => {
+            const groups = [];
+            let current = [];
+            queries.forEach((q, idx) => {
+                if (idx > 0 && q.connector === 'or') {
+                    groups.push(current);
+                    current = [];
+                }
+                current.push(q);
+            });
+            if (current.length > 0) groups.push(current);
+            return groups;
+        };
+
+        const groups = buildGroups(filterQueries);
+
+        const testCondition = (record, query) => {
+                if (!query.field || (query.operator !== 'exact_equals' && !query.value)) {
                     return true; // Skip empty queries
                 }
 
                 const fieldValue = this.getRecordFieldValue(record, query.field);
-                const queryValue = query.value.toLowerCase();
+                const queryValue = (query.value || '').toLowerCase();
                 const recordValue = String(fieldValue || '').toLowerCase();
 
                 console.log(`  Checking record ${record.id || record.serial}:`, {
@@ -356,41 +374,94 @@ Object.assign(DatabaseViewer.prototype, {
 
                 let result = false;
                 switch (query.operator) {
-                    case 'in':
-                        // "In (In Set)" - split by comma and check if value is in the set
-                        const setValues = queryValue.split(',').map(v => v.trim().toLowerCase());
-                        result = setValues.some(v => recordValue.includes(v));
-                        break;
-                    case 'contains':
-                        result = recordValue.includes(queryValue);
-                        break;
                     case 'equals':
-                        result = recordValue === queryValue;
-                        break;
-                    case 'not_equals':
-                        result = recordValue !== queryValue;
-                        break;
-                    case 'starts_with':
+                        // = : field begins with the expression (SXXI default)
                         result = recordValue.startsWith(queryValue);
                         break;
-                    case 'ends_with':
-                        result = recordValue.endsWith(queryValue);
+                    case 'exact_equals':
+                        // == : exact match; empty expression matches blank fields
+                        result = queryValue === '' ? recordValue === '' : recordValue === queryValue;
                         break;
-                    case 'greater_than':
-                        result = parseFloat(recordValue) > parseFloat(queryValue);
+                    case 'not_equals':
+                        // <> : field does NOT begin with the expression
+                        result = !recordValue.startsWith(queryValue);
                         break;
-                    case 'less_than':
-                        result = parseFloat(recordValue) < parseFloat(queryValue);
+                    case 'less_than': {
+                        // < : alphabetically/numerically less than
+                        const aLT = parseFloat(recordValue);
+                        const bLT = parseFloat(queryValue);
+                        result = isNaN(aLT) || isNaN(bLT) ? recordValue < queryValue : aLT < bLT;
                         break;
+                    }
+                    case 'greater_than': {
+                        // > : alphabetically/numerically greater than
+                        const aGT = parseFloat(recordValue);
+                        const bGT = parseFloat(queryValue);
+                        result = isNaN(aGT) || isNaN(bGT) ? recordValue > queryValue : aGT > bGT;
+                        break;
+                    }
+                    case 'less_than_eq': {
+                        // <= : less than or equal
+                        const aLTE = parseFloat(recordValue);
+                        const bLTE = parseFloat(queryValue);
+                        result = isNaN(aLTE) || isNaN(bLTE) ? recordValue <= queryValue : aLTE <= bLTE;
+                        break;
+                    }
+                    case 'greater_than_eq': {
+                        // >= : greater than or equal
+                        const aGTE = parseFloat(recordValue);
+                        const bGTE = parseFloat(queryValue);
+                        result = isNaN(aGTE) || isNaN(bGTE) ? recordValue >= queryValue : aGTE >= bGTE;
+                        break;
+                    }
+                    case 'in': {
+                        // In : comma-separated list; record begins with any entry
+                        const setValues = queryValue.split(',').map(v => v.trim());
+                        result = setValues.some(v => recordValue.startsWith(v));
+                        break;
+                    }
+                    case 'between': {
+                        // .. : expression is "low..high"; record must be >= low and <= high
+                        const parts = queryValue.split('..');
+                        if (parts.length === 2) {
+                            const low = parts[0].trim();
+                            const high = parts[1].trim();
+                            const loNum = parseFloat(low);
+                            const hiNum = parseFloat(high);
+                            const recNum = parseFloat(recordValue);
+                            if (!isNaN(loNum) && !isNaN(hiNum) && !isNaN(recNum)) {
+                                result = recNum >= loNum && recNum <= hiNum;
+                            } else {
+                                result = recordValue >= low && recordValue <= high;
+                            }
+                        } else {
+                            result = false;
+                        }
+                        break;
+                    }
+                    case 'contained_in': {
+                        // $ : comma-separated expressions; match if ANY entry contains the field value
+                        const ciEntries = queryValue.split(',').map(v => v.trim());
+                        result = ciEntries.some(entry => entry.includes(recordValue));
+                        break;
+                    }
+                    case 'contains': {
+                        // $$ : field contains any of the comma-separated expressions
+                        const cExprs = queryValue.split(',').map(v => v.trim());
+                        result = cExprs.some(expr => recordValue.includes(expr));
+                        break;
+                    }
                     default:
                         result = true;
                 }
 
                 if (query.negate) result = !result;
                 return result;
-            });
+        };
 
-            return matches;
+        const filtered = records.filter(record => {
+            // Record passes if ANY OR-group passes (group = all its AND conditions must pass)
+            return groups.some(group => group.every(query => testCondition(record, query)));
         });
 
         console.log(`✅ Filtering complete: ${filtered.length} records matched`);
@@ -435,27 +506,27 @@ Object.assign(DatabaseViewer.prototype, {
             switch (filterType) {
                 case 'hf':
                     if (fieldSelect) fieldSelect.value = 'frequency';
-                    if (operatorSelect) operatorSelect.value = 'starts_with';
+                    if (operatorSelect) operatorSelect.value = 'equals';  // begins with
                     if (valueInput) valueInput.value = 'K';
                     break;
                 case 'vhf':
                     if (fieldSelect) fieldSelect.value = 'frequency';
-                    if (operatorSelect) operatorSelect.value = 'starts_with';
+                    if (operatorSelect) operatorSelect.value = 'equals';  // begins with
                     if (valueInput) valueInput.value = 'M';
                     break;
                 case 'uhf':
                     if (fieldSelect) fieldSelect.value = 'frequency';
-                    if (operatorSelect) operatorSelect.value = 'contains';
+                    if (operatorSelect) operatorSelect.value = 'contains';  // $ contains
                     if (valueInput) valueInput.value = 'M';
                     break;
                 case 'imported':
                     if (fieldSelect) fieldSelect.value = 'marker_type';
-                    if (operatorSelect) operatorSelect.value = 'equals';
+                    if (operatorSelect) operatorSelect.value = 'exact_equals';
                     if (valueInput) valueInput.value = 'imported';
                     break;
                 case 'manual':
                     if (fieldSelect) fieldSelect.value = 'marker_type';
-                    if (operatorSelect) operatorSelect.value = 'equals';
+                    if (operatorSelect) operatorSelect.value = 'exact_equals';
                     if (valueInput) valueInput.value = 'manual';
                     break;
             }
@@ -632,21 +703,29 @@ Object.assign(DatabaseViewer.prototype, {
             '<option value="created_at">Date Created</option>'
         ].join('');
 
+        const isFirst = this.queryConditions.length === 0;
         const conditionHTML = `
             <div class="condition-item" data-condition-id="${conditionId}">
+                <select class="condition-connector" data-condition-id="${conditionId}" style="${isFirst ? 'visibility:hidden' : ''}">
+                    <option value="and">AND</option>
+                    <option value="or">OR</option>
+                </select>
                 <input type="checkbox" class="condition-checkbox" checked data-condition-id="${conditionId}">
                 <select class="condition-field" data-condition-id="${conditionId}">
                     ${fieldOptions}
                 </select>
                 <select class="condition-operator" data-condition-id="${conditionId}">
-                    <option value="in">In (In Set)</option>
-                    <option value="contains">Contains</option>
-                    <option value="equals">Equals</option>
-                    <option value="not_equals">Not Equals</option>
-                    <option value="starts_with">Starts With</option>
-                    <option value="ends_with">Ends With</option>
-                    <option value="greater_than">Greater Than</option>
-                    <option value="less_than">Less Than</option>
+                    <option value="equals">= (Begins With)</option>
+                    <option value="exact_equals">== (Exactly Equals)</option>
+                    <option value="not_equals">&lt;&gt; (Not Equal / Does Not Begin With)</option>
+                    <option value="less_than">&lt; (Less Than)</option>
+                    <option value="greater_than">&gt; (Greater Than)</option>
+                    <option value="less_than_eq">&lt;= (Less Than or Equals)</option>
+                    <option value="greater_than_eq">&gt;= (Greater Than or Equals)</option>
+                    <option value="in">In (In Set — comma-separated begins-with)</option>
+                    <option value="between">.. (Between — use value1..value2)</option>
+                    <option value="contained_in">$ (Contained In — field within expr)</option>
+                    <option value="contains">$$ (Contains — field contains expr)</option>
                 </select>
                 <label class="condition-not-label" title="Negate this condition">
                     <input type="checkbox" class="condition-negate" data-condition-id="${conditionId}">
@@ -663,10 +742,11 @@ Object.assign(DatabaseViewer.prototype, {
 
         this.queryConditions.push({
             id: conditionId,
+            connector: 'and',
             enabled: true,
             negate: false,
-            field: 'serial',
-            operator: 'in',
+            field: 'field110',
+            operator: 'equals',
             value: ''
         });
 
@@ -692,6 +772,11 @@ Object.assign(DatabaseViewer.prototype, {
         // Always keep at least one condition row
         if (this.queryConditions.length === 0) {
             this.addQueryCondition();
+        } else {
+            // Ensure the first row's connector is hidden
+            const firstId = this.queryConditions[0].id;
+            const firstConnector = document.querySelector(`.condition-connector[data-condition-id="${firstId}"]`);
+            if (firstConnector) firstConnector.style.visibility = 'hidden';
         }
     },
 
@@ -706,13 +791,14 @@ Object.assign(DatabaseViewer.prototype, {
 
         // Collect condition values from UI
         this.queryConditions.forEach(condition => {
+            const connectorSelect = document.querySelector(`.condition-connector[data-condition-id="${condition.id}"]`);
             const checkbox = document.querySelector(`.condition-checkbox[data-condition-id="${condition.id}"]`);
             const fieldSelect = document.querySelector(`.condition-field[data-condition-id="${condition.id}"]`);
             const operatorSelect = document.querySelector(`.condition-operator[data-condition-id="${condition.id}"]`);
             const valueInput = document.querySelector(`.condition-value[data-condition-id="${condition.id}"]`);
-
             const negateBox = document.querySelector(`.condition-negate[data-condition-id="${condition.id}"]`);
 
+            if (connectorSelect) condition.connector = connectorSelect.value;
             if (checkbox) condition.enabled = checkbox.checked;
             if (fieldSelect) condition.field = fieldSelect.value;
             if (operatorSelect) condition.operator = operatorSelect.value;
@@ -721,9 +807,11 @@ Object.assign(DatabaseViewer.prototype, {
         });
 
         // Filter only enabled conditions with non-empty values
+        // Exception: exact_equals with empty value is valid (finds blank fields)
         const enabledConditions = this.queryConditions.filter(c => {
-            const hasValue = c.value && c.value.trim().length > 0;
-            return c.enabled && hasValue;
+            if (!c.enabled) return false;
+            if (c.operator === 'exact_equals') return true;
+            return c.value && c.value.trim().length > 0;
         });
 
         console.log('📊 Enabled conditions with values:', enabledConditions.length);
