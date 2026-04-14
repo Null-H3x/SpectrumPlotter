@@ -785,6 +785,248 @@ Object.assign(DatabaseViewer.prototype, {
         // This method must exist so init() does not crash before addQueryCondition() runs.
     },
 
+    async loadFieldLabels() {
+        try {
+            const response = await fetch('/js/field_labels.json');
+            if (response.ok) {
+                this.fieldLabels = await response.json();
+            }
+        } catch (e) {
+            console.warn('field_labels.json not found, using built-in defaults');
+        }
+        if (!this.fieldLabels) this.fieldLabels = {};
+    },
+
+    // ── Query History ────────────────────────────────────────────────────────
+
+    _queryHistoryKey: 'sfaf_plotter_query_history',
+    _queryHistoryMax: 25,
+
+    _getQueryHistory() {
+        try { return JSON.parse(localStorage.getItem(this._queryHistoryKey) || '[]'); }
+        catch (_) { return []; }
+    },
+
+    _saveToQueryHistory(queries, matchCount) {
+        if (!queries || queries.length === 0) return;
+        const entry = {
+            id: `qh_${Date.now()}`,
+            timestamp: new Date().toISOString(),
+            matchCount,
+            conditions: queries.map(q => ({ field: q.field, operator: q.operator, value: q.value, connector: q.connector || 'and', negate: q.negate || false })),
+        };
+        const history = this._getQueryHistory();
+        const last = history[0];
+        if (last && JSON.stringify(last.conditions) === JSON.stringify(entry.conditions)) return;
+        history.unshift(entry);
+        if (history.length > this._queryHistoryMax) history.length = this._queryHistoryMax;
+        try { localStorage.setItem(this._queryHistoryKey, JSON.stringify(history)); } catch (_) {}
+        this.renderQueryHistory();
+    },
+
+    renderQueryHistory() {
+        const list = document.getElementById('queryHistoryList');
+        if (!list) return;
+        const history = this._getQueryHistory();
+        if (history.length === 0) {
+            list.innerHTML = '<div style="padding:16px;text-align:center;color:#607d8b;font-size:0.8rem;font-style:italic;">No history yet</div>';
+            return;
+        }
+        list.innerHTML = history.map(entry => {
+            const date = new Date(entry.timestamp);
+            const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+            const summary = entry.conditions.map(c =>
+                `<span style="font-size:0.72rem;color:#94a3b8;">${c.field} <em>${(c.operator||'').replace('_',' ')}</em> <strong style="color:#c4b5fd;">${c.value}</strong></span>`
+            ).join('<br>');
+            return `
+                <div class="query-history-entry" onclick="databaseViewer.loadQueryFromHistory('${entry.id}')"
+                     style="padding:8px 12px;border-bottom:1px solid rgba(102,126,234,0.08);cursor:pointer;transition:background 0.15s;"
+                     onmouseover="this.style.background='rgba(102,126,234,0.1)'" onmouseout="this.style.background=''">
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+                        <span style="font-size:0.72rem;color:#64748b;">${dateStr} ${timeStr}</span>
+                        <span style="font-size:0.72rem;background:rgba(167,139,250,0.15);color:#a78bfa;border-radius:10px;padding:1px 7px;">${entry.matchCount} results</span>
+                    </div>
+                    ${summary}
+                </div>`;
+        }).join('');
+    },
+
+    loadQueryFromHistory(entryId) {
+        const history = this._getQueryHistory();
+        const entry = history.find(h => h.id === entryId);
+        if (!entry) return;
+        const container = document.getElementById('queryConditionsList');
+        if (!container) return;
+        container.innerHTML = '';
+        this.queryConditions = [];
+        entry.conditions.forEach(c => {
+            this.addQueryCondition();
+            const last = this.queryConditions[this.queryConditions.length - 1];
+            if (!last) return;
+            const allFields     = container.querySelectorAll('.condition-field');
+            const allOps        = container.querySelectorAll('.condition-operator');
+            const allVals       = container.querySelectorAll('.condition-value');
+            const allNegates    = container.querySelectorAll('.condition-negate');
+            const allConnectors = container.querySelectorAll('.condition-connector');
+            const idx = allFields.length - 1;
+            if (allFields[idx])     allFields[idx].value      = c.field    || '';
+            if (allOps[idx])        allOps[idx].value         = c.operator || 'equals';
+            if (allVals[idx])       allVals[idx].value        = c.value    || '';
+            if (allNegates[idx])    allNegates[idx].checked   = c.negate   || false;
+            if (allConnectors[idx]) allConnectors[idx].value  = c.connector || 'and';
+            last.field     = c.field;
+            last.operator  = c.operator;
+            last.value     = c.value;
+            last.negate    = c.negate    || false;
+            last.connector = c.connector || 'and';
+        });
+    },
+
+    clearQueryHistory() {
+        if (!confirm('Clear all query history?')) return;
+        localStorage.removeItem(this._queryHistoryKey);
+        this.renderQueryHistory();
+    },
+
+    // ── Saved Query Library ──────────────────────────────────────────────────
+
+    _savedQueriesKey: 'sfaf_plotter_saved_queries',
+
+    _getSavedQueries() {
+        try { return JSON.parse(localStorage.getItem(this._savedQueriesKey) || '[]'); }
+        catch (_) { return []; }
+    },
+
+    saveQueryToLibrary() {
+        const conditions = (this.queryConditions || []).map(c => {
+            const fieldSel     = document.querySelector(`.condition-field[data-condition-id="${c.id}"]`);
+            const opSel        = document.querySelector(`.condition-operator[data-condition-id="${c.id}"]`);
+            const valInp       = document.querySelector(`.condition-value[data-condition-id="${c.id}"]`);
+            const negateBox    = document.querySelector(`.condition-negate[data-condition-id="${c.id}"]`);
+            const connectorSel = document.querySelector(`.condition-connector[data-condition-id="${c.id}"]`);
+            return {
+                field:     fieldSel     ? fieldSel.value        : c.field,
+                operator:  opSel        ? opSel.value           : c.operator,
+                value:     valInp       ? valInp.value          : c.value,
+                enabled:   c.enabled    !== false,
+                negate:    negateBox    ? negateBox.checked     : (c.negate || false),
+                connector: connectorSel ? connectorSel.value    : (c.connector || 'and'),
+            };
+        }).filter(c => c.field && c.value);
+
+        if (conditions.length === 0) {
+            alert('Add at least one condition with a field and value before saving.');
+            return;
+        }
+        const name = prompt('Name this query:');
+        if (!name || !name.trim()) return;
+        const sortField = document.getElementById('querySortField')?.value || 'created_at';
+        const entry = {
+            id: `sq_${Date.now()}`,
+            name: name.trim(),
+            savedAt: new Date().toISOString(),
+            conditions,
+            sortField,
+            sortOrder: this.querySortOrder || 'asc',
+        };
+        const saved = this._getSavedQueries();
+        saved.unshift(entry);
+        try { localStorage.setItem(this._savedQueriesKey, JSON.stringify(saved)); } catch (_) {}
+        this.renderSavedQueries();
+        this._flashBtn('saveQueryBtn', 'Saved!');
+    },
+
+    renderSavedQueries() {
+        const list = document.getElementById('savedQueriesList');
+        if (!list) return;
+        const saved = this._getSavedQueries();
+        if (saved.length === 0) {
+            list.innerHTML = '<div style="padding:16px;text-align:center;color:#607d8b;font-size:0.8rem;font-style:italic;">No saved queries</div>';
+            return;
+        }
+        list.innerHTML = saved.map(entry => {
+            const summary = entry.conditions.map(c =>
+                `<span style="font-size:0.7rem;color:#94a3b8;">${c.field} <em>${(c.operator||'').replace('_',' ')}</em> <strong style="color:#93c5fd;">${c.value}</strong></span>`
+            ).join('<br>');
+            return `
+                <div style="padding:8px 12px;border-bottom:1px solid rgba(96,165,250,0.08);display:flex;flex-direction:column;gap:4px;">
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <span style="flex:1;font-size:0.8rem;font-weight:600;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                              title="${this.escapeHtml(entry.name)}">${this.escapeHtml(entry.name)}</span>
+                        <button title="Load query"
+                                onclick="databaseViewer.loadSavedQuery('${entry.id}')"
+                                style="background:rgba(96,165,250,0.15);border:none;color:#60a5fa;cursor:pointer;border-radius:4px;padding:2px 7px;font-size:0.72rem;">
+                            Load
+                        </button>
+                        <button title="Delete saved query"
+                                onclick="databaseViewer.deleteSavedQuery('${entry.id}')"
+                                style="background:rgba(248,113,113,0.1);border:none;color:#f87171;cursor:pointer;border-radius:4px;padding:2px 6px;font-size:0.72rem;">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    ${summary}
+                </div>`;
+        }).join('');
+    },
+
+    loadSavedQuery(id) {
+        const entry = this._getSavedQueries().find(q => q.id === id);
+        if (!entry) return;
+        const container = document.getElementById('queryConditionsList');
+        if (!container) return;
+        container.innerHTML = '';
+        this.queryConditions = [];
+        entry.conditions.forEach(c => {
+            this.addQueryCondition();
+            const last = this.queryConditions[this.queryConditions.length - 1];
+            if (!last) return;
+            const allFields     = container.querySelectorAll('.condition-field');
+            const allOps        = container.querySelectorAll('.condition-operator');
+            const allVals       = container.querySelectorAll('.condition-value');
+            const allNegates    = container.querySelectorAll('.condition-negate');
+            const allConnectors = container.querySelectorAll('.condition-connector');
+            const idx = allFields.length - 1;
+            if (allFields[idx])     { allFields[idx].value     = c.field    || ''; allFields[idx].dataset.conditionId     = last.id; }
+            if (allOps[idx])        { allOps[idx].value        = c.operator || 'equals'; allOps[idx].dataset.conditionId  = last.id; }
+            if (allVals[idx])       { allVals[idx].value       = c.value    || ''; allVals[idx].dataset.conditionId       = last.id; }
+            if (allNegates[idx])    { allNegates[idx].checked  = c.negate   || false; allNegates[idx].dataset.conditionId = last.id; }
+            if (allConnectors[idx]) { allConnectors[idx].value = c.connector || 'and'; }
+            last.field     = c.field;
+            last.operator  = c.operator;
+            last.value     = c.value;
+            last.enabled   = c.enabled !== false;
+            last.negate    = c.negate    || false;
+            last.connector = c.connector || 'and';
+        });
+        const sortFieldEl = document.getElementById('querySortField');
+        if (sortFieldEl && entry.sortField) sortFieldEl.value = entry.sortField;
+        if (entry.sortOrder === 'desc') {
+            document.getElementById('sortDescBtn')?.classList.add('active');
+            document.getElementById('sortAscBtn')?.classList.remove('active');
+            this.querySortOrder = 'desc';
+        } else {
+            document.getElementById('sortAscBtn')?.classList.add('active');
+            document.getElementById('sortDescBtn')?.classList.remove('active');
+            this.querySortOrder = 'asc';
+        }
+    },
+
+    deleteSavedQuery(id) {
+        const saved = this._getSavedQueries().filter(q => q.id !== id);
+        try { localStorage.setItem(this._savedQueriesKey, JSON.stringify(saved)); } catch (_) {}
+        this.renderSavedQueries();
+    },
+
+    _flashBtn(btnId, text) {
+        const btn = document.getElementById(btnId);
+        if (!btn) return;
+        const original = btn.innerHTML;
+        btn.innerHTML = `<i class="fas fa-check"></i> ${text}`;
+        btn.disabled = true;
+        setTimeout(() => { btn.innerHTML = original; btn.disabled = false; }, 1500);
+    },
+
     runQuery() {
         console.log('🔍 Running query...', 'Total conditions:', this.queryConditions.length);
         console.log('📊 Current SFAF Data count:', this.currentSFAFData?.length || 0);
