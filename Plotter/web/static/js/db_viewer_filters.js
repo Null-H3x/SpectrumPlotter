@@ -750,15 +750,7 @@ Object.assign(DatabaseViewer.prototype, {
             value: ''
         });
 
-        const currentTotal = this.queryConditions.length;
-        console.log(`✅ Added query condition: ${conditionId}`);
-        console.log(`   Total conditions now: ${currentTotal}`);
-        console.log(`   All condition IDs:`, this.queryConditions.map(c => c.id));
-
-        // Reset the flag after a short delay
-        setTimeout(() => {
-            this._isAddingCondition = false;
-        }, 100);
+        this._isAddingCondition = false;
     },
 
     removeCondition(conditionId) {
