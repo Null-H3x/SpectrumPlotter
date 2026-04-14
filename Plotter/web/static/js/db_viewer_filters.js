@@ -945,29 +945,22 @@ Object.assign(DatabaseViewer.prototype, {
             list.innerHTML = '<div style="padding:16px;text-align:center;color:#607d8b;font-size:0.8rem;font-style:italic;">No saved queries</div>';
             return;
         }
-        list.innerHTML = saved.map(entry => {
-            const summary = entry.conditions.map(c =>
-                `<span style="font-size:0.7rem;color:#94a3b8;">${c.field} <em>${(c.operator||'').replace('_',' ')}</em> <strong style="color:#93c5fd;">${c.value}</strong></span>`
-            ).join('<br>');
-            return `
-                <div style="padding:8px 12px;border-bottom:1px solid rgba(96,165,250,0.08);display:flex;flex-direction:column;gap:4px;">
-                    <div style="display:flex;align-items:center;gap:6px;">
-                        <span style="flex:1;font-size:0.8rem;font-weight:600;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
-                              title="${this.escapeHtml(entry.name)}">${this.escapeHtml(entry.name)}</span>
-                        <button title="Load query"
-                                onclick="databaseViewer.loadSavedQuery('${entry.id}')"
-                                style="background:rgba(96,165,250,0.15);border:none;color:#60a5fa;cursor:pointer;border-radius:4px;padding:2px 7px;font-size:0.72rem;">
-                            Load
-                        </button>
-                        <button title="Delete saved query"
-                                onclick="databaseViewer.deleteSavedQuery('${entry.id}')"
-                                style="background:rgba(248,113,113,0.1);border:none;color:#f87171;cursor:pointer;border-radius:4px;padding:2px 6px;font-size:0.72rem;">
-                            <i class="fas fa-times"></i>
-                        </button>
-                    </div>
-                    ${summary}
-                </div>`;
-        }).join('');
+        list.innerHTML = saved.map(entry => `
+                <div style="padding:6px 12px;border-bottom:1px solid rgba(96,165,250,0.08);display:flex;align-items:center;gap:6px;">
+                    <span style="flex:1;font-size:0.8rem;font-weight:600;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                          title="${this.escapeHtml(entry.name)}">${this.escapeHtml(entry.name)}</span>
+                    <button title="Load query"
+                            onclick="databaseViewer.loadSavedQuery('${entry.id}')"
+                            style="background:rgba(96,165,250,0.15);border:none;color:#60a5fa;cursor:pointer;border-radius:4px;padding:2px 7px;font-size:0.72rem;">
+                        Load
+                    </button>
+                    <button title="Delete saved query"
+                            onclick="databaseViewer.deleteSavedQuery('${entry.id}')"
+                            style="background:rgba(248,113,113,0.1);border:none;color:#f87171;cursor:pointer;border-radius:4px;padding:2px 6px;font-size:0.72rem;">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>`
+        ).join('');
     },
 
     loadSavedQuery(id) {
