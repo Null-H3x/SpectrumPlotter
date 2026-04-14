@@ -848,12 +848,14 @@ func (ss *SFAFService) GetAllSFAFsWithMarkers() ([]*models.SFAF, error) {
 }
 
 func (ss *SFAFService) ImportSFAFFile(file io.Reader, filename string) (*models.SFAFImportResult, error) {
+	startTime := time.Now()
 	result := &models.SFAFImportResult{
-		TotalRecords:    0,
+		TotalRecords: 0,
 		SuccessfulCount: 0,
 		ErrorCount:      0,
 		Errors:          []string{},
 		ImportedIDs:     []string{},
+		ActionCounts:    map[string]int{},
 	}
 
 	// Parse all records from the file
@@ -864,6 +866,23 @@ func (ss *SFAFService) ImportSFAFFile(file io.Reader, filename string) (*models.
 
 	result.TotalRecords = len(records)
 	fmt.Printf("📊 Parsed %d records from file\n", len(records))
+
+	// Count Type of Action (field 010) for each record
+	for _, record := range records {
+		actionCode := ""
+		for _, f := range record.Fields {
+			if f.FieldNumber == "010" && f.Occurrence == 1 {
+				actionCode = strings.ToUpper(strings.TrimSpace(f.Value))
+				break
+			}
+		}
+		switch actionCode {
+		case "A", "D", "E", "F", "M", "N", "R":
+			result.ActionCounts[actionCode]++
+		default:
+			result.ActionCounts["Invalid"]++
+		}
+	}
 
 	// First pass: validate and prepare all records for batch import
 	fmt.Printf("🔄 Validating and preparing %d records for batch import...\n", len(records))
@@ -930,6 +949,9 @@ func (ss *SFAFService) ImportSFAFFile(file io.Reader, filename string) (*models.
 		// Link to marker if one was created
 		if rd.marker != nil {
 			rd.sfaf.MarkerID = &rd.marker.ID
+			result.WithMarker++
+		} else {
+			result.WithoutMarker++
 		}
 
 		// Convert first occurrences to field map for main SFAF table
@@ -1060,6 +1082,10 @@ func (ss *SFAFService) ImportSFAFFile(file io.Reader, filename string) (*models.
 			fmt.Printf("   - %s\n", errMsg)
 		}
 	}
+
+	elapsed := time.Since(startTime)
+	result.ProcessingTime = fmt.Sprintf("%d min, %d secs", int(elapsed.Minutes()), int(elapsed.Seconds())%60)
+	result.LoadCompleted = time.Now().Format("01/02/2006 at 15:04:05")
 
 	return result, nil
 }

@@ -1918,10 +1918,18 @@ type ValidationResult struct {
 type SFAFImportResult struct {
 	TotalRecords    int      `json:"total_records"`
 	SuccessfulCount int      `json:"successful_count"`
+	ReplacedCount   int      `json:"replaced_count"`
+	DeletedCount    int      `json:"deleted_count"`
 	ErrorCount      int      `json:"error_count"`
 	Errors          []string `json:"errors"`
 	ImportedIDs     []string `json:"imported_ids"`
 	ProcessingTime  string   `json:"processing_time"`
+	LoadCompleted   string   `json:"load_completed"`
+	// Type of Action counts (SFAF field 010): A, D, E, F, M, N, R, invalid
+	ActionCounts map[string]int `json:"action_counts"`
+	// Records with vs without coordinates
+	WithMarker    int `json:"with_marker"`
+	WithoutMarker int `json:"without_marker"`
 }
 
 // SFAFStatistics represents comprehensive statistics for SFAF records (Source: handlers.txt)
