@@ -1932,6 +1932,14 @@ type SFAFImportResult struct {
 	WithoutMarker int `json:"without_marker"`
 }
 
+// SFAFGeo is an SFAF record augmented with its marker's geographic coordinates.
+// Used for spatial queries such as EW deconfliction radius filtering.
+type SFAFGeo struct {
+	*SFAF
+	Latitude  float64
+	Longitude float64
+}
+
 // SFAFStatistics represents comprehensive statistics for SFAF records (Source: handlers.txt)
 type SFAFStatistics struct {
 	TotalRecords       int                    `json:"total_records"`

@@ -105,6 +105,7 @@ func main() {
 	// Initialize handlers with properly created services
 	markerHandler := handlers.NewMarkerHandler(markerService)
 	sfafHandler := handlers.NewSFAFHandler(sfafService, markerService, field530Service)
+	toolsHandler := handlers.NewToolsHandler(sfafService)
 	geometryHandler := handlers.NewGeometryHandler(geometryService)
 	frequencyHandler := handlers.NewFrequencyHandler(frequencyService)
 	manufacturerHandler := handlers.NewManufacturerHandler(manufacturerRepo)
@@ -227,6 +228,12 @@ func main() {
 	r.GET("/workbox", func(c *gin.Context) {
 		c.HTML(200, "request_dashboard.html", gin.H{
 			"title": "ISM Workbox",
+		})
+	})
+
+	r.GET("/tools", func(c *gin.Context) {
+		c.HTML(200, "tools.html", gin.H{
+			"title": "SFAF Plotter - Tools",
 		})
 	})
 
@@ -479,6 +486,12 @@ func main() {
 		api.POST("/sfaf-required", sfafRequiredHandler.Create)
 		api.DELETE("/sfaf-required/:id", sfafRequiredHandler.Delete)
 		api.DELETE("/sfaf-required", sfafRequiredHandler.DeleteByScope)
+
+		// ── Tools ────────────────────────────────────────────────────────────
+		tools := api.Group("/tools")
+		{
+			tools.POST("/ew-deconfliction", toolsHandler.RunEWDeconfliction)
+		}
 
 		// ── Country Capabilities (map sidebar) ──────────────────────────────
 		type countryCap struct {

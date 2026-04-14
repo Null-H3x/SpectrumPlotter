@@ -584,7 +584,7 @@ func (r *SFAFRepository) CreateSFAFField(field *models.SFAFField) error {
 	return err
 }
 
-func (r *SFAFRepository) GetAllWithMarkers() ([]*models.SFAF, error) {
+func (r *SFAFRepository) GetAllWithMarkers() ([]*models.SFAFGeo, error) {
 	query := `
         SELECT 
             s.id, s.marker_id, s.created_at, s.updated_at,
@@ -603,7 +603,7 @@ func (r *SFAFRepository) GetAllWithMarkers() ([]*models.SFAF, error) {
 	}
 	defer rows.Close()
 
-	var sfafs []*models.SFAF
+	var sfafs []*models.SFAFGeo
 	for rows.Next() {
 		var sfaf models.SFAF
 		var markerSerial, markerFreq, markerNotes string
@@ -622,10 +622,11 @@ func (r *SFAFRepository) GetAllWithMarkers() ([]*models.SFAF, error) {
 			return nil, fmt.Errorf("failed to scan SFAF record with marker: %w", err)
 		}
 
-		// Store marker data in SFAF for convenience (optional enhancement)
-		// This would require adding marker fields to SFAF model or using a separate struct
+		_ = markerSerial
+		_ = markerFreq
+		_ = markerNotes
 
-		sfafs = append(sfafs, &sfaf)
+		sfafs = append(sfafs, &models.SFAFGeo{SFAF: &sfaf, Latitude: markerLat, Longitude: markerLng})
 	}
 
 	return sfafs, nil

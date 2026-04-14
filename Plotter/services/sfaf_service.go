@@ -842,9 +842,8 @@ func (ss *SFAFService) GetAllSFAFs() ([]*models.SFAF, error) {
 	return ss.sfafRepo.GetPaginated(0, 10000)
 }
 
-func (ss *SFAFService) GetAllSFAFsWithMarkers() ([]*models.SFAF, error) {
-	// Use repository method that returns []*models.SFAF (Source: repositories.txt)
-	return ss.sfafRepo.GetAllWithMarkers() // This method exists in repositories.txt
+func (ss *SFAFService) GetAllSFAFsWithMarkers() ([]*models.SFAFGeo, error) {
+	return ss.sfafRepo.GetAllWithMarkers()
 }
 
 func (ss *SFAFService) ImportSFAFFile(file io.Reader, filename string) (*models.SFAFImportResult, error) {
