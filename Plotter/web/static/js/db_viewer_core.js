@@ -593,6 +593,7 @@ class DatabaseViewer {
         }
 
         // Initialize custom views and apply default view
+        await this.fetchCustomViewsFromServer();
         this.updateViewDropdown();
         this.applyDefaultView();
 

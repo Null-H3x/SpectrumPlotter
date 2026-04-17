@@ -3,11 +3,12 @@
 
 class ViewManager {
     constructor() {
-        this.views = this.loadViews();
+        this.views = [];
         this.editingViewId = null;
         this.defaultView = this.loadDefaultView();
 
         this.init();
+        this.loadViewsFromServer();
     }
 
     init() {
@@ -20,13 +21,53 @@ class ViewManager {
     // ==================== Storage Methods ====================
 
     loadViews() {
-        const stored = localStorage.getItem('sfaf_custom_views');
-        return stored ? JSON.parse(stored) : [];
+        return [];
     }
 
     saveViews() {
-        localStorage.setItem('sfaf_custom_views', JSON.stringify(this.views));
         this.updateStats();
+    }
+
+    async loadViewsFromServer() {
+        try {
+            const res = await fetch('/api/custom-views');
+            const data = await res.json();
+            if (!data.success) return;
+
+            if (data.views.length === 0) {
+                const legacy = localStorage.getItem('sfaf_custom_views');
+                if (legacy) {
+                    try {
+                        const legacyViews = JSON.parse(legacy);
+                        if (legacyViews.length > 0) {
+                            for (const view of legacyViews) {
+                                const r = await fetch('/api/custom-views', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        name: view.name,
+                                        description: view.description || '',
+                                        fields: view.fields || []
+                                    })
+                                });
+                                const d = await r.json();
+                                if (d.success) this.views.push(d.view);
+                            }
+                            localStorage.removeItem('sfaf_custom_views');
+                            this.renderViewsList();
+                            this.updateStats();
+                            return;
+                        }
+                    } catch (_) {}
+                }
+            }
+
+            this.views = data.views;
+            this.renderViewsList();
+            this.updateStats();
+        } catch (err) {
+            console.warn('Could not load views from server:', err);
+        }
     }
 
     loadDefaultView() {
@@ -76,7 +117,7 @@ class ViewManager {
         document.getElementById('viewModal').style.display = 'flex';
     }
 
-    saveView() {
+    async saveView() {
         const name = document.getElementById('viewName').value.trim();
         const description = document.getElementById('viewDescription').value.trim();
 
@@ -96,38 +137,40 @@ class ViewManager {
             return;
         }
 
-        if (this.editingViewId) {
-            // Update existing view
-            const viewIndex = this.views.findIndex(v => v.id === this.editingViewId);
-            if (viewIndex !== -1) {
-                this.views[viewIndex] = {
-                    ...this.views[viewIndex],
-                    name: name,
-                    description: description,
-                    fields: fields,
-                    updatedAt: new Date().toISOString()
-                };
+        try {
+            if (this.editingViewId) {
+                const res = await fetch(`/api/custom-views/${this.editingViewId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, description, fields })
+                });
+                const data = await res.json();
+                if (!data.success) { alert('Failed to update view'); return; }
+                const idx = this.views.findIndex(v => v.id === this.editingViewId);
+                if (idx !== -1) this.views[idx] = data.view;
                 alert(`View "${name}" updated successfully!`);
+            } else {
+                const res = await fetch('/api/custom-views', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, description, fields })
+                });
+                const data = await res.json();
+                if (!data.success) { alert('Failed to create view'); return; }
+                this.views.push(data.view);
+                alert(`View "${name}" created successfully!`);
             }
-        } else {
-            // Create new view
-            const newView = {
-                id: Date.now().toString(),
-                name: name,
-                description: description,
-                fields: fields,
-                createdAt: new Date().toISOString()
-            };
-            this.views.push(newView);
-            alert(`View "${name}" created successfully!`);
+        } catch (err) {
+            alert('Error saving view: ' + err.message);
+            return;
         }
 
-        this.saveViews();
+        this.updateStats();
         this.closeModal();
         this.renderViewsList();
     }
 
-    deleteView(viewId) {
+    async deleteView(viewId) {
         const view = this.views.find(v => v.id === viewId);
         if (!view) return;
 
@@ -135,25 +178,43 @@ class ViewManager {
             return;
         }
 
+        try {
+            const res = await fetch(`/api/custom-views/${viewId}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (!data.success) { alert('Failed to delete view'); return; }
+        } catch (err) {
+            alert('Error deleting view: ' + err.message);
+            return;
+        }
+
         this.views = this.views.filter(v => v.id !== viewId);
-        this.saveViews();
+        this.updateStats();
         this.renderViewsList();
     }
 
-    duplicateView(viewId) {
+    async duplicateView(viewId) {
         const view = this.views.find(v => v.id === viewId);
         if (!view) return;
 
-        const duplicate = {
-            id: Date.now().toString(),
-            name: `${view.name} (Copy)`,
-            description: view.description,
-            fields: [...view.fields],
-            createdAt: new Date().toISOString()
-        };
+        try {
+            const res = await fetch('/api/custom-views', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: `${view.name} (Copy)`,
+                    description: view.description || '',
+                    fields: view.fields
+                })
+            });
+            const data = await res.json();
+            if (!data.success) { alert('Failed to duplicate view'); return; }
+            this.views.push(data.view);
+        } catch (err) {
+            alert('Error duplicating view: ' + err.message);
+            return;
+        }
 
-        this.views.push(duplicate);
-        this.saveViews();
+        this.updateStats();
         this.renderViewsList();
     }
 
@@ -455,25 +516,43 @@ class ViewManager {
 
     // ==================== Bulk Operations ====================
 
-    clearAllViews() {
+    async clearAllViews() {
         if (!confirm('Are you sure you want to delete ALL custom views? This cannot be undone!')) {
             return;
         }
 
-        this.views = [];
-        this.saveViews();
-        this.renderViewsList();
-    }
-
-    resetToDefaults() {
-        if (!confirm('Reset to default settings? This will clear all custom views and reset your default view preference.')) {
+        try {
+            for (const view of [...this.views]) {
+                await fetch(`/api/custom-views/${view.id}`, { method: 'DELETE' });
+            }
+        } catch (err) {
+            alert('Error clearing views: ' + err.message);
             return;
         }
 
         this.views = [];
-        this.saveViews();
+        this.updateStats();
+        this.renderViewsList();
+    }
+
+    async resetToDefaults() {
+        if (!confirm('Reset to default settings? This will clear all custom views and reset your default view preference.')) {
+            return;
+        }
+
+        try {
+            for (const view of [...this.views]) {
+                await fetch(`/api/custom-views/${view.id}`, { method: 'DELETE' });
+            }
+        } catch (err) {
+            alert('Error resetting views: ' + err.message);
+            return;
+        }
+
+        this.views = [];
         this.saveDefaultView('summary');
         this.defaultView = 'summary';
+        this.updateStats();
         this.renderViewsList();
         this.updateDefaultViewSelect();
         alert('Settings reset to defaults');
@@ -511,18 +590,32 @@ class ViewManager {
             if (!file) return;
 
             const reader = new FileReader();
-            reader.onload = (event) => {
+            reader.onload = async (event) => {
                 try {
                     const data = JSON.parse(event.target.result);
-
                     if (!data.views || !Array.isArray(data.views)) {
                         alert('Invalid view file format');
                         return;
                     }
 
-                    const imported = data.views.length;
-                    this.views = [...this.views, ...data.views];
-                    this.saveViews();
+                    let imported = 0;
+                    for (const view of data.views) {
+                        try {
+                            const res = await fetch('/api/custom-views', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    name: view.name,
+                                    description: view.description || '',
+                                    fields: view.fields || []
+                                })
+                            });
+                            const d = await res.json();
+                            if (d.success) { this.views.push(d.view); imported++; }
+                        } catch (_) {}
+                    }
+
+                    this.updateStats();
                     this.renderViewsList();
                     alert(`Successfully imported ${imported} view(s)`);
                 } catch (error) {

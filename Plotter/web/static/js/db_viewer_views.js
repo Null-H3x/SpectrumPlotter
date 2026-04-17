@@ -3,13 +3,57 @@
 Object.assign(DatabaseViewer.prototype, {
 
     saveCustomViews() {
-        localStorage.setItem('sfaf_custom_views', JSON.stringify(this.customViews));
         this.updateViewDropdown();
     },
 
     loadCustomViews() {
-        const stored = localStorage.getItem('sfaf_custom_views');
-        return stored ? JSON.parse(stored) : [];
+        return [];
+    },
+
+    async fetchCustomViewsFromServer() {
+        try {
+            const res = await fetch('/api/custom-views');
+            const data = await res.json();
+            if (!data.success) return;
+
+            if (data.views.length === 0) {
+                const legacy = localStorage.getItem('sfaf_custom_views');
+                if (legacy) {
+                    try {
+                        const legacyViews = JSON.parse(legacy);
+                        if (legacyViews.length > 0) {
+                            await this._migrateLegacyViews(legacyViews);
+                            localStorage.removeItem('sfaf_custom_views');
+                            return;
+                        }
+                    } catch (_) {}
+                }
+            }
+
+            this.customViews = data.views;
+            this.updateViewDropdown();
+        } catch (err) {
+            console.warn('Could not load custom views from server:', err);
+        }
+    },
+
+    async _migrateLegacyViews(legacyViews) {
+        for (const view of legacyViews) {
+            try {
+                const res = await fetch('/api/custom-views', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: view.name,
+                        description: view.description || '',
+                        fields: view.fields || []
+                    })
+                });
+                const data = await res.json();
+                if (data.success) this.customViews.push(data.view);
+            } catch (_) {}
+        }
+        this.updateViewDropdown();
     },
 
     loadDefaultView() {
@@ -543,7 +587,7 @@ Object.assign(DatabaseViewer.prototype, {
         checkboxes.forEach(cb => cb.checked = false);
     },
 
-    saveCustomView() {
+    async saveCustomView() {
         const nameInput = document.getElementById('customViewName');
         const name = nameInput?.value?.trim();
 
@@ -552,7 +596,6 @@ Object.assign(DatabaseViewer.prototype, {
             return;
         }
 
-        // Get selected fields
         const checkboxes = document.querySelectorAll('#fieldSelectorGrid input[type="checkbox"]:checked');
         const fields = Array.from(checkboxes).map(cb => ({
             key: cb.value,
@@ -564,33 +607,36 @@ Object.assign(DatabaseViewer.prototype, {
             return;
         }
 
-        // Check if we're editing an existing view
-        if (this.editingViewId) {
-            // Update existing view
-            const viewIndex = this.customViews.findIndex(v => v.id === this.editingViewId);
-            if (viewIndex !== -1) {
-                this.customViews[viewIndex] = {
-                    ...this.customViews[viewIndex],
-                    name: name,
-                    fields: fields,
-                    updatedAt: new Date().toISOString()
-                };
+        try {
+            if (this.editingViewId) {
+                const res = await fetch(`/api/custom-views/${this.editingViewId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, description: '', fields })
+                });
+                const data = await res.json();
+                if (!data.success) { alert('Failed to update view'); return; }
+                const idx = this.customViews.findIndex(v => v.id === this.editingViewId);
+                if (idx !== -1) this.customViews[idx] = data.view;
                 alert(`Custom view "${name}" updated successfully!`);
+                this.editingViewId = null;
+            } else {
+                const res = await fetch('/api/custom-views', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, description: '', fields })
+                });
+                const data = await res.json();
+                if (!data.success) { alert('Failed to create view'); return; }
+                this.customViews.push(data.view);
+                alert(`Custom view "${name}" created successfully!`);
             }
-            this.editingViewId = null;
-        } else {
-            // Create new view
-            const newView = {
-                id: Date.now().toString(),
-                name: name,
-                fields: fields,
-                createdAt: new Date().toISOString()
-            };
-            this.customViews.push(newView);
-            alert(`Custom view "${name}" created successfully!`);
+        } catch (err) {
+            alert('Error saving view: ' + err.message);
+            return;
         }
 
-        this.saveCustomViews();
+        this.updateViewDropdown();
         this.cancelCreateCustomView();
         this.renderCustomViewsList();
     },
@@ -636,13 +682,22 @@ Object.assign(DatabaseViewer.prototype, {
         }
     },
 
-    deleteCustomView(viewId) {
+    async deleteCustomView(viewId) {
         if (!confirm('Are you sure you want to delete this custom view?')) {
             return;
         }
 
+        try {
+            const res = await fetch(`/api/custom-views/${viewId}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (!data.success) { alert('Failed to delete view'); return; }
+        } catch (err) {
+            alert('Error deleting view: ' + err.message);
+            return;
+        }
+
         this.customViews = this.customViews.filter(v => v.id !== viewId);
-        this.saveCustomViews();
+        this.updateViewDropdown();
         this.renderCustomViewsList();
     },
 

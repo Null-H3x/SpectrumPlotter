@@ -67,6 +67,7 @@ func main() {
 	geometryRepo := repositories.NewGeometryRepository(sqlxDB)
 	frequencyRepo := repositories.NewFrequencyRepository(sqlxDB)
 	manufacturerRepo := repositories.NewManufacturerRepository(sqlxDB)
+	customViewRepo := repositories.NewCustomViewRepository(sqlxDB)
 	systemConfigRepo := repositories.NewSystemConfigRepository(sqlxDB)
 	installationRepo := repositories.NewInstallationRepository(sqlxDB)
 	userRepo := repositories.NewUserRepository(sqlxDB)
@@ -105,6 +106,7 @@ func main() {
 	// Initialize handlers with properly created services
 	markerHandler := handlers.NewMarkerHandler(markerService)
 	sfafHandler := handlers.NewSFAFHandler(sfafService, markerService, field530Service)
+	customViewHandler := handlers.NewCustomViewHandler(customViewRepo)
 	toolsHandler := handlers.NewToolsHandler(sfafService)
 	geometryHandler := handlers.NewGeometryHandler(geometryService)
 	frequencyHandler := handlers.NewFrequencyHandler(frequencyService)
@@ -343,6 +345,12 @@ func main() {
 		api.POST("/sfaf/query", sfafHandler.QuerySFAFs)
 		api.POST("/sfaf/validate", sfafHandler.ValidateFields)
 		api.GET("/sfaf/pool-assignments", sfafHandler.GetPoolAssignments)
+
+		// Custom views (server-side persistence)
+		api.GET("/custom-views", customViewHandler.List)
+		api.POST("/custom-views", customViewHandler.Create)
+		api.PUT("/custom-views/:id", customViewHandler.Update)
+		api.DELETE("/custom-views/:id", customViewHandler.Delete)
 		api.GET("/sfaf/field-definitions", sfafHandler.GetFieldDefinitions)
 		api.POST("/sfaf/import", sfafHandler.ImportSFAF)
 		api.GET("/sfaf/export", sfafHandler.ExportAllSFAF)
