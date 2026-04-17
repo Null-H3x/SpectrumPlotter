@@ -688,6 +688,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     loadRequests();
     _loadSfafLookups();     // pre-fetch all lookup fields for the approval modal
     _loadSerialNumbers();   // pre-fetch available serial numbers for field 102
+    if (isISM) initWorkboxSwitcher();
 
     // Route default tab by URL path
     if (isWorkbox) {
@@ -854,6 +855,85 @@ async function loadPendingRequests() {
         showError('pendingRequestsContainer', 'Error loading workbox');
     }
 }
+
+// ── Workbox context switcher ─────────────────────────────────────────────────
+
+let _myWorkboxes = [];
+
+async function initWorkboxSwitcher() {
+    try {
+        const res  = await fetch('/api/user/workboxes');
+        const data = res.ok ? await res.json() : {};
+        _myWorkboxes = data.workboxes || [];
+    } catch { return; }
+
+    // Only show the switcher if the user has more than one workbox
+    if (_myWorkboxes.length <= 1) return;
+
+    const bar    = document.getElementById('workboxContextBar');
+    const label  = document.getElementById('activeWorkboxLabel');
+    if (!bar || !label) return;
+
+    const primary = _myWorkboxes.find(w => w.is_primary) || _myWorkboxes[0];
+    label.textContent = primary?.workbox_name || userWorkbox || '—';
+    bar.style.display = 'flex';
+
+    const list = document.getElementById('workboxSwitcherList');
+    list.innerHTML = _myWorkboxes.map(w => `
+        <div class="wb-switch-item${w.is_primary ? ' wb-switch-active' : ''}"
+             style="padding:8px 14px;cursor:pointer;display:flex;align-items:center;gap:10px;
+                    font-size:0.875rem;color:${w.is_primary ? '#64b5f6' : '#e2e8f0'};
+                    border-left:3px solid ${w.is_primary ? '#64b5f6' : 'transparent'}"
+             onmouseover="this.style.background='rgba(100,150,255,0.08)'"
+             onmouseout="this.style.background=''"
+             onclick="switchWorkboxContext('${w.workbox_id}', '${(w.workbox_name||'').replace(/'/g,"\\'")}')">
+            <i class="fas fa-inbox" style="width:14px"></i>
+            <span style="flex:1">${w.workbox_name}</span>
+            ${w.is_primary ? '<i class="fas fa-check" style="font-size:0.75rem;color:#64b5f6"></i>' : ''}
+        </div>
+    `).join('');
+}
+
+function toggleWorkboxSwitcher() {
+    const dd = document.getElementById('workboxSwitcherDropdown');
+    if (!dd) return;
+    dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+}
+
+async function switchWorkboxContext(workboxId, workboxName) {
+    document.getElementById('workboxSwitcherDropdown').style.display = 'none';
+    try {
+        const res = await fetch('/api/user/active-workbox', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ workbox_id: workboxId })
+        });
+        if (!res.ok) {
+            const d = await res.json();
+            console.error('Workbox switch failed:', d.error);
+            return;
+        }
+        // Update local state
+        userWorkbox = workboxName;
+        document.getElementById('activeWorkboxLabel').textContent = workboxName;
+        _myWorkboxes.forEach(w => w.is_primary = (w.workbox_id === workboxId));
+        // Rebuild dropdown to reflect new active selection
+        await initWorkboxSwitcher();
+        // Reload workbox to pick up newly visible requests
+        loadPendingRequests();
+    } catch (err) {
+        console.error('Workbox switch error:', err);
+    }
+}
+
+// Close switcher dropdown when clicking outside
+document.addEventListener('click', e => {
+    const dd  = document.getElementById('workboxSwitcherDropdown');
+    const btn = document.getElementById('switchWorkboxBtn');
+    if (dd && !dd.contains(e.target) && e.target !== btn && !btn?.contains(e.target)) {
+        dd.style.display = 'none';
+    }
+});
 
 // ── Workbox helpers ───────────────────────────────────────────────────────────
 const PRIORITY_WEIGHT = { emergency: 4, urgent: 3, priority: 2, routine: 1 };

@@ -559,6 +559,27 @@
         <!-- Action Items sub-panel -->
         <div id="action-items-subpanel" class="workbox-subpanel">
 
+        <!-- Workbox context switcher -->
+        <div id="workboxContextBar" style="display:none;align-items:center;gap:12px;padding:10px 16px;
+            background:rgba(15,15,35,0.6);border-bottom:1px solid rgba(100,150,255,0.12);font-size:0.875rem;">
+            <i class="fas fa-inbox" style="color:#64b5f6"></i>
+            <span style="color:#94a3b8">Working as:</span>
+            <strong id="activeWorkboxLabel" style="color:#e2e8f0"></strong>
+            <div style="position:relative;margin-left:4px">
+                <button id="switchWorkboxBtn" onclick="toggleWorkboxSwitcher()"
+                    style="background:rgba(100,150,255,0.12);border:1px solid rgba(100,150,255,0.25);
+                    color:#94a3b8;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:0.8rem;display:flex;align-items:center;gap:6px">
+                    <i class="fas fa-exchange-alt"></i> Switch
+                </button>
+                <div id="workboxSwitcherDropdown" style="display:none;position:absolute;top:calc(100% + 6px);left:0;
+                    background:#1a1a3e;border:1px solid rgba(100,150,255,0.25);border-radius:8px;
+                    min-width:220px;box-shadow:0 8px 24px rgba(0,0,0,0.5);z-index:200;padding:6px 0">
+                    <div style="padding:8px 14px 6px;font-size:0.75rem;color:#64748b;text-transform:uppercase;letter-spacing:0.05em">Switch workbox</div>
+                    <div id="workboxSwitcherList"></div>
+                </div>
+            </div>
+        </div>
+
         <!-- Stats bar -->
         <div id="workboxStats" class="workbox-stats" style="display:none">
             <div class="workbox-stat workbox-stat-total">

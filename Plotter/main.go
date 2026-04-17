@@ -330,6 +330,8 @@ func main() {
 		{
 			userGroup.GET("/profile", authHandler.GetProfile)
 			userGroup.PUT("/profile", authHandler.UpdateProfile)
+			userGroup.GET("/workboxes", frequencyHandler.GetMyWorkboxes)
+			userGroup.PUT("/active-workbox", frequencyHandler.SwitchWorkboxContext)
 		}
 		api.POST("/auth/change-password", authHandler.ChangePassword)
 

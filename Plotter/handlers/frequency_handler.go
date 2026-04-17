@@ -916,6 +916,51 @@ func (h *FrequencyHandler) RemoveWorkboxMember(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
+// GetMyWorkboxes returns all workboxes the current session user is assigned to.
+// GET /api/user/workboxes
+func (h *FrequencyHandler) GetMyWorkboxes(c *gin.Context) {
+	rawID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "not authenticated"})
+		return
+	}
+	userID := rawID.(uuid.UUID)
+	assignments, err := h.service.GetUserWorkboxAssignments(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if assignments == nil {
+		assignments = []models.UserWorkboxAssignment{}
+	}
+	c.JSON(http.StatusOK, gin.H{"workboxes": assignments})
+}
+
+// SwitchWorkboxContext sets a different workbox as the user's active (primary) workbox.
+// The user must already be assigned to the target workbox.
+// PUT /api/user/active-workbox
+func (h *FrequencyHandler) SwitchWorkboxContext(c *gin.Context) {
+	rawID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "not authenticated"})
+		return
+	}
+	userID := rawID.(uuid.UUID)
+
+	var body struct {
+		WorkboxID uuid.UUID `json:"workbox_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "workbox_id required"})
+		return
+	}
+	if err := h.service.SetPrimaryWorkbox(userID, body.WorkboxID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
 // GetUserWorkboxAssignments returns all workboxes a user is assigned to.
 // GET /api/users/:id/workboxes
 func (h *FrequencyHandler) GetUserWorkboxAssignments(c *gin.Context) {

@@ -898,3 +898,18 @@ func (s *FrequencyService) AddWorkboxMember(userID, workboxID uuid.UUID, isPrima
 func (s *FrequencyService) RemoveWorkboxMember(userID, workboxID uuid.UUID) error {
 	return s.repo.RemoveWorkboxMember(userID, workboxID)
 }
+
+// SetPrimaryWorkbox switches which workbox the user is currently working from.
+// The user must already be assigned to the target workbox.
+func (s *FrequencyService) SetPrimaryWorkbox(userID, workboxID uuid.UUID) error {
+	assignments, err := s.repo.GetUserWorkboxAssignments(userID)
+	if err != nil {
+		return err
+	}
+	for _, a := range assignments {
+		if a.WorkboxID == workboxID {
+			return s.repo.AddWorkboxMember(userID, workboxID, true)
+		}
+	}
+	return fmt.Errorf("you are not assigned to that workbox")
+}
