@@ -73,6 +73,9 @@
             <button class="tab-btn" data-tab="bases" onclick="switchTab('bases')">
                 <i class="fas fa-map-marker-alt"></i> Bases &amp; Units
             </button>
+            <button class="tab-btn" data-tab="workboxes" onclick="switchTab('workboxes')">
+                <i class="fas fa-inbox"></i> Workboxes
+            </button>
         </div>
 
         <!-- Users Tab -->
@@ -241,6 +244,37 @@
                 </div>
             </div>
         </div><!-- end tab-bases -->
+
+        <!-- Workboxes Tab -->
+        <div id="tab-workboxes" class="tab-content">
+            <div class="page-header">
+                <div class="page-header-left">
+                    <h1><i class="fas fa-inbox"></i> Workboxes</h1>
+                    <p>ISM and AFC spectrum management offices. Users are assigned to workboxes to receive routed requests.</p>
+                </div>
+                <div class="page-header-right">
+                    <button class="btn-primary" onclick="openWorkboxModal()"><i class="fas fa-plus"></i> New Workbox</button>
+                </div>
+            </div>
+
+            <div class="table-card">
+                <table class="users-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Description</th>
+                            <th>Installation</th>
+                            <th>Members</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="workboxesTableBody">
+                        <tr><td colspan="6" style="text-align:center;padding:20px;color:#94a3b8"><i class="fas fa-spinner fa-spin"></i> Loading…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div><!-- end tab-workboxes -->
     </div>
 
     <!-- Installation Modal -->
@@ -604,6 +638,47 @@
                 <button class="btn-primary" id="unitReviewSubmitBtn" onclick="submitUnitReview()">
                     <i class="fas fa-check"></i> <span id="unitReviewSubmitLabel">Create Unit &amp; Approve</span>
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Workbox Modal -->
+    <div id="workboxModal" class="modal-overlay" style="display:none">
+        <div class="modal" style="max-width:520px">
+            <div class="modal-header">
+                <h2 id="workboxModalTitle"><i class="fas fa-inbox"></i> New Workbox</h2>
+                <button class="modal-close" onclick="closeWorkboxModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="wbFieldID">
+                <div class="form-row">
+                    <div class="form-group" style="flex:2">
+                        <label>Name *</label>
+                        <input type="text" id="wbFieldName" class="form-input" placeholder="e.g. Hurlburt Field ISM" required>
+                    </div>
+                    <div class="form-group" style="flex:1">
+                        <label>Active</label>
+                        <select id="wbFieldActive" class="form-input">
+                            <option value="true">Yes</option>
+                            <option value="false">No</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <input type="text" id="wbFieldDescription" class="form-input" placeholder="Optional description">
+                </div>
+                <div class="form-group">
+                    <label>Installation (optional)</label>
+                    <select id="wbFieldInstallation" class="form-input">
+                        <option value="">— None —</option>
+                    </select>
+                </div>
+                <div id="wbModalError" style="display:none;color:#f87171;font-size:0.9em;margin-top:8px"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeWorkboxModal()">Cancel</button>
+                <button class="btn-primary" id="wbSaveBtn" onclick="saveWorkbox()"><i class="fas fa-save"></i> Save</button>
             </div>
         </div>
     </div>

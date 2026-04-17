@@ -494,6 +494,7 @@ function switchTab(name) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
     document.querySelectorAll('.tab-content').forEach(t => t.classList.toggle('active', t.id === 'tab-' + name));
     if (name === 'bases') loadBasesTab();
+    if (name === 'workboxes') loadWorkboxesTab();
 }
 
 // ─── Account Requests ─────────────────────────────────────────────────────────
@@ -1067,4 +1068,142 @@ function showAdminNotification(msg, type = 'info') {
     n.textContent = msg;
     document.body.appendChild(n);
     setTimeout(() => n.remove(), 3500);
+}
+
+// ─── Workboxes ────────────────────────────────────────────────────────────────
+
+let _workboxInstallations = [];
+
+async function loadWorkboxesTab() {
+    await Promise.all([loadWorkboxes(), loadWorkboxInstallations()]);
+}
+
+async function loadWorkboxes() {
+    const tbody = document.getElementById('workboxesTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:20px;color:#94a3b8"><i class="fas fa-spinner fa-spin"></i> Loading…</td></tr>`;
+    try {
+        const data = await apiFetch('/api/frequency/workboxes');
+        const wbs = data.workboxes || [];
+        if (wbs.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:20px;color:#94a3b8">No workboxes found</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = wbs.map(w => `
+            <tr>
+                <td><strong>${w.name}</strong></td>
+                <td style="color:#94a3b8;font-size:0.9em">${w.description || '—'}</td>
+                <td>${w.installation_name || '—'}</td>
+                <td style="text-align:center">${w.member_count}</td>
+                <td>
+                    <span style="padding:2px 8px;border-radius:12px;font-size:0.8em;font-weight:600;
+                        background:${w.is_active ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)'};
+                        color:${w.is_active ? '#10b981' : '#ef4444'}">
+                        ${w.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                </td>
+                <td>
+                    <button class="btn-icon" title="Edit" onclick="openEditWorkboxModal(${JSON.stringify(w).replace(/"/g, '&quot;')})">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn-icon btn-deactivate" title="Delete" onclick="deleteWorkbox('${w.id}', '${w.name.replace(/'/g, "\\'")}')">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:20px;color:#ef4444">Error loading workboxes: ${err.message}</td></tr>`;
+    }
+}
+
+async function loadWorkboxInstallations() {
+    try {
+        const data = await apiFetch('/api/auth/public-installations');
+        _workboxInstallations = data.installations || [];
+        const sel = document.getElementById('wbFieldInstallation');
+        if (!sel) return;
+        sel.innerHTML = '<option value="">— None —</option>' +
+            _workboxInstallations.map(i =>
+                `<option value="${i.id}">${i.name}${i.code ? ' (' + i.code + ')' : ''}</option>`
+            ).join('');
+    } catch { /* non-fatal */ }
+}
+
+function openWorkboxModal() {
+    document.getElementById('wbFieldID').value = '';
+    document.getElementById('wbFieldName').value = '';
+    document.getElementById('wbFieldDescription').value = '';
+    document.getElementById('wbFieldActive').value = 'true';
+    document.getElementById('wbFieldInstallation').value = '';
+    document.getElementById('wbModalError').style.display = 'none';
+    document.getElementById('workboxModalTitle').innerHTML = '<i class="fas fa-inbox"></i> New Workbox';
+    document.getElementById('wbSaveBtn').innerHTML = '<i class="fas fa-save"></i> Save';
+    document.getElementById('workboxModal').style.display = 'flex';
+    loadWorkboxInstallations();
+}
+
+function openEditWorkboxModal(w) {
+    document.getElementById('wbFieldID').value = w.id;
+    document.getElementById('wbFieldName').value = w.name;
+    document.getElementById('wbFieldDescription').value = w.description || '';
+    document.getElementById('wbFieldActive').value = w.is_active ? 'true' : 'false';
+    document.getElementById('wbModalError').style.display = 'none';
+    document.getElementById('workboxModalTitle').innerHTML = '<i class="fas fa-edit"></i> Edit Workbox';
+    document.getElementById('wbSaveBtn').innerHTML = '<i class="fas fa-save"></i> Update';
+    document.getElementById('workboxModal').style.display = 'flex';
+    loadWorkboxInstallations().then(() => {
+        document.getElementById('wbFieldInstallation').value = w.installation_id || '';
+    });
+}
+
+function closeWorkboxModal() {
+    document.getElementById('workboxModal').style.display = 'none';
+}
+
+async function saveWorkbox() {
+    const id   = document.getElementById('wbFieldID').value;
+    const name = document.getElementById('wbFieldName').value.trim();
+    const errEl = document.getElementById('wbModalError');
+
+    if (!name) {
+        errEl.textContent = 'Name is required.';
+        errEl.style.display = 'block';
+        return;
+    }
+
+    const installVal = document.getElementById('wbFieldInstallation').value;
+    const body = {
+        name,
+        description:     document.getElementById('wbFieldDescription').value.trim(),
+        installation_id: installVal || null,
+        is_active:       document.getElementById('wbFieldActive').value === 'true',
+    };
+
+    try {
+        errEl.style.display = 'none';
+        if (id) {
+            await apiFetch(`/api/frequency/workboxes/${id}`, { method: 'PUT',  headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+            showAdminNotification('Workbox updated', 'success');
+        } else {
+            await apiFetch('/api/frequency/workboxes',          { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+            showAdminNotification('Workbox created', 'success');
+        }
+        closeWorkboxModal();
+        await loadWorkboxes();
+    } catch (err) {
+        errEl.textContent = err.message;
+        errEl.style.display = 'block';
+    }
+}
+
+async function deleteWorkbox(id, name) {
+    if (!confirm(`Delete workbox "${name}"? Users assigned to it will lose this workbox assignment.`)) return;
+    try {
+        await apiFetch(`/api/frequency/workboxes/${id}`, { method: 'DELETE' });
+        showAdminNotification('Workbox deleted', 'success');
+        await loadWorkboxes();
+    } catch (err) {
+        showAdminNotification(err.message, 'error');
+    }
 }
