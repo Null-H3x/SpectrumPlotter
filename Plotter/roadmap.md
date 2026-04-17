@@ -3,7 +3,7 @@ User Accounts
 - No exchange needed, data is exchanged in real time.
 
 - Add AOI for database sync
-    -Options for region or polygon
+    - Options for region or polygon
     - Leave option open for full database unless this causes issues
 
 
@@ -78,3 +78,8 @@ Add JRFL functionality
 Add FAS Agenda Functionality
 Add Compliance Checks
 Add Alottment/Channeling Plans
+
+Operations page
+- Separate from Frequency Modules completely
+- Define EMOE, AOR, AOI, Friendly Force Location, Enemy Location
+- Display Friendly Comm Plan and Potential SOIs

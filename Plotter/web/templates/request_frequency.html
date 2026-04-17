@@ -445,8 +445,22 @@
         <a href="/frequency" class="nav-link"><i class="fas fa-broadcast-tower"></i><span>Frequencies</span></a>
         <a href="/workbox" class="nav-link ism-nav-link" style="display:none"><i class="fas fa-inbox"></i><span>Workbox</span></a>
         <a href="/frequency/request" class="nav-link active"><i class="fas fa-file-signature"></i><span>Request</span></a>
-        <a href="/view-manager" class="nav-link"><i class="fas fa-cog"></i><span>Table Manager</span></a>
-        <a href="/tools" class="nav-link"><i class="fas fa-wrench"></i><span>Tools</span></a>
+        <div class="nav-dropdown">
+            <button class="nav-link nav-dropdown-trigger">
+                <i class="fas fa-wrench"></i><span>Tools</span><i class="fas fa-caret-down nav-caret"></i>
+            </button>
+            <div class="nav-dropdown-menu">
+                <a href="/tools" class="nav-dropdown-item"><i class="fas fa-satellite-dish"></i> EW Deconfliction</a>
+                <a href="/tools?tool=serial-alloc" class="nav-dropdown-item"><i class="fas fa-list-ol"></i> Serial Allocation</a>
+                <a href="/tools?tool=serial-suballoc" class="nav-dropdown-item"><i class="fas fa-sitemap"></i> Serial Sub-Allocation</a>
+                <div class="nav-dropdown-divider"></div>
+                <a href="/frequency-nomination" class="nav-dropdown-item"><i class="fas fa-wave-square"></i> Nomination</a>
+                    <a href="/database?tab=analytics" class="nav-dropdown-item"><i class="fas fa-chart-bar"></i> Analytics</a>
+            </div>
+        </div>
+        <a href="/view-manager" class="nav-link">
+            <i class="fas fa-table"></i><span>Table Manager</span>
+        </a>
     </nav>
     <div class="header-actions">
         <a href="/frequency" class="btn btn-sm"><i class="fas fa-list"></i> My Requests</a>

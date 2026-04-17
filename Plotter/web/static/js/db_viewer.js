@@ -808,10 +808,11 @@ class DatabaseViewer {
                             class="table-action-btn btn-view" title="View Details">
                         <i class="fas fa-eye"></i>
                     </button>
-                    <button onclick="databaseViewer.deleteMarker('${marker.id}')" 
+                    ${['admin', 'ntia'].includes(window._authRole) ? `
+                    <button onclick="databaseViewer.deleteMarker('${marker.id}')"
                             class="table-action-btn btn-delete" title="Delete Marker">
                         <i class="fas fa-trash"></i>
-                    </button>
+                    </button>` : ''}
                 </td>
             </tr>
         `).join('');
@@ -12408,9 +12409,13 @@ class DatabaseViewer {
             ).join('<br>');
             return `
                 <div class="query-history-entry" onclick="databaseViewer.loadQueryFromHistory('${entry.id}')"
-                     style="padding:8px 12px;border-bottom:1px solid rgba(102,126,234,0.08);cursor:pointer;transition:background 0.15s;"
+                     style="padding:8px 12px;border-bottom:1px solid rgba(102,126,234,0.08);cursor:pointer;transition:background 0.15s;position:relative;"
                      onmouseover="this.style.background='rgba(102,126,234,0.1)'" onmouseout="this.style.background=''">
-                    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+                    <button onclick="event.stopPropagation();databaseViewer.removeQueryFromHistory('${entry.id}')"
+                            title="Remove from history"
+                            style="position:absolute;top:6px;right:6px;background:none;border:none;cursor:pointer;color:#ef4444;font-size:0.7rem;line-height:1;padding:2px 4px;border-radius:3px;opacity:0.6;transition:opacity 0.15s;"
+                            onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.6'">✕</button>
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;padding-right:18px;">
                         <span style="font-size:0.72rem;color:#64748b;">${dateStr} ${timeStr}</span>
                         <span style="font-size:0.72rem;background:rgba(167,139,250,0.15);color:#a78bfa;border-radius:10px;padding:1px 7px;">${entry.matchCount} results</span>
                     </div>
@@ -12457,6 +12462,12 @@ class DatabaseViewer {
     clearQueryHistory() {
         if (!confirm('Clear all query history?')) return;
         localStorage.removeItem(this._queryHistoryKey);
+        this.renderQueryHistory();
+    },
+
+    removeQueryFromHistory(entryId) {
+        const history = this._getQueryHistory().filter(h => h.id !== entryId);
+        try { localStorage.setItem(this._queryHistoryKey, JSON.stringify(history)); } catch {}
         this.renderQueryHistory();
     },
 

@@ -148,7 +148,7 @@ Deviation Ratio 1.667 for FM voice, 0.7 for FSK data.</Remarks>
       <Type cls="U">Government</Type>
       <Name cls="U">AN/PRC-209 SINCGARS Transmitter</Name>
       <Manufacturer>
-        <Name cls="U">Harris Corp, RF Com Div (SINC)</Name>
+        <Name cls="U">Lumen Corp, RF Com Div (SINC)</Name>
       </Manufacturer>
     </Nomenclature>
     <Deployment>
@@ -468,7 +468,7 @@ Harmonic levels -60 dBc in bands 162.0125-174 MHz and 406.1-420 MHz.</Remarks>
       <Type cls="U">Government</Type>
       <Name cls="U">AN/PRC-209 FM Transmitter</Name>
       <Manufacturer>
-        <Name cls="U">Harris Corp, RF Com Div   (FM)</Name>
+        <Name cls="U">Lumen Corp, RF Com Div   (FM)</Name>
       </Manufacturer>
     </Nomenclature>
     <Deployment>
@@ -1148,7 +1148,7 @@ Modulation Techniques and Coding: CPM (Continuous Phase Modulation)</Remarks>
       <Type cls="U">Government</Type>
       <Name cls="U">AN/PRC-209 CPM Data Mode Transmitter</Name>
       <Manufacturer>
-        <Name cls="U">Harris Corp, RF Com Div  (CPM)</Name>
+        <Name cls="U">Lumen Corp, RF Com Div  (CPM)</Name>
       </Manufacturer>
     </Nomenclature>
     <Deployment>
@@ -1301,7 +1301,7 @@ Modulation Techniques and Coding: AM (double sideband) Voice, ASK (Amplitude Shi
       <Type cls="U">Government</Type>
       <Name cls="U">AN/PRC-209 AM Communications Transmitter</Name>
       <Manufacturer>
-        <Name cls="U">Harris Corp, RF Com Div   (AM)</Name>
+        <Name cls="U">Lumen Corp, RF Com Div   (AM)</Name>
       </Manufacturer>
     </Nomenclature>
     <Deployment>
@@ -1554,7 +1554,7 @@ Modulation Techniques and Coding: AM (double sideband) Voice, ASK (Amplitude Shi
       <Type cls="U">Government</Type>
       <Name cls="U">AN/PRC-209 HAVE QUICK Transmitter</Name>
       <Manufacturer>
-        <Name cls="U">Harris Corp, RF Com Div   (HQ)</Name>
+        <Name cls="U">Lumen Corp, RF Com Div   (HQ)</Name>
       </Manufacturer>
     </Nomenclature>
     <Deployment>
@@ -1882,7 +1882,7 @@ Deviation Ratio is .5 for 1M20G1D (GMSK), not defined for
       <Type cls="U">Government</Type>
       <Name cls="U">AN/PRC-209 MANET Transmitter</Name>
       <Manufacturer>
-        <Name cls="U">Harris Corp, RF Com Div(MANET)</Name>
+        <Name cls="U">Lumen Corp, RF Com Div(MANET)</Name>
       </Manufacturer>
     </Nomenclature>
     <Deployment>
@@ -2236,7 +2236,7 @@ Max Modulation Frequency is 900 kHz for 1M20D1D</Remarks>
       <Type cls="U">Government</Type>
       <Name cls="U">AN/PRC-209 MANET Transmitter #2</Name>
       <Manufacturer>
-        <Name cls="U">Harris Corp, RF Com Div(16QAM)</Name>
+        <Name cls="U">Lumen Corp, RF Com Div(16QAM)</Name>
       </Manufacturer>
     </Nomenclature>
     <Deployment>
@@ -2479,7 +2479,7 @@ Modulation Techniques and Coding: SBPSK(Shaped BPSK), SFSK(Shaped Frequency Shif
       <Type cls="U">Government</Type>
       <Name cls="U">AN/PRC-209 SATCOM Transmitter</Name>
       <Manufacturer>
-        <Name cls="U">Harris Corp, RF Com Div  (SAT)</Name>
+        <Name cls="U">Lumen Corp, RF Com Div  (SAT)</Name>
       </Manufacturer>
     </Nomenclature>
     <Deployment>
@@ -2809,7 +2809,7 @@ Modulation Techniques and Coding: Digital chip rate: 3.84 Mcps; Data rate: 64kbp
       <Type cls="U">Government</Type>
       <Name cls="U">AN/PRC-117(V)(C) MUOS Transmitter</Name>
       <Manufacturer>
-        <Name cls="U">Harris Corp, RF Comm Div (SAT)</Name>
+        <Name cls="U">Lumen Corp, RF Comm Div (SAT)</Name>
       </Manufacturer>
     </Nomenclature>
     <Deployment>
@@ -2931,7 +2931,7 @@ SINAD for FM Voice and for FSK Data criteria is 90% Packet Success.</Remarks>
       <Type cls="U">Government</Type>
       <Name cls="U">AN/PRC-209 SINCGARS Receiver</Name>
       <Manufacturer>
-        <Name cls="U">Harris Corp, RF Com Div (SINC)</Name>
+        <Name cls="U">Lumen Corp, RF Com Div (SINC)</Name>
       </Manufacturer>
     </Nomenclature>
     <Deployment>
@@ -3286,7 +3286,7 @@ Note: In the bands 162.0125-174 MHz and 406.1-420 MHz, in accordance with
       <Type cls="U">Government</Type>
       <Name cls="U">AN/PRC-209 FM Receiver</Name>
       <Manufacturer>
-        <Name cls="U">Harris Corp, RF Com Div   (FM)</Name>
+        <Name cls="U">Lumen Corp, RF Com Div   (FM)</Name>
       </Manufacturer>
     </Nomenclature>
     <Deployment>
@@ -4100,7 +4100,7 @@ Sensitivity Criteria: 90% Packet Success</Remarks>
       <Type cls="U">Government</Type>
       <Name cls="U">AN/PRC-209 CPM Data Receiver</Name>
       <Manufacturer>
-        <Name cls="U">Harris Corp, RF Com Div (CPM)</Name>
+        <Name cls="U">Lumen Corp, RF Com Div (CPM)</Name>
       </Manufacturer>
     </Nomenclature>
     <Deployment>
@@ -4257,7 +4257,7 @@ Sensitivity Criteria for AM Voice (6K00A3E) is 10 dB SINAD and for ASK Data (16K
       <Type cls="U">Government</Type>
       <Name cls="U">AN/PRC-209 AM Receiver</Name>
       <Manufacturer>
-        <Name cls="U">Harris Corp, RF Com Div   (AM)</Name>
+        <Name cls="U">Lumen Corp, RF Com Div   (AM)</Name>
       </Manufacturer>
     </Nomenclature>
     <Deployment>
@@ -4535,7 +4535,7 @@ Sensitivity Criteria for AM Voice (6K00A3E) is 10 dB SINAD and for ASK Data (16K
       <Type cls="U">Government</Type>
       <Name cls="U">AN/PRC-209 HAVE QUICK Receiver</Name>
       <Manufacturer>
-        <Name cls="U">Harris Corp, RF Com Div   (HQ)</Name>
+        <Name cls="U">Lumen Corp, RF Com Div   (HQ)</Name>
       </Manufacturer>
     </Nomenclature>
     <Deployment>
@@ -4784,7 +4784,7 @@ Sensitivity Criteria: 90% Packet Success</Remarks>
       <Type cls="U">Government</Type>
       <Name cls="U">AN/PRC-209 MANET Receiver</Name>
       <Manufacturer>
-        <Name cls="U">Harris Corp, RF Com Div(MANET)</Name>
+        <Name cls="U">Lumen Corp, RF Com Div(MANET)</Name>
       </Manufacturer>
     </Nomenclature>
     <Deployment>
@@ -5108,7 +5108,7 @@ Sensitivity Criteria: 90% Packet Success</Remarks>
       <Type cls="U">Government</Type>
       <Name cls="U">AN/PRC-209 MANET Receiver #2</Name>
       <Manufacturer>
-        <Name cls="U">Harris Corp, RF Com Div(16QMN)</Name>
+        <Name cls="U">Lumen Corp, RF Com Div(16QMN)</Name>
       </Manufacturer>
     </Nomenclature>
     <Deployment>
@@ -5423,7 +5423,7 @@ Sensitivity Criteria: 90% Packet Success</Remarks>
       <Type cls="U">Government</Type>
       <Name cls="U">AN/PRC-209 SATCOM Receiver</Name>
       <Manufacturer>
-        <Name cls="U">Harris Corp, RF Com Div  (SAT)</Name>
+        <Name cls="U">Lumen Corp, RF Com Div  (SAT)</Name>
       </Manufacturer>
     </Nomenclature>
     <Deployment>
@@ -5931,7 +5931,7 @@ frequency for L1.</Remarks>
     <Serial cls="U">REMOVED</Serial>
     <EntryDateTime cls="U">2022-12-19T13:56:51Z</EntryDateTime>
     <LastChangeDateTime cls="U">2022-12-19T13:56:51Z</LastChangeDateTime>
-    <Remarks cls="U" idx="1">AN/PRC-117G(V) (C) MUOS Receiver Remarks:
+    <Remarks cls="U" idx="1">AN/PRC-209(V) (C) MUOS Receiver Remarks:
 
 Note: the 5M00G7W emission designator is defined by the MUOS system per SPS-18099/2
 
@@ -5955,7 +5955,7 @@ Sensitivity Criteria: 90% packet success</Remarks>
     <DeEmphasis cls="U">No</DeEmphasis>
     <Nomenclature toNTIA="Yes">
       <Type cls="U">Government</Type>
-      <Name cls="U">AN/PRC-117G(V) (C) MUOS Receiver</Name>
+      <Name cls="U">AN/PRC-209(V) (C) MUOS Receiver</Name>
       <Manufacturer>
         <Name cls="U">Harr Corp., RF Comm Div (SAT)</Name>
       </Manufacturer>
@@ -6097,7 +6097,7 @@ Sensitivity Criteria: 90% packet success</Remarks>
       <Type cls="U">Civilian/Commercial</Type>
       <Name cls="U">12006-4230-01 VHF Antenna</Name>
       <Manufacturer>
-        <Name cls="U">Harris Corp, RF Com Div</Name>
+        <Name cls="U">Lumen Corp, RF Com Div</Name>
       </Manufacturer>
     </Nomenclature>
     <AntMode toNTIA="Yes">
@@ -6134,7 +6134,7 @@ Sensitivity Criteria: 90% packet success</Remarks>
       <Type cls="U">Government</Type>
       <Name cls="U">12006-4210-01 VHF/UHF Antenna</Name>
       <Manufacturer>
-        <Name cls="U">Harris Corp, RF Com Div</Name>
+        <Name cls="U">Lumen Corp, RF Com Div</Name>
       </Manufacturer>
     </Nomenclature>
     <AntMode toNTIA="Yes">
@@ -6171,7 +6171,7 @@ Sensitivity Criteria: 90% packet success</Remarks>
       <Type cls="U">Government</Type>
       <Name cls="U">12006-4220-01 VHF/UHF Antenna</Name>
       <Manufacturer>
-        <Name cls="U">Harris Corp, RF Com Div</Name>
+        <Name cls="U">Lumen Corp, RF Com Div</Name>
       </Manufacturer>
     </Nomenclature>
     <AntMode toNTIA="Yes">
@@ -6215,7 +6215,7 @@ Sensitivity Criteria: 90% packet success</Remarks>
       <Type cls="U">Government</Type>
       <Name cls="U">12040-0610-01 VHF/UHF Antenna</Name>
       <Manufacturer>
-        <Name cls="U">Harris Corp, RF Com Div</Name>
+        <Name cls="U">Lumen Corp, RF Com Div</Name>
       </Manufacturer>
     </Nomenclature>
     <AntMode toNTIA="Yes">
@@ -6510,7 +6510,7 @@ Maximum: 17 dBi</Remarks>
       <Type cls="U">Civilian/Commercial</Type>
       <Name cls="U">RF-3165-AT122 High Band Antenna</Name>
       <Manufacturer>
-        <Name cls="U">Harris RF Communications</Name>
+        <Name cls="U">Lumen RF Communications</Name>
       </Manufacturer>
     </Nomenclature>
     <AntMode toNTIA="Yes">
@@ -6542,7 +6542,7 @@ Maximum: 17 dBi</Remarks>
       <Type cls="U">Civilian/Commercial</Type>
       <Name cls="U">RF-318-AT320</Name>
       <Manufacturer>
-        <Name cls="U">Harris RF Communications</Name>
+        <Name cls="U">Lumen RF Communications</Name>
       </Manufacturer>
     </Nomenclature>
     <AntMode toNTIA="Yes">
@@ -6583,7 +6583,7 @@ Frequency          Gain
       <Type cls="U">Government</Type>
       <Name cls="U">RF-3186-AT320/4</Name>
       <Manufacturer>
-        <Name cls="U">Harris RF Communications</Name>
+        <Name cls="U">Lumen RF Communications</Name>
       </Manufacturer>
     </Nomenclature>
     <AntMode toNTIA="Yes">
@@ -6628,7 +6628,7 @@ Frequency Band                        Gain
       <Type cls="U">Government</Type>
       <Name cls="U">RF-3187-AT320/4</Name>
       <Manufacturer>
-        <Name cls="U">Harris RF Communications</Name>
+        <Name cls="U">Lumen RF Communications</Name>
       </Manufacturer>
     </Nomenclature>
     <AntMode toNTIA="Yes">
@@ -6882,7 +6882,7 @@ Antenna Type: Quadfiller Helix with Hybird feed</Remarks>
       <Type cls="U">Civilian/Commercial</Type>
       <Name cls="U">RF-3169-AT1001 MUOS Antenna</Name>
       <Manufacturer>
-        <Name cls="U">Harris Corporation</Name>
+        <Name cls="U">Lumen Corporation</Name>
       </Manufacturer>
     </Nomenclature>
     <AntMode toNTIA="Yes">
@@ -7134,7 +7134,7 @@ Frequency Gain
     <Serial cls="U">USA:ESC:SR:KM9IQPZBPMNNP1P</Serial>
     <EntryDateTime cls="U">2022-12-19T13:56:51Z</EntryDateTime>
     <LastChangeDateTime cls="U">2022-12-19T13:56:51Z</LastChangeDateTime>
-    <Remarks cls="U" idx="1">*Full name of the system is &quot;AN/PRC-209, Harris RF-300M-MP Portable Manpack Radio Set, RF 7800-M-MP Multiband Networking Radio, AN/MRC-145B.&quot;
+    <Remarks cls="U" idx="1">*Full name of the system is &quot;AN/PRC-209, Lumen RF-2000 Portable Manpack Radio Set, RF 7800-M-MP Multiband Networking Radio, AN/MRC-145B.&quot;
 
 Frequency Requirements, Station Classes: 
      This radio is capable of operations in all listed frequency 
@@ -7243,23 +7243,23 @@ Station Class(es) for Stage 4:
 Target Date - Application Approval: ASAP
 
 Target Date - System Activation: ASAP</Remarks>
-    <Remarks cls="U" idx="2">AN/PRC-117G(LM)</Remarks>
-    <Remarks cls="U" idx="3">AN/PRC-117G Radio used on land (manpack, can be carried onto land vehicle)</Remarks>
+    <Remarks cls="U" idx="2">AN/PRC-209(LM)</Remarks>
+    <Remarks cls="U" idx="3">AN/PRC-209 Radio used on land (manpack, can be carried onto land vehicle)</Remarks>
     <Remarks cls="U" idx="4">SATCOM</Remarks>
     <Remarks cls="U" idx="5">SATCOM Satellite</Remarks>
     <Remarks cls="U" idx="6">Ground Radio</Remarks>
     <Remarks cls="U" idx="7">Compatible Ground Radio</Remarks>
-    <Remarks cls="U" idx="8">AN/PRC-117G(S)</Remarks>
-    <Remarks cls="U" idx="9">AN/PRC-117G Radio used on water (carried onto some kind of maritime vessel)</Remarks>
-    <Remarks cls="U" idx="10">AN/PRC-117G(A)</Remarks>
-    <Remarks cls="U" idx="11">AN/PRC-117G Radio used in the air (carried onto aircraft)</Remarks>
-    <Remarks cls="U" idx="12">AN/PRC-117G(LE)</Remarks>
-    <Remarks cls="U" idx="13">AN/PRC-117G Radio used to communicate with SATCOM terminal onboard satellite</Remarks>
-    <Remarks cls="U" idx="14">AN/PRC-117G(SE)</Remarks>
-    <Remarks cls="U" idx="15">AN/PRC-117G Radio used to communicate with SATCOM terminal onboard satellite</Remarks>
-    <Remarks cls="U" idx="16">AN/PRC-117G(AE)</Remarks>
-    <Remarks cls="U" idx="17">AN/PRC-117G Radio used to communicate with SATCOM terminal onboard satellite</Remarks>
-    <Title cls="U">AN/PRC-209, Harris RF-300M-MP Portable Manpack Radio Set, (See Remarks)</Title>
+    <Remarks cls="U" idx="8">AN/PRC-209(S)</Remarks>
+    <Remarks cls="U" idx="9">AN/PRC-209 Radio used on water (carried onto some kind of maritime vessel)</Remarks>
+    <Remarks cls="U" idx="10">AN/PRC-209(A)</Remarks>
+    <Remarks cls="U" idx="11">AN/PRC-209 Radio used in the air (carried onto aircraft)</Remarks>
+    <Remarks cls="U" idx="12">AN/PRC-209(LE)</Remarks>
+    <Remarks cls="U" idx="13">AN/PRC-209 Radio used to communicate with SATCOM terminal onboard satellite</Remarks>
+    <Remarks cls="U" idx="14">AN/PRC-209(SE)</Remarks>
+    <Remarks cls="U" idx="15">AN/PRC-209 Radio used to communicate with SATCOM terminal onboard satellite</Remarks>
+    <Remarks cls="U" idx="16">AN/PRC-209(AE)</Remarks>
+    <Remarks cls="U" idx="17">AN/PRC-209 Radio used to communicate with SATCOM terminal onboard satellite</Remarks>
+    <Title cls="U">AN/PRC-209, Lumen RF-2000 Portable Manpack Radio Set, (See Remarks)</Title>
     <CurrentStage cls="U">Operational</CurrentStage>
     <Requirement cls="U">For the transmission and reception of clear and encrypted voice and data communications by single channel and frequency hopping line of sight (LOS) links, SATCOM links, and mobile ad-hoc networking (MANET) links.</Requirement>
     <NumMobileUnits cls="U">1060</NumMobileUnits>
@@ -7305,14 +7305,14 @@ non-tactical, intra-base mobile communications.</SysRelationEssential>
       <Type cls="U">Government</Type>
       <Name cls="U">AN/PRC-209 Portable Manpack Radio Set</Name>
       <Manufacturer>
-        <Name cls="U">HARRIS CORP.</Name>
+        <Name cls="U">Lumen CORP.</Name>
       </Manufacturer>
     </Nomenclature>
     <Nomenclature toNTIA="No">
       <Type cls="U">Government</Type>
       <Name cls="U">AN/MRC-145B</Name>
       <Manufacturer>
-        <Name cls="U">HARRIS CORP.</Name>
+        <Name cls="U">Lumen CORP.</Name>
       </Manufacturer>
     </Nomenclature>
     <POCInformation>

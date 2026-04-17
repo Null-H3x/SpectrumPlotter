@@ -305,14 +305,21 @@
         <a href="/workbox" class="nav-link ism-nav-link" style="display:none">
             <i class="fas fa-inbox"></i><span>Workbox</span>
         </a>
-        <a href="/frequency-nomination" class="nav-link">
-            <i class="fas fa-wave-square"></i><span>Freq Tool</span>
-        </a>
+        <div class="nav-dropdown">
+            <button class="nav-link nav-dropdown-trigger active">
+                <i class="fas fa-wrench"></i><span>Tools</span><i class="fas fa-caret-down nav-caret"></i>
+            </button>
+            <div class="nav-dropdown-menu">
+                <a href="/tools" class="nav-dropdown-item"><i class="fas fa-satellite-dish"></i> EW Deconfliction</a>
+                <a href="/tools?tool=serial-alloc" class="nav-dropdown-item"><i class="fas fa-list-ol"></i> Serial Allocation</a>
+                <a href="/tools?tool=serial-suballoc" class="nav-dropdown-item"><i class="fas fa-sitemap"></i> Serial Sub-Allocation</a>
+                <div class="nav-dropdown-divider"></div>
+                <a href="/frequency-nomination" class="nav-dropdown-item"><i class="fas fa-wave-square"></i> Nomination</a>
+                    <a href="/database?tab=analytics" class="nav-dropdown-item"><i class="fas fa-chart-bar"></i> Analytics</a>
+            </div>
+        </div>
         <a href="/view-manager" class="nav-link">
             <i class="fas fa-table"></i><span>Table Manager</span>
-        </a>
-        <a href="/tools" class="nav-link active">
-            <i class="fas fa-wrench"></i><span>Tools</span>
         </a>
         <a href="/admin" class="nav-link admin-console-link" style="display:none">
             <i class="fas fa-shield-halved"></i><span>Admin</span>
@@ -320,7 +327,7 @@
     </div>
     <div class="nav-links nav-links-right">
         <a href="/profile" class="nav-link" title="Account">
-            <i class="fas fa-user-circle"></i><span>Account</span>
+            <i class="fas fa-cog"></i><span>Settings</span>
         </a>
         <button class="nav-link" onclick="handleLogout()" title="Logout"
                 style="background:none;border:none;cursor:pointer;color:inherit;">
@@ -339,6 +346,15 @@
     <div class="tool-tabs">
         <button class="tool-tab active" data-tool="ew-deconfliction" onclick="selectTool('ew-deconfliction', this)">
             <i class="fas fa-satellite-dish"></i> EW Deconfliction
+        </button>
+        <button id="tab-serial-alloc" class="tool-tab" data-tool="serial-alloc" onclick="selectTool('serial-alloc', this)">
+            <i class="fas fa-list-ol"></i> Serial Allocation
+        </button>
+        <button id="tab-serial-suballoc" class="tool-tab" data-tool="serial-suballoc" onclick="selectTool('serial-suballoc', this)">
+            <i class="fas fa-sitemap"></i> Serial Sub-Allocation
+        </button>
+        <button class="tool-tab" data-tool="freq-tool" onclick="selectTool('freq-tool', this)">
+            <i class="fas fa-wave-square"></i> Nomination
         </button>
     </div>
 
@@ -568,6 +584,144 @@
         </div>
 
     </div><!-- /tool-ew-deconfliction -->
+
+    <!-- Nomination Panel -->
+    <div id="tool-freq-tool" class="tool-panel">
+        <div class="card">
+            <div class="card-title"><i class="fas fa-wave-square"></i> Frequency Nomination Tool</div>
+            <p style="color:#94a3b8;font-size:14px;margin-bottom:18px;">
+                Submit and manage frequency nomination requests for SFAF coordination.
+            </p>
+            <a href="/frequency-nomination" class="run-btn" style="text-decoration:none;">
+                <i class="fas fa-external-link-alt"></i> Open Nomination
+            </a>
+        </div>
+    </div><!-- /tool-freq-tool -->
+
+    <!-- Serial Allocation Panel (AFSMO: all MAJCOMs; command: subordinate units only) -->
+    <div id="tool-serial-alloc" class="tool-panel">
+        <div class="card">
+            <div class="card-title" id="smAllocCardTitle"><i class="fas fa-plus-circle"></i> Allocate Serials to a MAJCOM Unit</div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                    <label style="font-size:0.75rem;color:#64748b;">Prefix</label>
+                    <select id="smPrefix" class="form-group select" style="width:100px;">
+                        <option value="AF">AF</option>
+                    </select>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:200px;">
+                    <label id="smUnitLabel" style="font-size:0.75rem;color:#64748b;">Unit (MAJCOM)</label>
+                    <select id="smUnitId" class="form-group select">
+                        <option value="">— Loading units… —</option>
+                    </select>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                    <label style="font-size:0.75rem;color:#64748b;">Count</label>
+                    <input type="number" id="smCount" value="500" min="1" max="10000"
+                        style="width:100px;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 10px;color:#e2e8f0;font-size:13px;">
+                </div>
+                <button class="run-btn" style="padding:9px 20px;" onclick="smAllocate()">
+                    <i class="fas fa-arrow-right"></i> Allocate
+                </button>
+            </div>
+            <div id="smAllocateMsg" style="margin-top:8px;font-size:0.8rem;display:none;"></div>
+        </div>
+        <div class="card">
+            <div class="card-title" style="justify-content:space-between;">
+                <span id="smAllocTableTitle"><i class="fas fa-table"></i> Current Allocations</span>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <select id="smFilterPrefix" style="background:#0f172a;border:1px solid #334155;border-radius:6px;padding:5px 8px;color:#e2e8f0;font-size:12px;" onchange="smLoadAllocations()">
+                        <option value="">All Prefixes</option>
+                        <option value="AF">AF</option>
+                    </select>
+                    <button onclick="smLoadAllocations()" style="background:#1e293b;border:1px solid #334155;border-radius:6px;padding:5px 10px;color:#94a3b8;font-size:12px;cursor:pointer;">
+                        <i class="fas fa-sync"></i>
+                    </button>
+                </div>
+            </div>
+            <div style="overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;font-size:0.82rem;" id="smTable">
+                    <thead>
+                        <tr style="border-bottom:1px solid #334155;">
+                            <th style="padding:8px 12px;text-align:left;color:#64748b;font-size:0.72rem;text-transform:uppercase;">Prefix</th>
+                            <th style="padding:8px 12px;text-align:left;color:#64748b;font-size:0.72rem;text-transform:uppercase;">Unit</th>
+                            <th style="padding:8px 12px;text-align:left;color:#64748b;font-size:0.72rem;text-transform:uppercase;">Code</th>
+                            <th style="padding:8px 12px;text-align:right;color:#64748b;font-size:0.72rem;text-transform:uppercase;">Allocated</th>
+                            <th style="padding:8px 12px;text-align:right;color:#64748b;font-size:0.72rem;text-transform:uppercase;">Available</th>
+                            <th style="padding:8px 12px;text-align:right;color:#64748b;font-size:0.72rem;text-transform:uppercase;">Used</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="smTableBody">
+                        <tr><td colspan="7" style="text-align:center;color:#64748b;padding:20px;">Loading…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div><!-- /tool-serial-alloc -->
+
+    <!-- Serial Sub-Allocation Panel (MAJCOM command role) -->
+    <div id="tool-serial-suballoc" class="tool-panel">
+        <div class="card">
+            <div class="card-title"><i class="fas fa-warehouse"></i> My Pool</div>
+            <div id="msMyPoolBody" style="font-size:0.85rem;color:#94a3b8;">Loading…</div>
+        </div>
+        <div class="card">
+            <div class="card-title"><i class="fas fa-plus-circle"></i> Sub-Allocate Serials to a Unit</div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                    <label style="font-size:0.75rem;color:#64748b;">Prefix</label>
+                    <select id="msPrefix" style="background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 10px;color:#e2e8f0;font-size:13px;width:110px;">
+                        <option value="">— Select —</option>
+                        <option value="AF">AF</option>
+                        <option value="AFSO">AFSO</option>
+                    </select>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:200px;">
+                    <label style="font-size:0.75rem;color:#64748b;">To Unit</label>
+                    <select id="msToUnitId" style="background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 10px;color:#e2e8f0;font-size:13px;">
+                        <option value="">— Loading units… —</option>
+                    </select>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                    <label style="font-size:0.75rem;color:#64748b;">Count</label>
+                    <input type="number" id="msCount" value="100" min="1" max="10000"
+                        style="width:100px;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 10px;color:#e2e8f0;font-size:13px;">
+                </div>
+                <button class="run-btn" style="padding:9px 20px;" onclick="msSubAllocate()">
+                    <i class="fas fa-arrow-right"></i> Sub-Allocate
+                </button>
+            </div>
+            <div id="msAllocateMsg" style="margin-top:8px;font-size:0.8rem;display:none;"></div>
+        </div>
+        <div class="card">
+            <div class="card-title" style="justify-content:space-between;">
+                <span><i class="fas fa-table"></i> Subordinate Allocations</span>
+                <button onclick="msLoadSubAllocations()" style="background:#1e293b;border:1px solid #334155;border-radius:6px;padding:5px 10px;color:#94a3b8;font-size:12px;cursor:pointer;">
+                    <i class="fas fa-sync"></i>
+                </button>
+            </div>
+            <div style="overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                    <thead>
+                        <tr style="border-bottom:1px solid #334155;">
+                            <th style="padding:8px 12px;text-align:left;color:#64748b;font-size:0.72rem;text-transform:uppercase;">Prefix</th>
+                            <th style="padding:8px 12px;text-align:left;color:#64748b;font-size:0.72rem;text-transform:uppercase;">Unit</th>
+                            <th style="padding:8px 12px;text-align:left;color:#64748b;font-size:0.72rem;text-transform:uppercase;">Code</th>
+                            <th style="padding:8px 12px;text-align:right;color:#64748b;font-size:0.72rem;text-transform:uppercase;">Allocated</th>
+                            <th style="padding:8px 12px;text-align:right;color:#64748b;font-size:0.72rem;text-transform:uppercase;">Available</th>
+                            <th style="padding:8px 12px;text-align:right;color:#64748b;font-size:0.72rem;text-transform:uppercase;">Used</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="msTableBody">
+                        <tr><td colspan="7" style="text-align:center;color:#64748b;padding:20px;">Loading…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div><!-- /tool-serial-suballoc -->
+
 </div>
 
 <script src="/js/modules/auth-guard.js"></script>
@@ -577,7 +731,32 @@ function selectTool(id, btn) {
     document.querySelectorAll('.tool-panel').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('tool-' + id).classList.add('active');
+    // Trigger data load for serial panels
+    if (id === 'serial-alloc')    { smLoadUnits(); smLoadAllocations(); }
+    if (id === 'serial-suballoc') { msInitPanel(); }
 }
+
+// ── Tool init from URL param ──────────────────────────────────────────────
+let _toolsUserRole   = '';
+let _toolsMyUnitId   = null;
+
+document.addEventListener('DOMContentLoaded', async () => {
+    // Resolve user role for role-gated tabs
+    try {
+        const res  = await fetch('/api/user/profile');
+        const data = res.ok ? await res.json() : {};
+        _toolsUserRole = data.role || '';
+        _toolsMyUnitId = data.primary_unit_id || null;
+    } catch (e) { /* not critical */ }
+
+    // Auto-select tab from ?tool= query param
+    const params = new URLSearchParams(window.location.search);
+    const toolParam = params.get('tool');
+    if (toolParam) {
+        const btn = document.querySelector(`.tool-tab[data-tool="${toolParam}"]`);
+        if (btn) { selectTool(toolParam, btn); return; }
+    }
+});
 
 function selectResultTab(id, btn) {
     document.querySelectorAll('.result-tab').forEach(t => t.classList.remove('active'));
@@ -744,6 +923,272 @@ function renderEWResults(data) {
         else if (jrflCount > 0) selectResultTab('jrfl', document.querySelector('[data-panel="jrfl"]'));
         else if (ceoisCount > 0) selectResultTab('ceoi', document.querySelector('[data-panel="ceoi"]'));
     }
+}
+
+// ── AFSMO Serial Allocation ───────────────────────────────────────────────
+let _smUnits = [];
+
+async function smLoadUnits() {
+    const isMajcom = _toolsUserRole === 'command';
+    // Update panel labels based on role
+    const titleEl      = document.getElementById('smAllocCardTitle');
+    const labelEl      = document.getElementById('smUnitLabel');
+    const tableTitleEl = document.getElementById('smAllocTableTitle');
+    const prefixFilter = document.getElementById('smFilterPrefix');
+    if (isMajcom) {
+        if (titleEl)      titleEl.innerHTML = '<i class="fas fa-plus-circle"></i> Allocate Serials to a Subordinate ISM';
+        if (labelEl)      labelEl.textContent = 'Unit (subordinate)';
+        if (tableTitleEl) tableTitleEl.innerHTML = '<i class="fas fa-table"></i> Subordinate Allocations';
+        if (prefixFilter) prefixFilter.parentElement.style.display = 'none'; // hide global filter
+    } else {
+        if (titleEl)      titleEl.innerHTML = '<i class="fas fa-plus-circle"></i> Allocate Serials to a MAJCOM Unit';
+        if (labelEl)      labelEl.textContent = 'Unit (MAJCOM)';
+        if (tableTitleEl) tableTitleEl.innerHTML = '<i class="fas fa-table"></i> Current Allocations';
+        if (prefixFilter) prefixFilter.parentElement.style.display = '';
+    }
+
+    try {
+        let units = [];
+        if (isMajcom && _toolsMyUnitId) {
+            // MAJCOM ISM: only show units subordinate to their own unit
+            const res  = await fetch(`/api/frequency/units/${_toolsMyUnitId}/subordinates`);
+            const data = res.ok ? await res.json() : {};
+            units = data.units || [];
+        } else {
+            // AFSMO/admin: all MAJCOM-level units
+            const res  = await fetch('/api/frequency/units/majcom');
+            const data = res.ok ? await res.json() : {};
+            units = data.units || [];
+        }
+        _smUnits = units.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        const sel = document.getElementById('smUnitId');
+        const placeholder = isMajcom ? '— Select subordinate unit —' : '— Select MAJCOM —';
+        sel.innerHTML = `<option value="">${placeholder}</option>` +
+            _smUnits.map(u =>
+                `<option value="${u.id}">${u.unit_code ? u.unit_code + ' — ' : ''}${u.name}</option>`
+            ).join('');
+    } catch (e) { console.warn('smLoadUnits:', e); }
+}
+
+async function smLoadAllocations() {
+    const prefix   = document.getElementById('smFilterPrefix')?.value || '';
+    const isMajcom = _toolsUserRole === 'command';
+    const tbody    = document.getElementById('smTableBody');
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#64748b;padding:16px;">Loading…</td></tr>';
+    try {
+        const res  = await fetch(`/api/serial-numbers/allocations${prefix ? '?prefix=' + prefix : ''}`);
+        const data = res.ok ? await res.json() : {};
+        let rows = data.allocations || [];
+        // MAJCOM ISMs only see allocations for their own subordinate units
+        if (isMajcom && _toolsMyUnitId) {
+            const subIds = new Set(_smUnits.map(u => u.id));
+            rows = rows.filter(r => r.allocated_unit_id && subIds.has(r.allocated_unit_id));
+        }
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#64748b;padding:16px;">No allocations found.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map(row => {
+            const isUnalloc = !row.allocated_unit_id;
+            const pct = row.total_allocated > 0
+                ? Math.round((row.used_count / row.total_allocated) * 100) : 0;
+            return `<tr style="border-bottom:1px solid rgba(51,65,85,0.5);">
+                <td style="padding:8px 12px;font-family:monospace;font-size:0.85rem;">${row.prefix}</td>
+                <td style="padding:8px 12px;">${isUnalloc
+                    ? '<span style="color:#64748b;font-style:italic;">Unallocated</span>'
+                    : row.unit_name}</td>
+                <td style="padding:8px 12px;font-family:monospace;font-size:0.78rem;color:#64748b;">${row.unit_code || '—'}</td>
+                <td style="padding:8px 12px;text-align:right;">${row.total_allocated.toLocaleString()}</td>
+                <td style="padding:8px 12px;text-align:right;color:#4ade80;">${row.available_count.toLocaleString()}</td>
+                <td style="padding:8px 12px;text-align:right;color:#94a3b8;">${row.used_count.toLocaleString()}
+                    ${pct > 0 ? `<span style="font-size:0.72rem;color:#64748b;"> (${pct}%)</span>` : ''}</td>
+                <td style="padding:8px 12px;text-align:right;">
+                    ${!isUnalloc ? `<button style="padding:3px 8px;font-size:0.75rem;background:rgba(180,40,40,0.4);color:#fca5a5;border:1px solid rgba(220,60,60,0.35);border-radius:4px;cursor:pointer;"
+                        onclick="smDeallocate('${row.allocated_unit_id}','${row.unit_name}','${row.prefix}')">
+                        <i class="fas fa-minus-circle"></i> Remove</button>` : ''}
+                </td>
+            </tr>`;
+        }).join('');
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#ef5350;padding:16px;">Failed to load.</td></tr>';
+    }
+}
+
+async function smAllocate() {
+    const prefix   = document.getElementById('smPrefix')?.value || 'AF';
+    const unitId   = document.getElementById('smUnitId').value;
+    const count    = parseInt(document.getElementById('smCount').value, 10);
+    if (!unitId) { smMsg('Select a unit first.', 'warning'); return; }
+    if (!count || count < 1) { smMsg('Enter a valid count.', 'warning'); return; }
+    const unitName = document.getElementById('smUnitId').selectedOptions[0]?.text || unitId;
+    if (!confirm(`Allocate ${count.toLocaleString()} "${prefix}" serials to ${unitName}?`)) return;
+    try {
+        const res  = await fetch('/api/serial-numbers/allocate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prefix, unit_id: unitId, count })
+        });
+        const data = await res.json();
+        if (!res.ok) { smMsg(data.error || 'Allocation failed.', 'danger'); return; }
+        smMsg(`Allocated ${data.allocated.toLocaleString()} serials to ${unitName}.`, 'success');
+        smLoadAllocations();
+    } catch (e) { smMsg('Error during allocation.', 'danger'); }
+}
+
+async function smDeallocate(unitId, unitName, prefix) {
+    if (!confirm(`Remove all unassigned "${prefix}" allocations from ${unitName}?\n\nAssigned serials will NOT be affected.`)) return;
+    try {
+        const res  = await fetch(`/api/serial-numbers/allocations/${unitId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok) { smMsg(data.error || 'Deallocation failed.', 'danger'); return; }
+        smMsg(`Removed ${data.deallocated.toLocaleString()} allocations from ${unitName}.`, 'success');
+        smLoadAllocations();
+    } catch (e) { smMsg('Error during deallocation.', 'danger'); }
+}
+
+function smMsg(text, type) {
+    const el = document.getElementById('smAllocateMsg');
+    const colors = { success: '#4ade80', danger: '#ef5350', warning: '#fbbf24' };
+    el.style.color = colors[type] || '#94a3b8';
+    el.textContent = text;
+    el.style.display = '';
+    setTimeout(() => { el.style.display = 'none'; }, 5000);
+}
+
+// ── MAJCOM Serial Sub-Allocation ──────────────────────────────────────────
+let _msMyUnitId = null;
+
+async function msInitPanel() {
+    try {
+        const res  = await fetch('/api/user/profile');
+        const data = res.ok ? await res.json() : {};
+        _msMyUnitId = data.primary_unit_id || null;
+    } catch (e) { _msMyUnitId = null; }
+    await Promise.all([msLoadMyPool(), msLoadSubUnits(), msLoadSubAllocations()]);
+}
+
+async function msLoadMyPool() {
+    if (!_msMyUnitId) {
+        document.getElementById('msMyPoolBody').textContent = 'Could not determine your unit.';
+        return;
+    }
+    try {
+        const res  = await fetch(`/api/serial-numbers/pool?unit_id=${_msMyUnitId}`);
+        const data = res.ok ? await res.json() : {};
+        const rows = data.pool || [];
+        if (!rows.length) {
+            document.getElementById('msMyPoolBody').textContent = 'No serials allocated to your unit.';
+            return;
+        }
+        document.getElementById('msMyPoolBody').innerHTML = rows.map(r => `
+            <span style="display:inline-block;margin-right:24px;margin-bottom:4px;">
+                <strong style="color:#e2e8f0;">${r.prefix}</strong>
+                — <span style="color:#4ade80;">${r.available_count.toLocaleString()} available</span>
+                / ${r.total_allocated.toLocaleString()} total (${r.used_count.toLocaleString()} used)
+            </span>`).join('');
+    } catch (e) {
+        document.getElementById('msMyPoolBody').textContent = 'Error loading pool.';
+    }
+}
+
+async function msLoadSubUnits() {
+    if (!_msMyUnitId) {
+        document.getElementById('msToUnitId').innerHTML = '<option value="">— Unit unknown —</option>';
+        return;
+    }
+    try {
+        const res   = await fetch(`/api/frequency/units/${_msMyUnitId}/subordinates`);
+        const data  = res.ok ? await res.json() : {};
+        const sel   = document.getElementById('msToUnitId');
+        const cur   = sel.value;
+        sel.innerHTML = '<option value="">— Select unit —</option>';
+        const units = data.units || [];
+        if (!units.length) { sel.innerHTML = '<option value="">No subordinate units found</option>'; return; }
+        units.forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u.id;
+            opt.textContent = u.unit_code ? `${u.unit_code} — ${u.name}` : u.name;
+            sel.appendChild(opt);
+        });
+        if (cur) sel.value = cur;
+    } catch (e) {
+        document.getElementById('msToUnitId').innerHTML = '<option value="">Error loading units</option>';
+    }
+}
+
+async function msLoadSubAllocations() {
+    if (!_msMyUnitId) return;
+    const tbody = document.getElementById('msTableBody');
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#64748b;padding:20px;">Loading…</td></tr>';
+    try {
+        const res  = await fetch('/api/serial-numbers/allocations');
+        const data = res.ok ? await res.json() : {};
+        const rows = (data.allocations || []).filter(r => r.allocated_unit_id && r.allocated_unit_id !== _msMyUnitId);
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#64748b;padding:20px;">No sub-allocations found.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map(row => `<tr style="border-bottom:1px solid rgba(51,65,85,0.5);">
+            <td style="padding:8px 12px;font-family:monospace;">${row.prefix}</td>
+            <td style="padding:8px 12px;">${row.unit_name}</td>
+            <td style="padding:8px 12px;color:#64748b;font-size:0.8rem;">${row.unit_code || ''}</td>
+            <td style="padding:8px 12px;text-align:right;">${row.total_allocated.toLocaleString()}</td>
+            <td style="padding:8px 12px;text-align:right;color:#4ade80;">${row.available_count.toLocaleString()}</td>
+            <td style="padding:8px 12px;text-align:right;color:#f87171;">${row.used_count.toLocaleString()}</td>
+            <td style="padding:8px 12px;text-align:right;">
+                <button style="padding:3px 8px;font-size:0.75rem;background:rgba(180,40,40,0.4);color:#fca5a5;border:1px solid rgba(220,60,60,0.35);border-radius:4px;cursor:pointer;"
+                    onclick="msReclaim('${row.allocated_unit_id}','${row.unit_name}','${row.prefix}')">
+                    <i class="fas fa-undo"></i> Reclaim</button>
+            </td>
+        </tr>`).join('');
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#ef5350;padding:20px;">Error.</td></tr>';
+    }
+}
+
+async function msSubAllocate() {
+    const prefix   = document.getElementById('msPrefix').value;
+    const toUnitId = document.getElementById('msToUnitId').value;
+    const count    = parseInt(document.getElementById('msCount').value, 10);
+    if (!_msMyUnitId) { msMsg('Could not determine your unit.', 'danger'); return; }
+    if (!prefix)    { msMsg('Select a prefix first.', 'warning'); return; }
+    if (!toUnitId)  { msMsg('Select a unit first.', 'warning'); return; }
+    if (!count || count < 1) { msMsg('Enter a valid count.', 'warning'); return; }
+    const unitName = document.getElementById('msToUnitId').selectedOptions[0]?.text || toUnitId;
+    if (!confirm(`Sub-allocate ${count.toLocaleString()} "${prefix}" serials to ${unitName}?`)) return;
+    try {
+        const res  = await fetch('/api/serial-numbers/sub-allocate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ from_unit_id: _msMyUnitId, to_unit_id: toUnitId, prefix, count })
+        });
+        const data = await res.json();
+        if (!res.ok) { msMsg(data.error || 'Sub-allocation failed.', 'danger'); return; }
+        if (data.allocated === 0) { msMsg(`No "${prefix}" serials available. Contact AFSMO to allocate first.`, 'warning'); return; }
+        msMsg(`Sub-allocated ${data.allocated.toLocaleString()} serials to ${unitName}.`, 'success');
+        msLoadMyPool(); msLoadSubAllocations();
+    } catch (e) { msMsg('Error during sub-allocation.', 'danger'); }
+}
+
+async function msReclaim(toUnitId, unitName, prefix) {
+    if (!_msMyUnitId) { msMsg('Could not determine your unit.', 'danger'); return; }
+    if (!confirm(`Reclaim all unassigned "${prefix}" allocations from ${unitName}?\n\nAssigned serials will NOT be affected.`)) return;
+    try {
+        const res  = await fetch(`/api/serial-numbers/sub-allocate?from_unit_id=${_msMyUnitId}&to_unit_id=${toUnitId}&count=0`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok) { msMsg(data.error || 'Reclaim failed.', 'danger'); return; }
+        msMsg(`Reclaimed ${data.reclaimed.toLocaleString()} serials from ${unitName}.`, 'success');
+        msLoadMyPool(); msLoadSubAllocations();
+    } catch (e) { msMsg('Error during reclaim.', 'danger'); }
+}
+
+function msMsg(text, type) {
+    const el = document.getElementById('msAllocateMsg');
+    const colors = { success: '#4ade80', danger: '#ef5350', warning: '#fbbf24' };
+    el.style.color = colors[type] || '#94a3b8';
+    el.textContent = text;
+    el.style.display = '';
+    setTimeout(() => { el.style.display = 'none'; }, 5000);
 }
 </script>
 </body>

@@ -78,14 +78,21 @@
             <a href="/workbox" class="nav-link ism-nav-link" style="display:none">
                 <i class="fas fa-inbox"></i><span>Workbox</span>
             </a>
-            <a href="/frequency-nomination" class="nav-link">
-                <i class="fas fa-wave-square"></i><span>Freq Tool</span>
-            </a>
+            <div class="nav-dropdown">
+                <button class="nav-link nav-dropdown-trigger">
+                    <i class="fas fa-wrench"></i><span>Tools</span><i class="fas fa-caret-down nav-caret"></i>
+                </button>
+                <div class="nav-dropdown-menu">
+                    <a href="/tools" class="nav-dropdown-item"><i class="fas fa-satellite-dish"></i> EW Deconfliction</a>
+                    <a href="/tools?tool=serial-alloc" class="nav-dropdown-item"><i class="fas fa-list-ol"></i> Serial Allocation</a>
+                    <a href="/tools?tool=serial-suballoc" class="nav-dropdown-item"><i class="fas fa-sitemap"></i> Serial Sub-Allocation</a>
+                    <div class="nav-dropdown-divider"></div>
+                    <a href="/frequency-nomination" class="nav-dropdown-item"><i class="fas fa-wave-square"></i> Nomination</a>
+                    <a href="/database?tab=analytics" class="nav-dropdown-item"><i class="fas fa-chart-bar"></i> Analytics</a>
+                </div>
+            </div>
             <a href="/view-manager" class="nav-link">
                 <i class="fas fa-table"></i><span>Table Manager</span>
-            </a>
-            <a href="/tools" class="nav-link">
-                <i class="fas fa-wrench"></i><span>Tools</span>
             </a>
             <a href="/admin" class="nav-link admin-console-link" style="display:none">
                 <i class="fas fa-shield-halved"></i><span>Admin</span>
@@ -94,7 +101,7 @@
         <div class="nav-links nav-links-right">
             <button id="refreshBtn"      class="nav-link" title="Refresh"><i class="fas fa-sync"></i></button>
             <a href="/profile" class="nav-link" title="Account">
-                <i class="fas fa-user-circle"></i><span>Account</span>
+                <i class="fas fa-cog"></i><span>Settings</span>
             </a>
             <button class="nav-link" onclick="handleLogout()" title="Logout"
                     style="background:none;border:none;cursor:pointer;color:inherit;">
@@ -105,7 +112,6 @@
 <!-- Tab Navigation -->
     <div class="tabs">
         <button class="tab active" data-tab="sfaf"><i class="fas fa-file-alt"></i> SFAF Records</button>
-        <button class="tab" data-tab="query"><i class="fas fa-search"></i> Query Builder</button>
         <button class="tab" data-tab="analytics"><i class="fas fa-chart-bar"></i> Analytics</button>
         <button class="tab" data-tab="custom-views"><i class="fas fa-layer-group"></i> Custom Views</button>
     </div>
@@ -178,100 +184,118 @@
                         </button>
                     </div>
                 </div>
-                <button id="deleteSelectedBtn" class="btn btn-danger" disabled><i class="fas fa-trash-alt"></i> Delete Selected</button>
-                <button id="deleteAllBtn" class="btn btn-danger" title="Delete all SFAF records from database"><i class="fas fa-trash"></i> Delete All</button>
+                <button id="deleteSelectedBtn" class="btn btn-danger admin-ntia-only" disabled><i class="fas fa-trash-alt"></i> Delete Selected</button>
+                <button id="deleteAllBtn" class="btn btn-danger admin-ntia-only" title="Delete all SFAF records from database"><i class="fas fa-trash"></i> Delete All</button>
                 <button id="refreshSFAFBtn" class="btn"><i class="fas fa-sync"></i></button>
             </div>
         </div>
 
-        <!-- Filters -->
-        <div class="filters">
-            <select id="completionStatusFilter" class="select">
-                <option value="">All Records</option>
-                <option value="complete">Complete</option>
-                <option value="incomplete">Incomplete</option>
-                <option value="empty">Empty</option>
-                <option value="validation-errors">Has Errors</option>
-            </select>
-            <select id="agencyFilter" class="select">
-                <option value="">All Agencies</option>
-                <option value="A">Army</option>
-                <option value="N">Navy</option>
-                <option value="F">Air Force</option>
-                <option value="M">Marines</option>
-            </select>
-            <select id="frequencyBandFilter" class="select">
-                <option value="">All Bands</option>
-                <option value="hf">HF</option>
-                <option value="vhf">VHF</option>
-                <option value="uhf">UHF</option>
-                <option value="shf">SHF</option>
-            </select>
-            <select id="poolAssignmentFilter" class="select">
-                <option value="">All Record Types</option>
-                <option value="pool">Pool Assignments Only</option>
-                <option value="assigned">Assigned Records Only</option>
-            </select>
-            <button id="advancedQueryBtn" class="btn btn-sm">
-                <i class="fas fa-filter"></i> Advanced Query
-            </button>
-            <button id="clearFiltersBtn" class="btn btn-sm">
-                <i class="fas fa-times"></i> Clear Filters
-            </button>
-        </div>
+        <!-- Query Builder (inline, replaces old advanced query panel) -->
+        <div style="display:flex;gap:0;border-bottom:1px solid rgba(102,126,234,0.15);">
 
-        <!-- Advanced Query Builder Panel (Initially Hidden) -->
-        <div id="advancedQueryPanel" class="advanced-query-panel" style="display: none;">
-            <div class="query-panel-header">
-                <h4><i class="fas fa-code"></i> Advanced Query Builder</h4>
-                <button class="btn-icon" onclick="databaseViewer.toggleQueryPanel()">
-                    <i class="fas fa-times"></i>
-                </button>
+            <!-- Sidebar: Saved Queries + History -->
+            <div id="queryHistoryPanel" style="width:240px;min-width:240px;border-right:1px solid rgba(102,126,234,0.15);display:flex;flex-direction:column;overflow:hidden;background:rgba(15,15,35,0.4);">
+                <div style="padding:12px 14px 10px;border-bottom:1px solid rgba(102,126,234,0.12);display:flex;align-items:center;gap:8px;">
+                    <span style="font-size:0.82rem;font-weight:700;color:#60a5fa;letter-spacing:0.5px;flex:1;"><i class="fas fa-bookmark"></i> Saved Queries</span>
+                </div>
+                <div id="savedQueriesList" style="max-height:180px;overflow-y:auto;padding:4px 0;border-bottom:1px solid rgba(102,126,234,0.12);">
+                    <div style="padding:16px;text-align:center;color:#607d8b;font-size:0.8rem;font-style:italic;">No saved queries</div>
+                </div>
+                <div style="padding:12px 14px 10px;border-bottom:1px solid rgba(102,126,234,0.12);display:flex;align-items:center;gap:8px;">
+                    <span style="font-size:0.82rem;font-weight:700;color:#a78bfa;letter-spacing:0.5px;flex:1;"><i class="fas fa-history"></i> Query History</span>
+                    <button class="btn btn-sm btn-secondary" onclick="databaseViewer.clearQueryHistory()" title="Clear history" style="padding:3px 7px;font-size:0.75rem;">Clear</button>
+                </div>
+                <div id="queryHistoryList" style="flex:1;overflow-y:auto;padding:4px 0;max-height:220px;">
+                    <div style="padding:16px;text-align:center;color:#607d8b;font-size:0.8rem;font-style:italic;">No history yet</div>
+                </div>
             </div>
 
-            <div class="query-panel-body">
-                <!-- Filter Queries Container -->
-                <div id="dbFilterQueriesContainer" class="filter-queries-container">
-                    <!-- Queries will be added dynamically here -->
-                </div>
-
-                <!-- Add Query Button -->
-                <button id="addDBQueryBtn" class="add-query-btn">
-                    <i class="fas fa-plus"></i> Add Filter Query
-                </button>
-
-                <!-- Quick Filters -->
-                <div class="quick-filters">
-                    <h5>Quick Filters:</h5>
-                    <div class="quick-filter-grid">
-                        <button class="quick-filter-btn" data-filter="hf">HF Band</button>
-                        <button class="quick-filter-btn" data-filter="vhf">VHF Band</button>
-                        <button class="quick-filter-btn" data-filter="uhf">UHF Band</button>
-                        <button class="quick-filter-btn" data-filter="imported">Imported</button>
-                        <button class="quick-filter-btn" data-filter="manual">Manual</button>
+            <!-- Builder -->
+            <div style="flex:1;overflow-y:auto;">
+            <div class="query-builder-container">
+                <div class="query-conditions-box">
+                    <div class="query-section">
+                        <h4>Query Conditions</h4>
+                        <div id="queryConditionsList" class="conditions-list"></div>
+                        <button id="addConditionBtn" class="btn-add-condition">
+                            <i class="fas fa-plus-circle"></i> Add Condition
+                        </button>
+                    </div>
+                    <div class="query-section">
+                        <h4>Query Sort</h4>
+                        <div class="sort-controls">
+                            <label>Field:</label>
+                            <select id="querySortField" class="query-select">
+                                <option value="created_at">Created Date</option>
+                                <option value="frequency">Frequency</option>
+                                <option value="serial">Serial Number</option>
+                                <option value="location">Location</option>
+                            </select>
+                            <div class="sort-order-toggle">
+                                <button id="sortAscBtn" class="sort-btn active" data-order="asc">
+                                    <i class="fas fa-sort-amount-down"></i> Ascending
+                                </button>
+                                <button id="sortDescBtn" class="sort-btn" data-order="desc">
+                                    <i class="fas fa-sort-amount-up"></i> Descending
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="query-section">
+                        <h4>Assignments with Matching Proposals</h4>
+                        <select id="queryAssignmentMode" class="query-select">
+                            <option value="include">Include</option>
+                            <option value="exclude">Exclude</option>
+                            <option value="only">Only Matching</option>
+                        </select>
                     </div>
                 </div>
-
-                <!-- Query Actions -->
-                <div class="filter-actions">
-                    <button id="applyDBFiltersBtn" class="btn btn-primary">
-                        <i class="fas fa-search"></i> Run Query
+                <div class="query-actions">
+                    <button id="runQueryBtn" class="btn btn-primary btn-lg">
+                        <i class="fas fa-play"></i> Run Query
                     </button>
-                    <button id="clearDBFiltersBtn" class="btn">
-                        <i class="fas fa-times"></i> Clear All
+                    <button id="clearQueryBtn" class="btn btn-lg">
+                        <i class="fas fa-eraser"></i> Clear All
+                    </button>
+                    <button id="saveQueryBtn" class="btn btn-lg">
+                        <i class="fas fa-save"></i> Save Query
                     </button>
                 </div>
+            </div>
+            </div>
+        </div>
 
-                <!-- Filter Results -->
-                <div class="filter-results">
-                    <div class="stat-row">
-                        <span>Matching Records:</span>
-                        <span id="dbMatchingCount" class="stat-value">0</span>
+        <!-- Query Results (shown after Run Query; hides SFAF grid) -->
+        <div id="queryResultsSection" style="display:none;">
+            <div class="results-header" style="padding:10px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(102,126,234,0.12);">
+                <h3 style="font-size:0.95rem;font-weight:600;color:#c7d2fe;display:flex;align-items:center;gap:8px;"><i class="fas fa-table"></i> Query Results</h3>
+                <div style="display:flex;align-items:center;gap:16px;">
+                    <div class="filter-results" style="display:flex;gap:20px;">
+                        <div class="stat-row"><span>Matching Records:</span> <span id="queryMatchingCount" class="stat-value">0</span></div>
+                        <div class="stat-row"><span>Total Records:</span> <span id="queryTotalCount" class="stat-value">0</span></div>
                     </div>
-                    <div class="stat-row">
-                        <span id="dbTotalCountLabel">Database Records:</span>
-                        <span id="dbTotalCount" class="stat-value">0</span>
-                    </div>
+                    <button onclick="databaseViewer.clearQueryResults()" class="btn btn-sm" title="Back to SFAF Records"><i class="fas fa-times"></i> Close Results</button>
+                </div>
+            </div>
+            <div class="data-grid" id="queryResultsGrid">
+                <div class="table-container"></div>
+            </div>
+            <div class="empty-state" id="queryEmptyState" style="display:none;">
+                <i class="fas fa-search"></i>
+                <h3>No Query Results</h3>
+                <p>Add filters and click "Run Query" to search records</p>
+            </div>
+            <div class="pagination" id="queryPagination" style="display:none;">
+                <div class="pagination-left"><span id="queryRecordsDisplayInfo">0 records</span></div>
+                <div class="pagination-center">
+                    <button id="queryFirstPageBtn" class="btn-icon"><i class="fas fa-angle-double-left"></i></button>
+                    <button id="queryPrevPageBtn" class="btn-icon"><i class="fas fa-chevron-left"></i></button>
+                    <span id="queryPageInfo">Page 1</span>
+                    <button id="queryNextPageBtn" class="btn-icon"><i class="fas fa-chevron-right"></i></button>
+                    <button id="queryLastPageBtn" class="btn-icon"><i class="fas fa-angle-double-right"></i></button>
+                </div>
+                <div class="pagination-right">
+                    <button id="exportQueryResultsBtn" class="btn btn-sm"><i class="fas fa-download"></i> Export Results</button>
                 </div>
             </div>
         </div>
@@ -322,153 +346,7 @@
     </div>
 
     <!-- Query Builder Tab -->
-    <div id="query-tab" class="tab-panel">
-        <div style="display:flex;gap:0;height:100%;overflow:hidden;">
 
-        <!-- Sidebar: Saved Queries + History -->
-        <div id="queryHistoryPanel" style="width:260px;min-width:260px;border-right:1px solid rgba(102,126,234,0.15);display:flex;flex-direction:column;overflow:hidden;background:rgba(15,15,35,0.4);">
-            <!-- Saved Queries -->
-            <div style="padding:12px 14px 10px;border-bottom:1px solid rgba(102,126,234,0.12);display:flex;align-items:center;gap:8px;">
-                <span style="font-size:0.82rem;font-weight:700;color:#60a5fa;letter-spacing:0.5px;flex:1;"><i class="fas fa-bookmark"></i> Saved Queries</span>
-            </div>
-            <div id="savedQueriesList" style="max-height:200px;overflow-y:auto;padding:4px 0;border-bottom:1px solid rgba(102,126,234,0.12);">
-                <div style="padding:16px;text-align:center;color:#607d8b;font-size:0.8rem;font-style:italic;">No saved queries</div>
-            </div>
-            <!-- History -->
-            <div style="padding:12px 14px 10px;border-bottom:1px solid rgba(102,126,234,0.12);display:flex;align-items:center;gap:8px;">
-                <span style="font-size:0.82rem;font-weight:700;color:#a78bfa;letter-spacing:0.5px;flex:1;"><i class="fas fa-history"></i> Query History</span>
-                <button class="btn btn-sm btn-secondary" onclick="databaseViewer.clearQueryHistory()" title="Clear history" style="padding:3px 7px;font-size:0.75rem;">Clear</button>
-            </div>
-            <div id="queryHistoryList" style="flex:1;overflow-y:auto;padding:4px 0;">
-                <div style="padding:16px;text-align:center;color:#607d8b;font-size:0.8rem;font-style:italic;">No history yet</div>
-            </div>
-        </div>
-
-        <div style="flex:1;overflow-y:auto;">
-        <div class="query-builder-container">
-            <!-- Query Builder Header -->
-            <div class="query-builder-header">
-                <div class="header-content">
-                    <h2><i class="fas fa-search"></i> Query Builder</h2>
-                    <p class="header-description">Define search criteria to filter SFAF records</p>
-                </div>
-            </div>
-
-            <!-- Unified Query Conditions Box -->
-            <div class="query-conditions-box">
-                <div class="query-section">
-                    <h4>Query Conditions</h4>
-
-                    <!-- Conditions List Container -->
-                    <div id="queryConditionsList" class="conditions-list">
-                        <!-- Conditions will be added here dynamically -->
-                    </div>
-
-                    <!-- Add Condition Button -->
-                    <button id="addConditionBtn" class="btn-add-condition">
-                        <i class="fas fa-plus-circle"></i> Add Condition
-                    </button>
-                </div>
-
-                <!-- Sort Section -->
-                <div class="query-section">
-                    <h4>Query Sort</h4>
-                    <div class="sort-controls">
-                        <label>Field:</label>
-                        <select id="querySortField" class="query-select">
-                            <option value="created_at">Created Date</option>
-                            <option value="frequency">Frequency</option>
-                            <option value="serial">Serial Number</option>
-                            <option value="location">Location</option>
-                        </select>
-                        <div class="sort-order-toggle">
-                            <button id="sortAscBtn" class="sort-btn active" data-order="asc">
-                                <i class="fas fa-sort-amount-down"></i> Ascending
-                            </button>
-                            <button id="sortDescBtn" class="sort-btn" data-order="desc">
-                                <i class="fas fa-sort-amount-up"></i> Descending
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Assignments Section -->
-                <div class="query-section">
-                    <h4>Assignments with Matching Proposals</h4>
-                    <select id="queryAssignmentMode" class="query-select">
-                        <option value="include">Include</option>
-                        <option value="exclude">Exclude</option>
-                        <option value="only">Only Matching</option>
-                    </select>
-                </div>
-            </div>
-
-            <!-- Query Actions -->
-            <div class="query-actions">
-                <button id="runQueryBtn" class="btn btn-primary btn-lg">
-                    <i class="fas fa-play"></i> Run Query
-                </button>
-                <button id="clearQueryBtn" class="btn btn-lg">
-                    <i class="fas fa-eraser"></i> Clear All
-                </button>
-                <button id="saveQueryBtn" class="btn btn-lg">
-                    <i class="fas fa-save"></i> Save Query
-                </button>
-            </div>
-
-            <!-- Query Results Section -->
-            <div class="query-results-section">
-                <div class="results-header">
-                    <h3><i class="fas fa-table"></i> Query Results</h3>
-                    <div class="filter-results">
-                        <div class="stat-row">
-                            <span>Matching Records:</span>
-                            <span id="queryMatchingCount" class="stat-value">0</span>
-                        </div>
-                        <div class="stat-row">
-                            <span>Total Records:</span>
-                            <span id="queryTotalCount" class="stat-value">0</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Results Table -->
-                <div class="data-grid" id="queryResultsGrid">
-                    <div class="table-container">
-                        <!-- Table will be rendered here dynamically -->
-                    </div>
-                </div>
-
-                <!-- Empty State -->
-                <div class="empty-state" id="queryEmptyState">
-                    <i class="fas fa-search"></i>
-                    <h3>No Query Results</h3>
-                    <p>Add filters and click "Run Query" to search records</p>
-                </div>
-
-                <!-- Results Pagination -->
-                <div class="pagination" id="queryPagination" style="display: none;">
-                    <div class="pagination-left">
-                        <span id="queryRecordsDisplayInfo">0 records</span>
-                    </div>
-                    <div class="pagination-center">
-                        <button id="queryFirstPageBtn" class="btn-icon"><i class="fas fa-angle-double-left"></i></button>
-                        <button id="queryPrevPageBtn" class="btn-icon"><i class="fas fa-chevron-left"></i></button>
-                        <span id="queryPageInfo">Page 1</span>
-                        <button id="queryNextPageBtn" class="btn-icon"><i class="fas fa-chevron-right"></i></button>
-                        <button id="queryLastPageBtn" class="btn-icon"><i class="fas fa-angle-double-right"></i></button>
-                    </div>
-                    <div class="pagination-right">
-                        <button id="exportQueryResultsBtn" class="btn btn-sm">
-                            <i class="fas fa-download"></i> Export Results
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        </div><!-- /flex scroll wrapper -->
-        </div><!-- /outer flex row -->
-    </div>
 
     <!-- Analytics Tab -->
     <div id="analytics-tab" class="tab-panel">
@@ -707,14 +585,14 @@
 </div>
 
 <script src="/js/db_viewer_session.js?v=2"></script>
-<script src="/js/db_viewer_core.js?v=2"></script>
-<script src="/js/db_viewer_table.js?v=2"></script>
+<script src="/js/db_viewer_core.js?v=3"></script>
+<script src="/js/db_viewer_table.js?v=3"></script>
 <script src="/js/db_viewer_sfaf_fields.js?v=2"></script>
 <script src="/js/db_viewer_sfaf_records.js?v=2"></script>
 <script src="/js/db_viewer_validation.js?v=2"></script>
 <script src="/js/db_viewer_analytics.js?v=2"></script>
 <script src="/js/db_viewer_irac.js?v=2"></script>
-<script src="/js/db_viewer_filters.js?v=9"></script>
+<script src="/js/db_viewer_filters.js?v=19"></script>
 <script src="/js/db_viewer_views.js?v=2"></script>
 <script src="/js/db_viewer_import_export.js?v=2"></script>
 <script src="/js/db_viewer_ui.js?v=2"></script>

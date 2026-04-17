@@ -1513,6 +1513,11 @@ Object.assign(DatabaseViewer.prototype, {
             this.renderEnhancedSFAFTable(filteredRecords);
             this.updateSFAFSummaryStats(filteredRecords);
 
+            // Kick off silent background cache of all records so queries are instant
+            if (this.totalDatabaseRecords > (this.itemsPerPage || 50)) {
+                this._prefetchAllRecordsInBackground?.();
+            }
+
         } catch (error) {
             console.error('❌ Failed to load SFAF records:', error);
             this.showError(`Failed to load SFAF records: ${error.message}`);

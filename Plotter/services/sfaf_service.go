@@ -846,6 +846,10 @@ func (ss *SFAFService) GetAllSFAFsWithMarkers() ([]*models.SFAFGeo, error) {
 	return ss.sfafRepo.GetAllWithMarkers()
 }
 
+func (ss *SFAFService) QueryFiltered(conditions []models.QueryCondition, sortField, sortOrder string, maxResults int) ([]*models.SFAF, int, error) {
+	return ss.sfafRepo.QueryFiltered(conditions, sortField, sortOrder, maxResults)
+}
+
 func (ss *SFAFService) ImportSFAFFile(file io.Reader, filename string) (*models.SFAFImportResult, error) {
 	startTime := time.Now()
 	result := &models.SFAFImportResult{

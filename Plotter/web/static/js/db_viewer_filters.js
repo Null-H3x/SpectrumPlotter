@@ -777,18 +777,6 @@ Object.assign(DatabaseViewer.prototype, {
         // This method must exist so init() does not crash before addQueryCondition() runs.
     },
 
-    async loadFieldLabels() {
-        try {
-            const response = await fetch('/js/field_labels.json');
-            if (response.ok) {
-                this.fieldLabels = await response.json();
-            }
-        } catch (e) {
-            console.warn('field_labels.json not found, using built-in defaults');
-        }
-        if (!this.fieldLabels) this.fieldLabels = {};
-    },
-
     // ── Query History ────────────────────────────────────────────────────────
 
     _queryHistoryKey: 'sfaf_plotter_query_history',
@@ -833,9 +821,13 @@ Object.assign(DatabaseViewer.prototype, {
             ).join('<br>');
             return `
                 <div class="query-history-entry" onclick="databaseViewer.loadQueryFromHistory('${entry.id}')"
-                     style="padding:8px 12px;border-bottom:1px solid rgba(102,126,234,0.08);cursor:pointer;transition:background 0.15s;"
+                     style="padding:8px 12px;border-bottom:1px solid rgba(102,126,234,0.08);cursor:pointer;transition:background 0.15s;position:relative;"
                      onmouseover="this.style.background='rgba(102,126,234,0.1)'" onmouseout="this.style.background=''">
-                    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+                    <button onclick="event.stopPropagation();databaseViewer.removeQueryFromHistory('${entry.id}')"
+                            title="Remove from history"
+                            style="position:absolute;top:6px;right:6px;background:none;border:none;cursor:pointer;color:#ef4444;font-size:0.7rem;line-height:1;padding:2px 4px;border-radius:3px;opacity:0.6;transition:opacity 0.15s;"
+                            onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.6'">✕</button>
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;padding-right:18px;">
                         <span style="font-size:0.72rem;color:#64748b;">${dateStr} ${timeStr}</span>
                         <span style="font-size:0.72rem;background:rgba(167,139,250,0.15);color:#a78bfa;border-radius:10px;padding:1px 7px;">${entry.matchCount} results</span>
                     </div>
@@ -878,6 +870,12 @@ Object.assign(DatabaseViewer.prototype, {
     clearQueryHistory() {
         if (!confirm('Clear all query history?')) return;
         localStorage.removeItem(this._queryHistoryKey);
+        this.renderQueryHistory();
+    },
+
+    removeQueryFromHistory(entryId) {
+        const history = this._getQueryHistory().filter(h => h.id !== entryId);
+        try { localStorage.setItem(this._queryHistoryKey, JSON.stringify(history)); } catch (_) {}
         this.renderQueryHistory();
     },
 
@@ -1012,61 +1010,123 @@ Object.assign(DatabaseViewer.prototype, {
         setTimeout(() => { btn.innerHTML = original; btn.disabled = false; }, 1500);
     },
 
-    runQuery() {
-        console.log('🔍 Running query...', 'Total conditions:', this.queryConditions.length);
-        console.log('📊 Current SFAF Data count:', this.currentSFAFData?.length || 0);
-
+    async runQuery() {
         // Collect condition values from UI
         this.queryConditions.forEach(condition => {
             const connectorSelect = document.querySelector(`.condition-connector[data-condition-id="${condition.id}"]`);
-            const checkbox = document.querySelector(`.condition-checkbox[data-condition-id="${condition.id}"]`);
-            const fieldSelect = document.querySelector(`.condition-field[data-condition-id="${condition.id}"]`);
-            const operatorSelect = document.querySelector(`.condition-operator[data-condition-id="${condition.id}"]`);
-            const valueInput = document.querySelector(`.condition-value[data-condition-id="${condition.id}"]`);
-            const negateBox = document.querySelector(`.condition-negate[data-condition-id="${condition.id}"]`);
+            const checkbox        = document.querySelector(`.condition-checkbox[data-condition-id="${condition.id}"]`);
+            const fieldSelect     = document.querySelector(`.condition-field[data-condition-id="${condition.id}"]`);
+            const operatorSelect  = document.querySelector(`.condition-operator[data-condition-id="${condition.id}"]`);
+            const valueInput      = document.querySelector(`.condition-value[data-condition-id="${condition.id}"]`);
+            const negateBox       = document.querySelector(`.condition-negate[data-condition-id="${condition.id}"]`);
 
             if (connectorSelect) condition.connector = connectorSelect.value;
-            if (checkbox) condition.enabled = checkbox.checked;
-            if (fieldSelect) condition.field = fieldSelect.value;
-            if (operatorSelect) condition.operator = operatorSelect.value;
-            if (valueInput) condition.value = valueInput.value;
-            if (negateBox) condition.negate = negateBox.checked;
+            if (checkbox)        condition.enabled   = checkbox.checked;
+            if (fieldSelect)     condition.field     = fieldSelect.value;
+            if (operatorSelect)  condition.operator  = operatorSelect.value;
+            if (valueInput)      condition.value     = valueInput.value;
+            if (negateBox)       condition.negate    = negateBox.checked;
         });
 
-        // Filter only enabled conditions with non-empty values
-        // Exception: exact_equals with empty value is valid (finds blank fields)
         const enabledConditions = this.queryConditions.filter(c => {
             if (!c.enabled) return false;
             if (c.operator === 'exact_equals') return true;
             return c.value && c.value.trim().length > 0;
         });
 
-        console.log('📊 Enabled conditions with values:', enabledConditions.length);
-
         if (enabledConditions.length === 0) {
             alert('Please add at least one enabled condition with a value');
             return;
         }
 
-        // Filter data
-        console.log('🔍 Filtering records with', enabledConditions.length, 'conditions...');
-        const filteredData = this.filterRecordsByQueries(this.currentSFAFData || [], enabledConditions);
-        console.log('📊 Filtered results:', filteredData.length, 'records');
-
-        // Sort data
         const sortField = document.getElementById('querySortField')?.value || 'created_at';
-        const sortedData = this.sortQueryResults(filteredData, sortField, this.querySortOrder);
 
-        // Store results
-        this.queryResults = sortedData;
+        // ── Try server-side query first ───────────────────────────────────────
+        // The "contained_in" ($) operator has no SQL equivalent; fall back to
+        // client-side for any query that uses it.
+        const needsClientSide = enabledConditions.some(c => c.operator === 'contained_in');
 
-        // Render results
-        console.log('🎨 Rendering query results...');
+        if (!needsClientSide) {
+            this.showLoading(true);
+            try {
+                const res = await fetch('/api/sfaf/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        conditions:  enabledConditions,
+                        sort_field:  sortField,
+                        sort_order:  this.querySortOrder || 'asc',
+                        max_results: 5000,
+                    }),
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.success) {
+                        // Enhance raw SFAF records into the same format as _fetchAllSFAFRecords
+                        const enhanced = (data.sfafs || []).map(sfaf => {
+                            const sfafFields = {};
+                            Object.keys(sfaf).forEach(key => {
+                                if (/^[Ff]ield\d+$/.test(key)) sfafFields[key.toLowerCase()] = sfaf[key];
+                            });
+                            return {
+                                id: sfaf.id,
+                                serial: sfafFields.field102 || sfaf.id,
+                                sfafFields,
+                                rawSFAFFields: sfafFields,
+                                frequency: sfafFields.field110 || '',
+                                emission:  sfafFields.field114 || '',
+                                power:     sfafFields.field115 || '',
+                                completionPercentage: this.calculateCompletionPercentage?.(sfafFields) ?? 0,
+                                mcebCompliant:        this.validateMCEBCompliance?.(sfafFields)        ?? false,
+                                marker: sfaf.marker || null,
+                            };
+                        });
+
+                        this.queryResults = enhanced;
+                        this._queryHasRun = true;
+                        this.renderQueryResults();
+                        this.updateQueryStats();
+                        this._saveToQueryHistory(enabledConditions, enhanced.length);
+                        this.showLoading(false);
+                        console.log(`✅ Server-side query: ${enabledConditions.length} conditions → ${enhanced.length} of ${data.total} results`);
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.warn('Server-side query failed, falling back to client-side:', e);
+            }
+            this.showLoading(false);
+        }
+
+        // ── Client-side fallback ──────────────────────────────────────────────
+        // Used for "contained_in" operator or if the API call failed.
+        // Refused for large datasets to avoid loading the browser with hundreds of MB.
+        const total = this.totalDatabaseRecords || 0;
+        if (total > 10000 && (this.currentSFAFData || []).length < total) {
+            alert(`Client-side filtering is unavailable for ${total.toLocaleString()} records.\n\nThe "contained_in" ($) operator is not supported at this scale. Use "contains" ($$) instead, which runs server-side.`);
+            return;
+        }
+        if ((this.currentSFAFData || []).length < total) {
+            this.showLoading(true);
+            try {
+                this.currentSFAFData = await this._fetchAllSFAFRecords();
+            } catch (e) {
+                console.error('Failed to fetch all records for client-side query:', e);
+                this.showLoading(false);
+                return;
+            }
+            this.showLoading(false);
+        }
+
+        const filteredData = this.filterRecordsByQueries(this.currentSFAFData || [], enabledConditions);
+        const sortedData   = this.sortQueryResults(filteredData, sortField, this.querySortOrder);
+
+        this.queryResults  = sortedData;
+        this._queryHasRun  = true;
         this.renderQueryResults();
         this.updateQueryStats();
         this._saveToQueryHistory(enabledConditions, sortedData.length);
-
-        console.log(`✅ Query executed: ${enabledConditions.length} conditions, ${sortedData.length} results`);
+        console.log(`✅ Client-side query: ${enabledConditions.length} conditions → ${sortedData.length} results`);
     },
 
     sortQueryResults(data, field, order) {
@@ -1082,85 +1142,90 @@ Object.assign(DatabaseViewer.prototype, {
         });
     },
 
+    clearQueryResults() {
+        this._queryHasRun = false;
+        this.queryResults = null;
+        const sfafGrid  = document.getElementById('sfafDataGrid');
+        const sfafPagination = document.querySelector('#sfaf-tab .pagination');
+        const resultsSection = document.getElementById('queryResultsSection');
+        if (sfafGrid) sfafGrid.style.display = '';
+        if (sfafPagination) sfafPagination.style.display = '';
+        if (resultsSection) resultsSection.style.display = 'none';
+    },
+
     renderQueryResults() {
+        const resultsSection = document.getElementById('queryResultsSection');
         const resultsGrid = document.getElementById('queryResultsGrid');
         const emptyState = document.getElementById('queryEmptyState');
+        const sfafGrid = document.getElementById('sfafDataGrid');
+        const sfafPagination = document.querySelector('#sfaf-tab .pagination');
 
         if (!this.queryResults || this.queryResults.length === 0) {
+            if (resultsSection) resultsSection.style.display = 'block';
             if (resultsGrid) resultsGrid.style.display = 'none';
             if (emptyState) emptyState.style.display = 'flex';
+            if (sfafGrid) sfafGrid.style.display = 'none';
+            if (sfafPagination) sfafPagination.style.display = 'none';
             return;
         }
 
+        if (resultsSection) resultsSection.style.display = 'block';
         if (resultsGrid) resultsGrid.style.display = 'block';
         if (emptyState) emptyState.style.display = 'none';
+        if (sfafGrid) sfafGrid.style.display = 'none';
+        if (sfafPagination) sfafPagination.style.display = 'none';
 
         const tableContainer = resultsGrid.querySelector('.table-container');
         if (tableContainer) {
             const tableHTML = this.generateQueryResultsTable(this.queryResults);
             tableContainer.innerHTML = tableHTML;
+
+            // Re-attach select-all listener after innerHTML rebuild
+            const selectAll = tableContainer.querySelector('#selectAllCheckbox');
+            if (selectAll) {
+                selectAll.addEventListener('change', () => {
+                    const checked = selectAll.checked;
+                    tableContainer.querySelectorAll('.row-checkbox').forEach(cb => {
+                        cb.checked = checked;
+                        const recordId = cb.value;
+                        if (checked) {
+                            this.selectedItems.add(recordId);
+                        } else {
+                            this.selectedItems.delete(recordId);
+                        }
+                    });
+                    this.updateSelectionUI();
+                });
+            }
         }
     },
 
     generateQueryResultsTable(records) {
         if (!records || records.length === 0) return '';
 
-        let html = `
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th class="checkbox-col"><input type="checkbox" id="selectAllQueryCheckbox" title="Select All"></th>
-                        <th>102 - Agency Serial</th>
-                        <th>110 - Frequency</th>
-                        <th>200 - Agency</th>
-                        <th>300 - State/Country</th>
-                        <th>301 - City/Location</th>
-                        <th>115 - Power</th>
-                        <th>Type</th>
-                        <th>ID</th>
-                    </tr>
-                </thead>
-                <tbody>
-        `;
+        // Use the same view/headers as the main SFAF table so the user sees
+        // the same columns (Summary, Technical, All Fields, custom views, etc.)
+        const headers = this.getHeadersForView(this.currentView || 'summary');
 
-        records.forEach(record => {
-            const recordId = record.marker_id || record.id;
-            const isChecked = this.selectedItems.has(recordId) ? 'checked' : '';
-            const escapedId = recordId.replace(/'/g, "\\'");
-            const agencySerial = record.sfafFields?.field102 || record.serial || 'N/A';
-            const frequency = record.sfafFields?.field110 || record.frequency || 'N/A';
-            const agency = record.sfafFields?.field200 || record.agency || 'N/A';
-            const stateCountry = record.sfafFields?.field300 || 'N/A';
-            const cityLocation = record.sfafFields?.field301 || record.location || 'N/A';
-            const power = record.sfafFields?.field115 || 'N/A';
+        const headerHTML = `
+            <tr class="header-row">
+                ${headers.map(h => `<th data-field="${h.field}" class="${h.class || ''}">
+                    <div class="header-content"><span class="header-label">${h.label}</span></div>
+                </th>`).join('')}
+            </tr>`;
 
-            html += `
-                <tr data-record-id="${recordId}">
-                    <td class="checkbox-col">
-                        <input type="checkbox" class="row-checkbox" value="${recordId}" ${isChecked}
-                               data-record-id="${recordId}"
-                               onchange="databaseViewer.toggleRowSelection('${escapedId}', this.checked)">
-                    </td>
-                    <td>${agencySerial}</td>
-                    <td>${frequency}</td>
-                    <td>${agency}</td>
-                    <td>${stateCountry}</td>
-                    <td>${cityLocation}</td>
-                    <td>${power}</td>
-                    <td><span class="badge badge-${record.marker_type || 'imported'}">${record.marker_type || 'imported'}</span></td>
-                    <td>
-                        <span class="text-muted" style="font-size: 11px;">${recordId || ''}</span>
-                    </td>
-                </tr>
-            `;
-        });
+        const rowsHTML = records.map(record => {
+            const isChecked = this.selectedItems.has(record.id) ? 'checked' : '';
+            if (this.currentView === 'spreadsheet') {
+                return this.renderSpreadsheetRow(record, headers, isChecked);
+            }
+            return this.renderGenericRow(record, headers, isChecked);
+        }).join('');
 
-        html += `
-                </tbody>
-            </table>
-        `;
-
-        return html;
+        return `<table class="data-table sfaf-records-table">
+            <thead>${headerHTML}</thead>
+            <tbody>${rowsHTML}</tbody>
+        </table>`;
     },
 
     clearQuery() {
@@ -1185,9 +1250,80 @@ Object.assign(DatabaseViewer.prototype, {
         console.log('✅ Query cleared');
     },
 
+    // Silently prefetch all records in the background so the client-side fallback is instant.
+    // Only runs for small datasets (≤10K records) — large datasets rely on server-side queries.
+    _prefetchAllRecordsInBackground() {
+        const total = this.totalDatabaseRecords || 0;
+        if (this._prefetchInProgress) return;
+        if ((this.currentSFAFData || []).length >= total) return;
+        if (total > 10000) {
+            console.log(`ℹ️ ${total} records — skipping background prefetch, server-side queries only`);
+            return;
+        }
+        this._prefetchInProgress = true;
+        this._fetchAllSFAFRecords()
+            .then(records => {
+                this.currentSFAFData = records;
+                console.log(`✅ Background prefetch complete: ${records.length} records cached`);
+            })
+            .catch(e => console.warn('Background prefetch failed (non-critical):', e))
+            .finally(() => { this._prefetchInProgress = false; });
+    },
+
+    async _fetchAllSFAFRecords() {
+        const pageSize = 1000;
+        let page = 1;
+        let allSFAFs = [];
+        let total = null;
+
+        do {
+            const res = await fetch(`/api/sfaf?page=${page}&limit=${pageSize}`);
+            if (!res.ok) throw new Error(`SFAF API failed: ${res.status}`);
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error || 'Failed to load records');
+
+            allSFAFs = allSFAFs.concat(data.sfafs || []);
+            if (total === null) {
+                total = data.pagination?.total || data.sfafs?.length || 0;
+                this.totalDatabaseRecords = total;
+            }
+            page++;
+        } while (allSFAFs.length < total);
+
+        const enhanced = [];
+        for (const sfaf of allSFAFs) {
+            try {
+                // Extract sfafFields the same way loadSFAFRecords does —
+                // fields live as flat keys on the sfaf object (field005, field110…)
+                const sfafFields = {};
+                Object.keys(sfaf).forEach(key => {
+                    if (key.match(/^[Ff]ield\d+$/)) {
+                        sfafFields[key.toLowerCase()] = sfaf[key];
+                    }
+                });
+                enhanced.push({
+                    id: sfaf.id,
+                    serial: sfafFields.field102 || sfaf.serial_number || sfaf.id,
+                    sfafFields,
+                    rawSFAFFields: sfafFields,
+                    frequency: sfafFields.field110 || '',
+                    emission: sfafFields.field114 || '',
+                    power: sfafFields.field115 || '',
+                    completionPercentage: this.calculateCompletionPercentage?.(sfafFields) ?? 0,
+                    mcebCompliant: this.validateMCEBCompliance?.(sfafFields) ?? false,
+                    marker: sfaf.marker || null,
+                });
+            } catch (_) { /* skip bad records */ }
+        }
+        return enhanced;
+    },
+
     updateQueryStats() {
         const matchingCount = document.getElementById('queryMatchingCount');
         const totalCount = document.getElementById('queryTotalCount');
+
+        // Only show stats after a query has been run
+        if (!this._queryHasRun) return;
 
         if (matchingCount) {
             matchingCount.textContent = this.queryResults ? this.queryResults.length : 0;

@@ -435,293 +435,7 @@ window.addEventListener('message', function(event) {
     applyPoolSelection(event.data);
 });
 
-// ── AFSMO Serial Management ────────────────────────────────────────────────
-let _smUnits = [];
-
-async function openSerialMgmt() {
-    document.getElementById('serialMgmtModal').style.display = 'flex';
-    const filterSel = document.getElementById('smFilterPrefix');
-    if (filterSel) filterSel.value = '';   // always start with All Prefixes
-    const prefixSel = document.getElementById('smPrefix');
-    if (prefixSel) prefixSel.value = 'AF';
-    await Promise.all([smLoadUnits(), smLoadAllocations()]);
-}
-
-function closeSerialMgmt() {
-    document.getElementById('serialMgmtModal').style.display = 'none';
-}
-
-async function smLoadUnits() {
-    try {
-        const res  = await fetch('/api/frequency/units/majcom');
-        const data = res.ok ? await res.json() : {};
-        _smUnits = (data.units || []).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-        const sel = document.getElementById('smUnitId');
-        sel.innerHTML = '<option value="">— Select MAJCOM —</option>' +
-            _smUnits.map(u =>
-                `<option value="${u.id}">${u.name}${u.unit_code ? ' (' + u.unit_code + ')' : ''}</option>`
-            ).join('');
-    } catch (e) {
-        console.warn('smLoadUnits failed:', e);
-    }
-}
-
-async function smLoadAllocations() {
-    const prefix = document.getElementById('smFilterPrefix')?.value || '';
-    const tbody  = document.getElementById('smTableBody');
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#64748b;padding:16px;">Loading…</td></tr>';
-    try {
-        const res = await fetch(`/api/serial-numbers/allocations${prefix ? '?prefix=' + prefix : ''}`);
-        const data = res.ok ? await res.json() : {};
-        const rows = data.allocations || [];
-        if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#64748b;padding:16px;">No allocations found.</td></tr>';
-            return;
-        }
-        tbody.innerHTML = rows.map(row => {
-            const isUnalloc = !row.allocated_unit_id;
-            const pct = row.total_allocated > 0
-                ? Math.round((row.used_count / row.total_allocated) * 100)
-                : 0;
-            return `<tr>
-                <td><span style="font-family:monospace;font-size:0.85rem;">${row.prefix}</span></td>
-                <td>${isUnalloc
-                    ? '<span style="color:#64748b;font-style:italic;">Unallocated</span>'
-                    : row.unit_name}</td>
-                <td style="font-family:monospace;font-size:0.78rem;color:#64748b;">${row.unit_code || '—'}</td>
-                <td style="text-align:right;">${row.total_allocated.toLocaleString()}</td>
-                <td style="text-align:right;color:#4ade80;">${row.available_count.toLocaleString()}</td>
-                <td style="text-align:right;color:#94a3b8;">${row.used_count.toLocaleString()}
-                    ${pct > 0 ? `<span style="font-size:0.72rem;color:#64748b;"> (${pct}%)</span>` : ''}
-                </td>
-                <td style="text-align:right;">
-                    ${!isUnalloc ? `
-                    <button class="btn-xs btn-xs-danger" onclick="smDeallocate('${row.allocated_unit_id}','${row.unit_name}','${row.prefix}')"
-                        title="Remove all unassigned allocations for this unit">
-                        <i class="fas fa-minus-circle"></i> Remove
-                    </button>` : ''}
-                </td>
-            </tr>`;
-        }).join('');
-    } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#ef5350;padding:16px;">Failed to load allocations.</td></tr>';
-    }
-}
-
-async function smAllocate() {
-    const prefix  = document.getElementById('smPrefix')?.value || 'AF';
-    const unitId  = document.getElementById('smUnitId').value;
-    const count   = parseInt(document.getElementById('smCount').value, 10);
-    const msgEl   = document.getElementById('smAllocateMsg');
-
-    if (!unitId) { smMsg('Select a unit first.', 'warning'); return; }
-    if (!count || count < 1) { smMsg('Enter a valid count.', 'warning'); return; }
-
-    const unitName = document.getElementById('smUnitId').selectedOptions[0]?.text || unitId;
-    if (!confirm(`Allocate ${count.toLocaleString()} "${prefix}" serials to ${unitName}?`)) return;
-
-    try {
-        const res  = await fetch('/api/serial-numbers/allocate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prefix, unit_id: unitId, count })
-        });
-        const data = await res.json();
-        if (!res.ok) { smMsg(data.error || 'Allocation failed.', 'danger'); return; }
-        smMsg(`Allocated ${data.allocated.toLocaleString()} serials to ${unitName}.`, 'success');
-        smLoadAllocations();
-    } catch (e) {
-        smMsg('Error during allocation.', 'danger');
-    }
-}
-
-async function smDeallocate(unitId, unitName, prefix) {
-    if (!confirm(`Remove all unassigned "${prefix}" serial allocations from ${unitName}?\n\nSerials already assigned to frequency records will NOT be affected.`)) return;
-    try {
-        const res  = await fetch(`/api/serial-numbers/allocations/${unitId}`, { method: 'DELETE' });
-        const data = await res.json();
-        if (!res.ok) { smMsg(data.error || 'Deallocation failed.', 'danger'); return; }
-        smMsg(`Removed ${data.deallocated.toLocaleString()} serial allocations from ${unitName}.`, 'success');
-        smLoadAllocations();
-    } catch (e) {
-        smMsg('Error during deallocation.', 'danger');
-    }
-}
-
-function smMsg(text, type) {
-    const el = document.getElementById('smAllocateMsg');
-    const colors = { success: '#4ade80', danger: '#ef5350', warning: '#fbbf24' };
-    el.style.color = colors[type] || '#94a3b8';
-    el.textContent = text;
-    el.style.display = '';
-    setTimeout(() => { el.style.display = 'none'; }, 5000);
-}
-
-// ── MAJCOM Serial Sub-Allocation ──────────────────────────────────────────────
-
-let _msMyUnitId = null;
-
-async function openMajcomSerialMgmt() {
-    document.getElementById('majcomSerialMgmtModal').style.display = 'flex';
-    // Resolve own unit from the user profile
-    try {
-        const res  = await fetch('/api/user/profile');
-        const data = res.ok ? await res.json() : {};
-        _msMyUnitId = data.primary_unit_id || null;
-    } catch (e) {
-        _msMyUnitId = null;
-    }
-    await Promise.all([msLoadMyPool(), msLoadSubUnits(), msLoadSubAllocations()]);
-}
-
-function closeMajcomSerialMgmt() {
-    document.getElementById('majcomSerialMgmtModal').style.display = 'none';
-}
-
-async function msLoadMyPool() {
-    if (!_msMyUnitId) {
-        document.getElementById('msMyPoolBody').textContent = 'Could not determine your unit.';
-        return;
-    }
-    try {
-        const res  = await fetch(`/api/serial-numbers/pool?unit_id=${_msMyUnitId}`);
-        const data = res.ok ? await res.json() : {};
-        const rows = data.pool || [];
-
-        if (rows.length === 0) {
-            document.getElementById('msMyPoolBody').textContent = 'No serials allocated to your unit.';
-            return;
-        }
-        const html = rows.map(r => `
-            <span style="display:inline-block;margin-right:24px;margin-bottom:4px;">
-                <strong style="color:#e2e8f0;">${r.prefix}</strong>
-                — <span style="color:#4ade80;">${r.available_count.toLocaleString()} available</span>
-                / ${r.total_allocated.toLocaleString()} total
-                (${r.used_count.toLocaleString()} used)
-            </span>`).join('');
-        document.getElementById('msMyPoolBody').innerHTML = html;
-    } catch (e) {
-        document.getElementById('msMyPoolBody').textContent = 'Error loading pool.';
-    }
-}
-
-async function msLoadSubUnits() {
-    if (!_msMyUnitId) {
-        document.getElementById('msToUnitId').innerHTML = '<option value="">— Unit unknown —</option>';
-        return;
-    }
-    try {
-        const res  = await fetch(`/api/frequency/units/${_msMyUnitId}/subordinates`);
-        const data = res.ok ? await res.json() : {};
-        const sel  = document.getElementById('msToUnitId');
-        const current = sel.value;
-        sel.innerHTML = '<option value="">— Select unit —</option>';
-        const units = data.units || [];
-        if (units.length === 0) {
-            sel.innerHTML = '<option value="">No subordinate units found</option>';
-            return;
-        }
-        units.forEach(u => {
-            const opt = document.createElement('option');
-            opt.value = u.id;
-            opt.textContent = u.unit_code ? `${u.unit_code} — ${u.name}` : u.name;
-            sel.appendChild(opt);
-        });
-        if (current) sel.value = current;
-    } catch (e) {
-        document.getElementById('msToUnitId').innerHTML = '<option value="">Error loading units</option>';
-    }
-}
-
-async function msLoadSubAllocations() {
-    if (!_msMyUnitId) return;
-    const tbody = document.getElementById('msTableBody');
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#64748b;padding:20px;">Loading…</td></tr>';
-    try {
-        // Get allocations for all units; filter to ones whose serials came from our pool
-        // We show the global allocation summary and let the admin see the context
-        const res  = await fetch('/api/serial-numbers/allocations');
-        const data = res.ok ? await res.json() : {};
-        const rows = (data.allocations || []).filter(r => r.allocated_unit_id && r.allocated_unit_id !== _msMyUnitId);
-        if (rows.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#64748b;padding:20px;">No sub-allocations found.</td></tr>';
-            return;
-        }
-        tbody.innerHTML = rows.map(row => {
-            return `<tr>
-                <td><span class="badge badge-secondary">${row.prefix}</span></td>
-                <td>${row.unit_name}</td>
-                <td style="color:#64748b;font-size:0.8rem;">${row.unit_code || ''}</td>
-                <td style="text-align:right;">${row.total_allocated.toLocaleString()}</td>
-                <td style="text-align:right;color:#4ade80;">${row.available_count.toLocaleString()}</td>
-                <td style="text-align:right;color:#f87171;">${row.used_count.toLocaleString()}</td>
-                <td style="text-align:right;">
-                    <button class="btn-xs btn-xs-danger" onclick="msReclaim('${row.allocated_unit_id}','${row.unit_name}','${row.prefix}')"
-                        title="Reclaim all unassigned allocations from this unit">
-                        <i class="fas fa-undo"></i> Reclaim
-                    </button>
-                </td>
-            </tr>`;
-        }).join('');
-    } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#ef5350;padding:20px;">Error loading allocations.</td></tr>';
-    }
-}
-
-async function msSubAllocate() {
-    const prefix  = document.getElementById('msPrefix').value;
-    const toUnitId = document.getElementById('msToUnitId').value;
-    const count   = parseInt(document.getElementById('msCount').value, 10);
-
-    if (!_msMyUnitId) { msMsg('Could not determine your unit.', 'danger'); return; }
-    if (!prefix)      { msMsg('Select a prefix first.', 'warning'); return; }
-    if (!toUnitId)    { msMsg('Select a unit first.', 'warning'); return; }
-    if (!count || count < 1) { msMsg('Enter a valid count.', 'warning'); return; }
-
-    const unitName = document.getElementById('msToUnitId').selectedOptions[0]?.text || toUnitId;
-    if (!confirm(`Sub-allocate ${count.toLocaleString()} "${prefix}" serials to ${unitName}?`)) return;
-
-    try {
-        const res  = await fetch('/api/serial-numbers/sub-allocate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ from_unit_id: _msMyUnitId, to_unit_id: toUnitId, prefix, count })
-        });
-        const data = await res.json();
-        if (!res.ok) { msMsg(data.error || 'Sub-allocation failed.', 'danger'); return; }
-        if (data.allocated === 0) { msMsg(`No "${prefix}" serials available in your pool. Contact AFSMO to allocate ${prefix} serials to your MAJCOM first.`, 'warning'); return; }
-        msMsg(`Sub-allocated ${data.allocated.toLocaleString()} serials to ${unitName}.`, 'success');
-        msLoadMyPool();
-        msLoadSubAllocations();
-    } catch (e) {
-        msMsg('Error during sub-allocation.', 'danger');
-    }
-}
-
-async function msReclaim(toUnitId, unitName, prefix) {
-    if (!_msMyUnitId) { msMsg('Could not determine your unit.', 'danger'); return; }
-    if (!confirm(`Reclaim all unassigned "${prefix}" serial allocations from ${unitName}?\n\nSerials already assigned to frequency records will NOT be affected.`)) return;
-    try {
-        const url = `/api/serial-numbers/sub-allocate?from_unit_id=${_msMyUnitId}&to_unit_id=${toUnitId}&count=0`;
-        const res  = await fetch(url, { method: 'DELETE' });
-        const data = await res.json();
-        if (!res.ok) { msMsg(data.error || 'Reclaim failed.', 'danger'); return; }
-        msMsg(`Reclaimed ${data.reclaimed.toLocaleString()} serials from ${unitName}.`, 'success');
-        msLoadMyPool();
-        msLoadSubAllocations();
-    } catch (e) {
-        msMsg('Error during reclaim.', 'danger');
-    }
-}
-
-function msMsg(text, type) {
-    const el = document.getElementById('msAllocateMsg');
-    const colors = { success: '#4ade80', danger: '#ef5350', warning: '#fbbf24' };
-    el.style.color = colors[type] || '#94a3b8';
-    el.textContent = text;
-    el.style.display = '';
-    setTimeout(() => { el.style.display = 'none'; }, 5000);
-}
+// Serial allocation functions moved to tools.html
 
 async function _loadSfafLookups() {
     try {
@@ -952,18 +666,6 @@ document.addEventListener('DOMContentLoaded', async function () {
     if (window.canViewProposals) {
         const tab = document.getElementById('proposalsTab');
         if (tab) tab.style.display = '';
-    }
-
-    // Show AFSMO serial management for agency/ntia/admin
-    if (['agency', 'ntia', 'admin'].includes(userRole)) {
-        const smBtn = document.getElementById('btnSerialMgmt');
-        if (smBtn) smBtn.style.display = '';
-    }
-
-    // Show MAJCOM serial sub-allocation for command role
-    if (userRole === 'command') {
-        const msBtn = document.getElementById('btnMajcomSerialMgmt');
-        if (msBtn) msBtn.style.display = '';
     }
 
     // Show Workbox nav link for ISM+ roles; set active link based on current path
@@ -4805,8 +4507,16 @@ function renderProposals(proposals) {
                </button>`
             : `<span style="font-size:0.72rem;color:#64748b;font-style:italic;">Awaiting agency review</span>`;
 
+        const isSelected = compareSelected.includes(a.id);
+        const compareClass = compareMode ? ' compare-selectable' + (isSelected ? ' compare-selected' : '') : '';
+        const compareOverlay = compareMode
+            ? `<div class="proposal-select-overlay${isSelected ? ' selected' : ''}" onclick="selectForCompare('${a.id}', event)"></div>`
+            : '';
+        const clickAttr = compareMode ? `onclick="selectForCompare('${a.id}', event)"` : '';
+
         return `
-        <div class="request-card" data-id="${a.id}">
+        <div class="request-card${compareClass}" data-id="${a.id}" ${clickAttr}>
+            ${compareOverlay}
             <div class="request-card-header">
                 <div class="request-card-title">
                     <span class="badge badge-info">${a.sfaf_record_type}</span>
@@ -5688,3 +5398,160 @@ window.saveCoordinations = async function() {
         showAlert('Error: ' + err.message, 'danger');
     }
 };
+
+// ── Proposal Side-by-Side Compare ─────────────────────────────────────────────
+
+let compareMode     = false;
+let compareSelected = []; // up to 2 proposal assignment IDs
+
+window.toggleCompareMode = function() {
+    compareMode = !compareMode;
+    compareSelected = [];
+
+    const btn  = document.getElementById('compareToggleBtn');
+    const hint = document.getElementById('compareHint');
+    if (btn)  btn.classList.toggle('compare-active', compareMode);
+    if (hint) hint.style.display = compareMode ? '' : 'none';
+
+    applyProposalFilters();
+};
+
+window.selectForCompare = function(id, event) {
+    if (!compareMode) return;
+    if (event) event.stopPropagation();
+
+    const idx = compareSelected.indexOf(id);
+    if (idx !== -1) {
+        compareSelected.splice(idx, 1);
+    } else {
+        if (compareSelected.length >= 2) {
+            compareSelected.shift();
+        }
+        compareSelected.push(id);
+    }
+
+    applyProposalFilters();
+
+    if (compareSelected.length === 2) {
+        openCompareModal();
+    }
+};
+
+window.openCompareModal = function() {
+    if (compareSelected.length < 2) return;
+
+    const pA = allProposals.find(p => p.assignment.id === compareSelected[0]);
+    const pB = allProposals.find(p => p.assignment.id === compareSelected[1]);
+    if (!pA || !pB) return;
+
+    document.getElementById('compareModalBody').innerHTML = buildCompareTable(pA, pB);
+    document.getElementById('compareModal').style.display = 'flex';
+};
+
+window.closeCompareModal = function() {
+    document.getElementById('compareModal').style.display = 'none';
+};
+
+function buildCompareTable(pA, pB) {
+    const aA = pA.assignment;
+    const aB = pB.assignment;
+
+    const fmtDate   = v => v ? formatDate(v) : null;
+    const fmtBool   = v => v ? 'Yes' : 'No';
+    const fmtPow    = v => v != null ? `${v} W` : null;
+    const fmtRadius = v => v != null ? `${v} km` : null;
+
+    const typeLabel = { P: 'Permanent Proposal', S: 'Temporary Proposal', A: 'Permanent Assignment', T: 'Temporary Assignment' };
+
+    const sections = [
+        {
+            label: 'Identity',
+            fields: [
+                { label: 'Record Type',        a: typeLabel[aA.sfaf_record_type] || aA.sfaf_record_type, b: typeLabel[aB.sfaf_record_type] || aB.sfaf_record_type },
+                { label: 'Serial (Field 102)', a: aA.serial,          b: aB.serial },
+                { label: 'Unit',               a: pA.unit?.name,      b: pB.unit?.name },
+                { label: 'Unit Code',          a: pA.unit?.unit_code, b: pB.unit?.unit_code },
+                { label: 'Classification',     a: aA.classification,  b: aB.classification },
+            ],
+        },
+        {
+            label: 'Frequency & Emission',
+            fields: [
+                { label: 'Frequency',           a: aA.frequency,           b: aB.frequency },
+                { label: 'Assignment Type',     a: aA.assignment_type,     b: aB.assignment_type },
+                { label: 'Emission Designator', a: aA.emission_designator, b: aB.emission_designator },
+                { label: 'Bandwidth',           a: aA.bandwidth,           b: aB.bandwidth },
+                { label: 'Power',               a: fmtPow(aA.power_watts), b: fmtPow(aB.power_watts) },
+                { label: 'Auth. Radius',        a: fmtRadius(aA.authorized_radius_km), b: fmtRadius(aB.authorized_radius_km) },
+            ],
+        },
+        {
+            label: 'Operational Details',
+            fields: [
+                { label: 'Net Name',  a: aA.net_name,              b: aB.net_name },
+                { label: 'Callsign',  a: aA.callsign,              b: aB.callsign },
+                { label: 'Purpose',   a: aA.purpose,               b: aB.purpose },
+                { label: 'Priority',  a: aA.priority,              b: aB.priority },
+                { label: 'Encrypted', a: fmtBool(aA.is_encrypted), b: fmtBool(aB.is_encrypted) },
+                { label: 'Enc. Type', a: aA.encryption_type,       b: aB.encryption_type },
+            ],
+        },
+        {
+            label: 'Dates & Authorization',
+            fields: [
+                { label: 'Assignment Date',   a: fmtDate(aA.assignment_date),   b: fmtDate(aB.assignment_date) },
+                { label: 'Expiration Date',   a: fmtDate(aA.expiration_date),   b: fmtDate(aB.expiration_date) },
+                { label: 'Auth. Authority',   a: aA.assignment_authority,       b: aB.assignment_authority },
+                { label: 'Authorization No.', a: aA.authorization_number,       b: aB.authorization_number },
+                { label: 'Pool Serial',       a: aA.pool_serial,                b: aB.pool_serial },
+            ],
+        },
+        {
+            label: 'Routing & Coordination',
+            fields: [
+                { label: 'Routed To',        a: aA.routed_to_workbox || 'Unrouted',  b: aB.routed_to_workbox || 'Unrouted' },
+                { label: 'Edit Authority',   a: aA.edit_authority_workbox,           b: aB.edit_authority_workbox },
+                { label: 'Coordinated With', a: (pA.coordinated_with || []).join(', ') || null, b: (pB.coordinated_with || []).join(', ') || null },
+                { label: 'Created',          a: fmtDate(aA.created_at),             b: fmtDate(aB.created_at) },
+            ],
+        },
+        {
+            label: 'Notes',
+            fields: [
+                { label: 'Notes', a: aA.notes, b: aB.notes },
+            ],
+        },
+    ];
+
+    const headerA = `<strong style="color:#60a5fa;">${aA.sfaf_record_type} — ${aA.frequency}</strong>
+        <div style="font-size:0.72rem;color:#94a3b8;margin-top:2px;">${pA.unit?.name || '—'}</div>`;
+    const headerB = `<strong style="color:#a78bfa;">${aB.sfaf_record_type} — ${aB.frequency}</strong>
+        <div style="font-size:0.72rem;color:#94a3b8;margin-top:2px;">${pB.unit?.name || '—'}</div>`;
+
+    let html = `<table class="compare-table">
+        <thead><tr>
+            <th class="field-label">Field</th>
+            <th class="col-a">${headerA}</th>
+            <th class="col-b">${headerB}</th>
+        </tr></thead><tbody>`;
+
+    for (const section of sections) {
+        html += `<tr><td colspan="3" class="compare-section-header">${section.label}</td></tr>`;
+        for (const f of section.fields) {
+            const valA = f.a != null && f.a !== '' ? String(f.a) : null;
+            const valB = f.b != null && f.b !== '' ? String(f.b) : null;
+            const differs = valA !== valB;
+            const rowClass    = differs ? ' class="row-diff"' : '';
+            const cellClassA  = differs ? ' class="val-diff"' : (valA == null ? ' class="val-empty"' : '');
+            const cellClassB  = differs ? ' class="val-diff"' : (valB == null ? ' class="val-empty"' : '');
+            html += `<tr${rowClass}>
+                <td class="field-label">${f.label}</td>
+                <td${cellClassA}>${valA ?? '<em>—</em>'}</td>
+                <td${cellClassB}>${valB ?? '<em>—</em>'}</td>
+            </tr>`;
+        }
+    }
+
+    html += '</tbody></table>';
+    return html;
+}

@@ -340,6 +340,7 @@ func main() {
 		api.GET("/sfaf", sfafHandler.GetAllSFAFs)
 		api.GET("/sfaf/:id", sfafHandler.GetSFAF)
 		api.GET("/sfaf/marker/:marker_id", sfafHandler.GetSFAFByMarkerID)
+		api.POST("/sfaf/query", sfafHandler.QuerySFAFs)
 		api.POST("/sfaf/validate", sfafHandler.ValidateFields)
 		api.GET("/sfaf/pool-assignments", sfafHandler.GetPoolAssignments)
 		api.GET("/sfaf/field-definitions", sfafHandler.GetFieldDefinitions)

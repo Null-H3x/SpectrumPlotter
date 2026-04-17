@@ -10,6 +10,15 @@ import (
 	"github.com/google/uuid"
 )
 
+// QueryCondition represents a single filter condition in a server-side SFAF query.
+type QueryCondition struct {
+	Field     string `json:"field"`
+	Operator  string `json:"operator"`
+	Value     string `json:"value"`
+	Connector string `json:"connector"` // "and" | "or"
+	Negate    bool   `json:"negate"`
+}
+
 // SFAF represents a complete Standard Frequency Action Form record
 // Maps directly to the sfafs table in PostgreSQL (Source: table_info.txt)
 type SFAF struct {

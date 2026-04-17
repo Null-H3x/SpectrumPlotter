@@ -205,6 +205,43 @@ func (sh *SFAFHandler) GetAllSFAFs(c *gin.Context) {
 	})
 }
 
+// QuerySFAFs handles server-side SFAF filtering via POST /api/sfaf/query.
+// It accepts a JSON body with conditions, sort options, and an optional max_results cap.
+func (sh *SFAFHandler) QuerySFAFs(c *gin.Context) {
+	type queryRequest struct {
+		Conditions []models.QueryCondition `json:"conditions"`
+		SortField  string                  `json:"sort_field"`
+		SortOrder  string                  `json:"sort_order"`
+		MaxResults int                     `json:"max_results"`
+	}
+
+	var req queryRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, NewErrorResponse("Invalid request: "+err.Error()))
+		return
+	}
+	if len(req.Conditions) == 0 {
+		c.JSON(http.StatusBadRequest, NewErrorResponse("At least one condition is required"))
+		return
+	}
+	if req.MaxResults == 0 {
+		req.MaxResults = 5000
+	}
+
+	sfafs, total, err := sh.sfafService.QueryFiltered(req.Conditions, req.SortField, req.SortOrder, req.MaxResults)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, NewErrorResponse("Query failed: "+err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":  true,
+		"sfafs":    sfafs,
+		"total":    total,
+		"returned": len(sfafs),
+	})
+}
+
 // GetPoolAssignments returns SFAF records that are pool assignments.
 // Pool assignments lack geographic constraints: fields 306, 406, 530, and 531 are all empty.
 // GET /api/sfaf/pool-assignments

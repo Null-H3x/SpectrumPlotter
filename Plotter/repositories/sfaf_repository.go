@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"regexp"
 	"sfaf-plotter/models"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -572,6 +574,231 @@ func (r *SFAFRepository) GetCount() (int, error) {
 		return 0, fmt.Errorf("failed to count SFAF records: %w", err)
 	}
 	return count, nil
+}
+
+// validFieldRe matches column names like field005, field110, field999, etc.
+var validFieldRe = regexp.MustCompile(`^field\d{3,4}$`)
+
+// QueryFiltered runs server-side filtering using PostgreSQL WHERE clauses and returns
+// matching SFAF records plus the total match count.
+func (r *SFAFRepository) QueryFiltered(conditions []models.QueryCondition, sortField, sortOrder string, maxResults int) ([]*models.SFAF, int, error) {
+	isValidField := func(f string) bool {
+		return f == "created_at" || validFieldRe.MatchString(f)
+	}
+
+	// Group conditions the same way the frontend does:
+	// conditions connected by OR start a new group; within a group all are AND.
+	type condGroup []models.QueryCondition
+	var groups []condGroup
+	var current condGroup
+	for i, cond := range conditions {
+		if i > 0 && strings.ToLower(cond.Connector) == "or" {
+			if len(current) > 0 {
+				groups = append(groups, current)
+			}
+			current = condGroup{}
+		}
+		current = append(current, cond)
+	}
+	if len(current) > 0 {
+		groups = append(groups, current)
+	}
+
+	var args []interface{}
+	argIdx := 1
+	var groupSQLs []string
+
+	for _, group := range groups {
+		var condSQLs []string
+		for _, cond := range group {
+			if !isValidField(cond.Field) {
+				continue
+			}
+			col := cond.Field
+			val := cond.Value
+			var expr string
+
+			switch cond.Operator {
+			case "equals":
+				expr = fmt.Sprintf("LOWER(COALESCE(%s,'')) LIKE LOWER($%d)", col, argIdx)
+				args = append(args, val+"%")
+				argIdx++
+			case "exact_equals":
+				if val == "" {
+					expr = fmt.Sprintf("(COALESCE(%s,'') = '')", col)
+				} else {
+					expr = fmt.Sprintf("LOWER(COALESCE(%s,'')) = LOWER($%d)", col, argIdx)
+					args = append(args, val)
+					argIdx++
+				}
+			case "not_equals":
+				expr = fmt.Sprintf("LOWER(COALESCE(%s,'')) NOT LIKE LOWER($%d)", col, argIdx)
+				args = append(args, val+"%")
+				argIdx++
+			case "contains":
+				var subExprs []string
+				for _, e := range strings.Split(val, ",") {
+					e = strings.TrimSpace(e)
+					if e != "" {
+						subExprs = append(subExprs, fmt.Sprintf("LOWER(COALESCE(%s,'')) LIKE LOWER($%d)", col, argIdx))
+						args = append(args, "%"+e+"%")
+						argIdx++
+					}
+				}
+				if len(subExprs) > 0 {
+					expr = "(" + strings.Join(subExprs, " OR ") + ")"
+				}
+			case "less_than":
+				expr = fmt.Sprintf("COALESCE(%s,'') < $%d", col, argIdx)
+				args = append(args, val)
+				argIdx++
+			case "greater_than":
+				expr = fmt.Sprintf("COALESCE(%s,'') > $%d", col, argIdx)
+				args = append(args, val)
+				argIdx++
+			case "less_than_eq":
+				expr = fmt.Sprintf("COALESCE(%s,'') <= $%d", col, argIdx)
+				args = append(args, val)
+				argIdx++
+			case "greater_than_eq":
+				expr = fmt.Sprintf("COALESCE(%s,'') >= $%d", col, argIdx)
+				args = append(args, val)
+				argIdx++
+			case "in":
+				var inExprs []string
+				for _, entry := range strings.Split(val, ",") {
+					entry = strings.TrimSpace(entry)
+					if entry != "" {
+						inExprs = append(inExprs, fmt.Sprintf("LOWER(COALESCE(%s,'')) LIKE LOWER($%d)", col, argIdx))
+						args = append(args, entry+"%")
+						argIdx++
+					}
+				}
+				if len(inExprs) > 0 {
+					expr = "(" + strings.Join(inExprs, " OR ") + ")"
+				}
+			case "between":
+				parts := strings.SplitN(val, "..", 2)
+				if len(parts) == 2 {
+					low := strings.TrimSpace(parts[0])
+					high := strings.TrimSpace(parts[1])
+					expr = fmt.Sprintf("COALESCE(%s,'') >= $%d AND COALESCE(%s,'') <= $%d", col, argIdx, col, argIdx+1)
+					args = append(args, low, high)
+					argIdx += 2
+				}
+			// "contained_in" ($) is not supported server-side; falls through with no expr.
+			}
+
+			if expr != "" {
+				if cond.Negate {
+					expr = "NOT (" + expr + ")"
+				}
+				condSQLs = append(condSQLs, expr)
+			}
+		}
+		if len(condSQLs) > 0 {
+			groupSQLs = append(groupSQLs, "("+strings.Join(condSQLs, " AND ")+")")
+		}
+	}
+
+	whereSQL := ""
+	if len(groupSQLs) > 0 {
+		whereSQL = "WHERE " + strings.Join(groupSQLs, " OR ")
+	}
+
+	// Validate sort field to prevent injection
+	sortMap := map[string]string{
+		"created_at": "created_at",
+		"frequency":  "field110",
+		"serial":     "field102",
+		"location":   "field301",
+	}
+	dbSort, ok := sortMap[sortField]
+	if !ok {
+		if validFieldRe.MatchString(sortField) {
+			dbSort = sortField
+		} else {
+			dbSort = "created_at"
+		}
+	}
+	if sortOrder != "asc" && sortOrder != "desc" {
+		sortOrder = "asc"
+	}
+	if maxResults < 1 || maxResults > 10000 {
+		maxResults = 5000
+	}
+
+	// Count matching records
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM sfafs %s", whereSQL)
+	var total int
+	if err := r.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count query results: %w", err)
+	}
+
+	// Fetch matching records (capped at maxResults)
+	dataArgs := append(append([]interface{}{}, args...), maxResults)
+	dataQuery := fmt.Sprintf(`
+        SELECT id, marker_id, created_at, updated_at,
+               COALESCE(field005, ''), COALESCE(field006, ''), COALESCE(field007, ''), COALESCE(field010, ''), COALESCE(field013, ''), COALESCE(field014, ''), COALESCE(field015, ''), COALESCE(field016, ''), COALESCE(field017, ''), COALESCE(field018, ''), COALESCE(field019, ''), COALESCE(field020, ''),
+               COALESCE(field102, ''), COALESCE(field103, ''), COALESCE(field105, ''), COALESCE(field106, ''), COALESCE(field107, ''), COALESCE(field108, ''), COALESCE(field110, ''), COALESCE(field111, ''), COALESCE(field112, ''), COALESCE(field113, ''), COALESCE(field114, ''), COALESCE(field115, ''), COALESCE(field116, ''), COALESCE(field117, ''), COALESCE(field118, ''),
+               COALESCE(field130, ''), COALESCE(field131, ''), field140, field141, field142, field143, COALESCE(field144, ''), COALESCE(field145, ''), COALESCE(field146, ''), COALESCE(field147, ''), COALESCE(field151, ''), COALESCE(field152, ''),
+               COALESCE(field200, ''), COALESCE(field201, ''), COALESCE(field202, ''), COALESCE(field203, ''), COALESCE(field204, ''), COALESCE(field205, ''), COALESCE(field206, ''), COALESCE(field207, ''), COALESCE(field208, ''), COALESCE(field209, ''),
+               COALESCE(field300, ''), COALESCE(field301, ''), COALESCE(field302, ''), COALESCE(field303, ''), COALESCE(field304, ''), COALESCE(field306, ''),
+               field315, field316, field317, COALESCE(field318, ''), field319, field321,
+               COALESCE(field340, ''), COALESCE(field341, ''), COALESCE(field342, ''), COALESCE(field343, ''), COALESCE(field344, ''), COALESCE(field345, ''), COALESCE(field346, ''), COALESCE(field347, ''), COALESCE(field348, ''), COALESCE(field349, ''),
+               COALESCE(field354, ''), COALESCE(field355, ''), field356, field357, field358, field359, field360, field361, COALESCE(field362, ''), COALESCE(field363, ''), field364, field365, COALESCE(field373, ''), COALESCE(field374, ''),
+               COALESCE(field400, ''), COALESCE(field401, ''), COALESCE(field403, ''), COALESCE(field406, ''), COALESCE(field407, ''), COALESCE(field408, ''), field415, field416, field417, COALESCE(field418, ''), field419,
+               COALESCE(field440, ''), COALESCE(field442, ''), COALESCE(field443, ''),
+               COALESCE(field453, ''), COALESCE(field454, ''), COALESCE(field455, ''), field456, field457, field458, field459, field460, field461, COALESCE(field462, ''), COALESCE(field463, ''), field470, field471, field472, COALESCE(field473, ''),
+               COALESCE(field500, ''), COALESCE(field501, ''), COALESCE(field502, ''), COALESCE(field503, ''), COALESCE(field504, ''), COALESCE(field506, ''), COALESCE(field511, ''), COALESCE(field512, ''), COALESCE(field513, ''), COALESCE(field520, ''), COALESCE(field521, ''), COALESCE(field530, ''), COALESCE(field531, ''),
+               COALESCE(field701, ''), COALESCE(field702, ''), COALESCE(field704, ''), COALESCE(field707, ''), COALESCE(field710, ''), COALESCE(field711, ''), COALESCE(field716, ''),
+               COALESCE(field801, ''), COALESCE(field803, ''), COALESCE(field804, ''), field805, COALESCE(field806, ''),
+               COALESCE(field901, ''), COALESCE(field903, ''), field904, COALESCE(field905, ''), COALESCE(field906, ''), COALESCE(field907, ''), COALESCE(field910, ''), field911, COALESCE(field924, ''), field926, field927, field928,
+               COALESCE(field952, ''), COALESCE(field953, ''), COALESCE(field956, ''), field957, COALESCE(field958, ''), COALESCE(field959, ''), COALESCE(field963, ''), field964, field965,
+               COALESCE(field982, ''), COALESCE(field983, ''), COALESCE(field984, ''), COALESCE(field985, ''), COALESCE(field986, ''), COALESCE(field987, ''), COALESCE(field988, ''), COALESCE(field989, ''), COALESCE(field990, ''), COALESCE(field991, ''), COALESCE(field992, ''), COALESCE(field993, ''), COALESCE(field994, ''), COALESCE(field995, ''), COALESCE(field996, ''), COALESCE(field997, ''), COALESCE(field998, ''), COALESCE(field999, '')
+        FROM sfafs
+        %s
+        ORDER BY %s %s
+        LIMIT $%d`, whereSQL, dbSort, sortOrder, argIdx)
+
+	rows, err := r.db.Query(dataQuery, dataArgs...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to execute query: %w", err)
+	}
+	defer rows.Close()
+
+	var sfafs []*models.SFAF
+	for rows.Next() {
+		var sfaf models.SFAF
+		err := rows.Scan(
+			&sfaf.ID, &sfaf.MarkerID, &sfaf.CreatedAt, &sfaf.UpdatedAt,
+			&sfaf.Field005, &sfaf.Field006, &sfaf.Field007, &sfaf.Field010, &sfaf.Field013, &sfaf.Field014, &sfaf.Field015, &sfaf.Field016, &sfaf.Field017, &sfaf.Field018, &sfaf.Field019, &sfaf.Field020,
+			&sfaf.Field102, &sfaf.Field103, &sfaf.Field105, &sfaf.Field106, &sfaf.Field107, &sfaf.Field108, &sfaf.Field110, &sfaf.Field111, &sfaf.Field112, &sfaf.Field113, &sfaf.Field114, &sfaf.Field115, &sfaf.Field116, &sfaf.Field117, &sfaf.Field118,
+			&sfaf.Field130, &sfaf.Field131, &sfaf.Field140, &sfaf.Field141, &sfaf.Field142, &sfaf.Field143, &sfaf.Field144, &sfaf.Field145, &sfaf.Field146, &sfaf.Field147, &sfaf.Field151, &sfaf.Field152,
+			&sfaf.Field200, &sfaf.Field201, &sfaf.Field202, &sfaf.Field203, &sfaf.Field204, &sfaf.Field205, &sfaf.Field206, &sfaf.Field207, &sfaf.Field208, &sfaf.Field209,
+			&sfaf.Field300, &sfaf.Field301, &sfaf.Field302, &sfaf.Field303, &sfaf.Field304, &sfaf.Field306,
+			&sfaf.Field315, &sfaf.Field316, &sfaf.Field317, &sfaf.Field318, &sfaf.Field319, &sfaf.Field321,
+			&sfaf.Field340, &sfaf.Field341, &sfaf.Field342, &sfaf.Field343, &sfaf.Field344, &sfaf.Field345, &sfaf.Field346, &sfaf.Field347, &sfaf.Field348, &sfaf.Field349,
+			&sfaf.Field354, &sfaf.Field355, &sfaf.Field356, &sfaf.Field357, &sfaf.Field358, &sfaf.Field359, &sfaf.Field360, &sfaf.Field361, &sfaf.Field362, &sfaf.Field363, &sfaf.Field364, &sfaf.Field365, &sfaf.Field373, &sfaf.Field374,
+			&sfaf.Field400, &sfaf.Field401, &sfaf.Field403, &sfaf.Field406, &sfaf.Field407, &sfaf.Field408, &sfaf.Field415, &sfaf.Field416, &sfaf.Field417, &sfaf.Field418, &sfaf.Field419,
+			&sfaf.Field440, &sfaf.Field442, &sfaf.Field443,
+			&sfaf.Field453, &sfaf.Field454, &sfaf.Field455, &sfaf.Field456, &sfaf.Field457, &sfaf.Field458, &sfaf.Field459, &sfaf.Field460, &sfaf.Field461, &sfaf.Field462, &sfaf.Field463, &sfaf.Field470, &sfaf.Field471, &sfaf.Field472, &sfaf.Field473,
+			&sfaf.Field500, &sfaf.Field501, &sfaf.Field502, &sfaf.Field503, &sfaf.Field504, &sfaf.Field506, &sfaf.Field511, &sfaf.Field512, &sfaf.Field513, &sfaf.Field520, &sfaf.Field521, &sfaf.Field530, &sfaf.Field531,
+			&sfaf.Field701, &sfaf.Field702, &sfaf.Field704, &sfaf.Field707, &sfaf.Field710, &sfaf.Field711, &sfaf.Field716,
+			&sfaf.Field801, &sfaf.Field803, &sfaf.Field804, &sfaf.Field805, &sfaf.Field806,
+			&sfaf.Field901, &sfaf.Field903, &sfaf.Field904, &sfaf.Field905, &sfaf.Field906, &sfaf.Field907, &sfaf.Field910, &sfaf.Field911, &sfaf.Field924, &sfaf.Field926, &sfaf.Field927, &sfaf.Field928,
+			&sfaf.Field952, &sfaf.Field953, &sfaf.Field956, &sfaf.Field957, &sfaf.Field958, &sfaf.Field959, &sfaf.Field963, &sfaf.Field964, &sfaf.Field965,
+			&sfaf.Field982, &sfaf.Field983, &sfaf.Field984, &sfaf.Field985, &sfaf.Field986, &sfaf.Field987, &sfaf.Field988, &sfaf.Field989, &sfaf.Field990, &sfaf.Field991, &sfaf.Field992, &sfaf.Field993, &sfaf.Field994, &sfaf.Field995, &sfaf.Field996, &sfaf.Field997, &sfaf.Field998, &sfaf.Field999,
+		)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to scan query result: %w", err)
+		}
+		sfafs = append(sfafs, &sfaf)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("error iterating query results: %w", err)
+	}
+	return sfafs, total, nil
 }
 
 // CreateSFAFField inserts a multi-occurrence field into the sfaf_fields table

@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const data = await res.json();
         if (!data.valid || !data.user) return;
         const role = data.user.role || 'operator';
+        window._authRole = role;
         if (_ISM_NAV_ROLES.includes(role)) {
             document.querySelectorAll('.ism-nav-link').forEach(el => {
                 el.style.display = '';
@@ -28,6 +29,11 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (role === 'admin') {
             document.querySelectorAll('.admin-console-link').forEach(el => {
                 el.style.display = '';
+            });
+        }
+        if (!['admin', 'ntia'].includes(role)) {
+            document.querySelectorAll('.admin-ntia-only').forEach(el => {
+                el.style.display = 'none';
             });
         }
         if (role === 'operator') {

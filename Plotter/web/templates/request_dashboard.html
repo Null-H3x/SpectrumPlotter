@@ -411,14 +411,21 @@
             <a href="/workbox" class="nav-link ism-nav-link active" style="display:none">
                 <i class="fas fa-inbox"></i><span>Workbox</span>
             </a>
-            <a href="/frequency-nomination" class="nav-link">
-                <i class="fas fa-wave-square"></i><span>Freq Tool</span>
-            </a>
+            <div class="nav-dropdown">
+                <button class="nav-link nav-dropdown-trigger">
+                    <i class="fas fa-wrench"></i><span>Tools</span><i class="fas fa-caret-down nav-caret"></i>
+                </button>
+                <div class="nav-dropdown-menu">
+                    <a href="/tools" class="nav-dropdown-item"><i class="fas fa-satellite-dish"></i> EW Deconfliction</a>
+                    <a href="/tools?tool=serial-alloc" class="nav-dropdown-item"><i class="fas fa-list-ol"></i> Serial Allocation</a>
+                    <a href="/tools?tool=serial-suballoc" class="nav-dropdown-item"><i class="fas fa-sitemap"></i> Serial Sub-Allocation</a>
+                    <div class="nav-dropdown-divider"></div>
+                    <a href="/frequency-nomination" class="nav-dropdown-item"><i class="fas fa-wave-square"></i> Nomination</a>
+                    <a href="/database?tab=analytics" class="nav-dropdown-item"><i class="fas fa-chart-bar"></i> Analytics</a>
+                </div>
+            </div>
             <a href="/view-manager" class="nav-link">
                 <i class="fas fa-table"></i><span>Table Manager</span>
-            </a>
-            <a href="/tools" class="nav-link">
-                <i class="fas fa-wrench"></i><span>Tools</span>
             </a>
             <a href="/admin" class="nav-link admin-console-link" style="display:none">
                 <i class="fas fa-shield-halved"></i><span>Admin</span>
@@ -427,11 +434,8 @@
         <div class="nav-links nav-links-right">
             <button id="refreshBtn" class="nav-link" title="Refresh"><i class="fas fa-sync"></i></button>
             <a href="/frequency/request" class="nav-link"><i class="fas fa-plus"></i><span>New Request</span></a>
-            <button id="btnSerialMgmt" class="nav-link" style="display:none;background:none;border:none;cursor:pointer;" onclick="openSerialMgmt()"><i class="fas fa-list-ol"></i></button>
-            <button id="btnMajcomSerialMgmt" class="nav-link" style="display:none;background:none;border:none;cursor:pointer;" onclick="openMajcomSerialMgmt()"><i class="fas fa-sitemap"></i></button>
-            <span id="sessionInfo" class="session-badge"></span>
-            <a href="/profile" class="nav-link" title="Account">
-                <i class="fas fa-user-circle"></i><span>Account</span>
+            <a href="/profile" class="nav-link" title="Settings">
+                <i class="fas fa-cog"></i><span>Settings</span>
             </a>
             <button class="nav-link" onclick="handleLogout()" title="Logout"
                     style="background:none;border:none;cursor:pointer;color:inherit;">
@@ -514,6 +518,16 @@
                     <option value="S">S — Temporary Proposal</option>
                 </select>
             </div>
+            <div class="toolbar-right">
+                <button id="compareToggleBtn" class="btn btn-sm btn-secondary" onclick="toggleCompareMode()">
+                    <i class="fas fa-columns"></i> Compare
+                </button>
+            </div>
+        </div>
+        <div id="compareHint" style="display:none;padding:6px 14px;font-size:0.78rem;color:#94a3b8;background:rgba(99,102,241,0.08);border-bottom:1px solid rgba(99,102,241,0.2);">
+            <i class="fas fa-info-circle" style="color:#818cf8;margin-right:6px;"></i>
+            Select two proposals to compare side by side.
+            <button onclick="toggleCompareMode()" style="margin-left:10px;background:none;border:none;color:#818cf8;cursor:pointer;font-size:0.78rem;">Cancel</button>
         </div>
         <div id="proposalsContainer" class="requests-container">
             <div class="loading-state">
@@ -2518,167 +2532,7 @@
 
 <div id="pub7-popover" role="tooltip"></div>
 
-<!-- ── AFSMO Serial Allocation Management Modal ── -->
-<div id="serialMgmtModal" class="modal" style="display:none;">
-    <div class="modal-content modal-large" style="max-width:900px;max-height:90vh;display:flex;flex-direction:column;">
-        <div class="modal-header">
-            <h3><i class="fas fa-list-ol"></i> AFSMO — Serial Number Allocation</h3>
-            <button class="modal-close" onclick="closeSerialMgmt()"><i class="fas fa-times"></i></button>
-        </div>
-        <div class="modal-body" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:16px;padding:18px 20px;">
-
-            <!-- Allocate block -->
-            <div style="background:rgba(10,20,50,0.4);border:1px solid rgba(100,150,255,0.15);border-radius:8px;padding:14px;">
-                <div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#90caf9;margin-bottom:10px;">
-                    <i class="fas fa-plus-circle"></i> Allocate Serials to a MAJCOM Unit
-                </div>
-                <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
-                    <div style="display:flex;flex-direction:column;gap:4px;">
-                        <label style="font-size:0.75rem;color:#64748b;">Prefix</label>
-                        <select id="smPrefix" class="form-control" style="width:100px;">
-                            <option value="AF">AF</option>
-                        </select>
-                    </div>
-                    <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:200px;">
-                        <label style="font-size:0.75rem;color:#64748b;">Unit (MAJCOM)</label>
-                        <select id="smUnitId" class="form-control">
-                            <option value="">— Loading units… —</option>
-                        </select>
-                    </div>
-                    <div style="display:flex;flex-direction:column;gap:4px;">
-                        <label style="font-size:0.75rem;color:#64748b;">Count</label>
-                        <input type="number" id="smCount" class="form-control" value="500" min="1" max="10000" style="width:100px;">
-                    </div>
-                    <button type="button" class="btn btn-primary" onclick="smAllocate()">
-                        <i class="fas fa-arrow-right"></i> Allocate
-                    </button>
-                </div>
-                <div id="smAllocateMsg" style="margin-top:8px;font-size:0.8rem;display:none;"></div>
-            </div>
-
-            <!-- Allocation summary table -->
-            <div style="flex:1;">
-                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-                    <div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#90caf9;">
-                        <i class="fas fa-table"></i> Current Allocations
-                    </div>
-                    <select id="smFilterPrefix" class="form-control" style="width:110px;margin-left:auto;" onchange="smLoadAllocations()">
-                        <option value="">All Prefixes</option>
-                        <option value="AF">AF</option>
-                    </select>
-                    <button type="button" class="btn btn-sm btn-secondary" onclick="smLoadAllocations()">
-                        <i class="fas fa-sync"></i> Refresh
-                    </button>
-                </div>
-                <div style="overflow-x:auto;">
-                    <table class="submitted-table" id="smTable" style="width:100%;">
-                        <thead>
-                            <tr>
-                                <th>Prefix</th>
-                                <th>Unit</th>
-                                <th>Code</th>
-                                <th style="text-align:right;">Allocated</th>
-                                <th style="text-align:right;">Available</th>
-                                <th style="text-align:right;">Used</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody id="smTableBody">
-                            <tr><td colspan="7" style="text-align:center;color:#64748b;padding:20px;">Loading…</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-        <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" onclick="closeSerialMgmt()">Close</button>
-        </div>
-    </div>
-</div>
-
-<!-- ── MAJCOM Serial Sub-Allocation Management Modal ── -->
-<div id="majcomSerialMgmtModal" class="modal" style="display:none;">
-    <div class="modal-content modal-large" style="max-width:900px;max-height:90vh;display:flex;flex-direction:column;">
-        <div class="modal-header">
-            <h3><i class="fas fa-sitemap"></i> MAJCOM — Serial Number Sub-Allocation</h3>
-            <button class="modal-close" onclick="closeMajcomSerialMgmt()"><i class="fas fa-times"></i></button>
-        </div>
-        <div class="modal-body" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:16px;padding:18px 20px;">
-
-            <!-- My Pool summary -->
-            <div style="background:rgba(10,20,50,0.4);border:1px solid rgba(100,150,255,0.15);border-radius:8px;padding:14px;">
-                <div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#90caf9;margin-bottom:8px;">
-                    <i class="fas fa-warehouse"></i> My Pool
-                </div>
-                <div id="msMyPoolBody" style="font-size:0.85rem;color:#94a3b8;">Loading…</div>
-            </div>
-
-            <!-- Sub-allocate block -->
-            <div style="background:rgba(10,20,50,0.4);border:1px solid rgba(100,150,255,0.15);border-radius:8px;padding:14px;">
-                <div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#90caf9;margin-bottom:10px;">
-                    <i class="fas fa-plus-circle"></i> Sub-Allocate Serials to a Unit
-                </div>
-                <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
-                    <div style="display:flex;flex-direction:column;gap:4px;">
-                        <label style="font-size:0.75rem;color:#64748b;">Prefix</label>
-                        <select id="msPrefix" class="form-control" style="width:110px;">
-                            <option value="">— Select —</option>
-                            <option value="AF">AF</option>
-                            <option value="AFSO">AFSO</option>
-                        </select>
-                    </div>
-                    <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:200px;">
-                        <label style="font-size:0.75rem;color:#64748b;">To Unit</label>
-                        <select id="msToUnitId" class="form-control">
-                            <option value="">— Loading units… —</option>
-                        </select>
-                    </div>
-                    <div style="display:flex;flex-direction:column;gap:4px;">
-                        <label style="font-size:0.75rem;color:#64748b;">Count</label>
-                        <input type="number" id="msCount" class="form-control" value="100" min="1" max="10000" style="width:100px;">
-                    </div>
-                    <button type="button" class="btn btn-primary" onclick="msSubAllocate()">
-                        <i class="fas fa-arrow-right"></i> Sub-Allocate
-                    </button>
-                </div>
-                <div id="msAllocateMsg" style="margin-top:8px;font-size:0.8rem;display:none;"></div>
-            </div>
-
-            <!-- Sub-allocation summary table -->
-            <div style="flex:1;">
-                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-                    <div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#90caf9;">
-                        <i class="fas fa-table"></i> Subordinate Allocations
-                    </div>
-                    <button type="button" class="btn btn-sm btn-secondary" onclick="msLoadSubAllocations()" style="margin-left:auto;">
-                        <i class="fas fa-sync"></i> Refresh
-                    </button>
-                </div>
-                <div style="overflow-x:auto;">
-                    <table class="submitted-table" id="msTable" style="width:100%;">
-                        <thead>
-                            <tr>
-                                <th>Prefix</th>
-                                <th>Unit</th>
-                                <th>Code</th>
-                                <th style="text-align:right;">Allocated</th>
-                                <th style="text-align:right;">Available</th>
-                                <th style="text-align:right;">Used</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody id="msTableBody">
-                            <tr><td colspan="7" style="text-align:center;color:#64748b;padding:20px;">Loading…</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-        <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" onclick="closeMajcomSerialMgmt()">Close</button>
-        </div>
-    </div>
-</div>
+<!-- Serial allocation panels live at /tools?tool=serial-alloc and /tools?tool=serial-suballoc -->
 
 <!-- ── Serial Number Picker Modal ── -->
 <!-- 702 Picker Modal -->
@@ -2868,6 +2722,105 @@
         </div>
     </div>
 </div>
+
+<!-- ── Proposal Comparison Modal ── -->
+<div id="compareModal" class="modal" style="display:none;">
+    <div class="modal-content" style="max-width:900px;max-height:90vh;display:flex;flex-direction:column;">
+        <div class="modal-header">
+            <h3><i class="fas fa-columns"></i> Proposal Comparison</h3>
+            <button class="modal-close" onclick="closeCompareModal()">&times;</button>
+        </div>
+        <div class="modal-body" style="overflow-y:auto;padding:0;">
+            <div id="compareModalBody"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeCompareModal()">Close</button>
+        </div>
+    </div>
+</div>
+
+<style>
+/* ── Proposal Compare ── */
+#compareToggleBtn.compare-active {
+    background: rgba(99,102,241,0.2);
+    border-color: #818cf8;
+    color: #c7d2fe;
+}
+.proposal-select-overlay {
+    position: absolute;
+    top: 10px; right: 10px;
+    width: 22px; height: 22px;
+    border-radius: 4px;
+    border: 2px solid #475569;
+    background: #0f172a;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color 0.15s, background 0.15s;
+}
+.proposal-select-overlay.selected {
+    border-color: #818cf8;
+    background: #312e81;
+}
+.proposal-select-overlay.selected::after {
+    content: '✓';
+    color: #c7d2fe;
+    font-size: 13px;
+    line-height: 1;
+}
+.request-card.compare-selectable { cursor: pointer; position: relative; }
+.request-card.compare-selectable:hover { border-color: #4f46e5; }
+.request-card.compare-selected  { border-color: #818cf8 !important; background: rgba(49,46,129,0.25) !important; }
+
+/* Compare table */
+.compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+}
+.compare-table th {
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #94a3b8;
+    border-bottom: 1px solid #1e293b;
+    background: #0f172a;
+    position: sticky; top: 0; z-index: 1;
+}
+.compare-table th.col-a { color: #60a5fa; }
+.compare-table th.col-b { color: #a78bfa; }
+.compare-table td {
+    padding: 8px 14px;
+    vertical-align: top;
+    border-bottom: 1px solid rgba(30,41,59,0.8);
+    color: #cbd5e1;
+}
+.compare-table tr:last-child td { border-bottom: none; }
+.compare-table td.field-label {
+    color: #64748b;
+    font-size: 0.75rem;
+    font-weight: 500;
+    white-space: nowrap;
+    width: 160px;
+}
+.compare-table tr.row-diff td { background: rgba(234,179,8,0.06); }
+.compare-table tr.row-diff td.field-label { color: #facc15; }
+.compare-table td.val-diff { color: #fde68a; font-weight: 500; }
+.compare-table td.val-empty { color: #334155; font-style: italic; }
+.compare-section-header {
+    padding: 8px 14px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #475569;
+    background: rgba(15,23,42,0.9);
+    border-bottom: 1px solid #1e293b;
+    border-top: 1px solid #1e293b;
+}
+</style>
 
 <script src="/js/request_dashboard.js"></script>
 </body>

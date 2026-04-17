@@ -576,6 +576,10 @@ class DatabaseViewer {
         // ✅ Apply session preferences before loading data
         this.applySessionPreferences();
 
+        // Override tab if specified in URL params (e.g. ?tab=analytics)
+        const urlTab = new URLSearchParams(window.location.search).get('tab');
+        if (urlTab) this.currentTab = urlTab;
+
         // ✅ Restore last query builder state
         this.restoreQueryState();
 
