@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 )
 
 type FrequencyRepository struct {
@@ -508,7 +509,7 @@ func (r *FrequencyRepository) GetPendingRequests(callerWorkboxes []string) ([]mo
 			WHERE status IN ('pending', 'under_review')
 			  AND (routed_to_workbox IS NULL OR routed_to_workbox = ANY($1))
 			ORDER BY priority DESC, created_at`
-		args = []interface{}{callerWorkboxes}
+		args = []interface{}{pq.Array(callerWorkboxes)}
 	} else {
 		query = `
 			SELECT * FROM frequency_requests
@@ -536,7 +537,7 @@ func (r *FrequencyRepository) BulkRouteRequests(ids []uuid.UUID, workbox *string
 	}
 	authorityClause := ""
 	if len(callerWorkboxes) > 0 {
-		args = append(args, callerWorkboxes)
+		args = append(args, pq.Array(callerWorkboxes))
 		authorityClause = fmt.Sprintf(
 			" AND (edit_authority_workbox = ANY($%d) OR edit_authority_workbox IS NULL)",
 			len(args))
@@ -909,7 +910,7 @@ func (r *FrequencyRepository) GetInboundAssignments(workboxes []string) ([]model
 		WHERE sfaf_record_type IN ('P', 'S')
 		  AND is_active = true
 		  AND routed_to_workbox = ANY($1)
-		ORDER BY created_at DESC`, workboxes)
+		ORDER BY created_at DESC`, pq.Array(workboxes))
 	return assignments, err
 }
 
@@ -1020,7 +1021,7 @@ func (r *FrequencyRepository) BulkRouteAssignments(ids []uuid.UUID, workbox *str
 	}
 	authorityClause := ""
 	if len(callerWorkboxes) > 0 {
-		args = append(args, callerWorkboxes)
+		args = append(args, pq.Array(callerWorkboxes))
 		authorityClause = fmt.Sprintf(
 			" AND (edit_authority_workbox = ANY($%d) OR edit_authority_workbox IS NULL)",
 			len(args))
