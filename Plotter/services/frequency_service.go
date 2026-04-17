@@ -329,12 +329,18 @@ func (s *FrequencyService) SubmitFrequencyRequest(
 	}
 
 	// Resolve edit authority workbox.
-	// Priority: ism_office (if it's a workbox name, not a UUID) → requester's ISM unit.
+	// Priority:
+	//   1. ism_office as a workbox name (string, not a UUID)
+	//   2. ism_office as an installation UUID → look up the installation's workbox
+	//   3. requester's own primary workbox
 	var editAuthorityWorkbox *string
 	if input.ISMOffice != "" {
-		if _, parseErr := uuid.Parse(input.ISMOffice); parseErr != nil {
-			// Not a UUID — treat as a workbox/ISM unit name
+		if installID, parseErr := uuid.Parse(input.ISMOffice); parseErr != nil {
+			// Not a UUID — treat as a direct workbox/ISM unit name
 			editAuthorityWorkbox = &input.ISMOffice
+		} else {
+			// Installation UUID — resolve to the workbox linked to that installation
+			editAuthorityWorkbox, _ = s.repo.GetWorkboxNameByInstallation(installID)
 		}
 	}
 	if editAuthorityWorkbox == nil {

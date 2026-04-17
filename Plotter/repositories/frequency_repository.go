@@ -1321,6 +1321,24 @@ func (r *FrequencyRepository) GetUserWorkboxNames(userID uuid.UUID) ([]string, e
 	return names, err
 }
 
+// GetWorkboxNameByInstallation returns the name of the active workbox linked to the given
+// installation, or nil if none exists. Used to resolve installation UUIDs from the ISM
+// office dropdown to a routable workbox name.
+func (r *FrequencyRepository) GetWorkboxNameByInstallation(installationID uuid.UUID) (*string, error) {
+	var name string
+	err := r.db.Get(&name, `
+		SELECT name FROM workboxes
+		WHERE installation_id = $1 AND is_active = true
+		LIMIT 1`, installationID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &name, nil
+}
+
 // GetUserPrimaryWorkboxName returns the name of the user's primary workbox, or nil.
 // Used for edit-authority attribution on new SFAFs/proposals.
 func (r *FrequencyRepository) GetUserPrimaryWorkboxName(userID uuid.UUID) (*string, error) {
