@@ -21,6 +21,7 @@ import shutil
 import time
 import argparse
 from pathlib import Path
+from typing import NoReturn
 
 SCRIPT_DIR  = Path(__file__).parent.resolve()
 BINARY_PATH = SCRIPT_DIR / "bin" / "sfaf-plotter"
@@ -37,7 +38,7 @@ def _c(text, colour): return f"{colour}{text}{NC}"
 def ok(msg):   print(f"  {_c('✓', GREEN)} {msg}")
 def warn(msg): print(f"  {_c('⚠', YELLOW)} {msg}")
 def info(msg): print(f"  {_c('·', CYAN)} {msg}")
-def die(msg):
+def die(msg) -> NoReturn:
     print(f"\n{_c('✗ FATAL:', RED)} {msg}")
     sys.exit(1)
 
@@ -74,7 +75,15 @@ def load_env(path: Path) -> dict:
         if not line or line.startswith("#") or "=" not in line:
             continue
         k, _, v = line.partition("=")
-        env[k.strip()] = v.strip()
+        v = v.strip()
+        # Strip inline comments unless the value is quoted
+        if v and not v.startswith(("'", '"')):
+            v = v.split("#")[0].strip()
+        elif v and v[0] in ("'", '"'):
+            quote = v[0]
+            end = v.find(quote, 1)
+            v = v[1:end] if end != -1 else v[1:]
+        env[k.strip()] = v
     return env
 
 def apply_env(env: dict):
@@ -171,6 +180,14 @@ def check_database_initialised(env: dict):
                 f"Database '{env.get('DB_NAME')}' does not exist or has not been initialised.\n"
                 "  Run:  sudo python3 install.py"
             )
+        if "permission denied" in err_msg:
+            die(
+                f"Database user '{env.get('DB_USER')}' lacks table permissions.\n"
+                "  Run as postgres:\n"
+                f"    sudo -u postgres psql -d {env.get('DB_NAME')} "
+                f"-c \"GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO \\\"{env.get('DB_USER')}\\\"; "
+                f"GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO \\\"{env.get('DB_USER')}\\\";\""
+            )
         die(f"Database connectivity error:\n  {err_msg}")
 
     migration_count = result.stdout.strip()
@@ -185,8 +202,8 @@ def needs_rebuild() -> bool:
         return True
     binary_mtime = BINARY_PATH.stat().st_mtime
     for src in SCRIPT_DIR.rglob("*.go"):
-        # Skip the test data generator — it's a cmd tool, not the server
-        if "generate_test_data" in str(src):
+        parts = src.parts
+        if "vendor" in parts or "generate_test_data" in str(src):
             continue
         if src.stat().st_mtime > binary_mtime:
             return True
@@ -216,13 +233,15 @@ def run_server(env: dict):
     proc = None
 
     def _shutdown(signum, frame):
+        nonlocal proc
         print(f"\n\n{_c('Shutting down …', YELLOW)}")
-        if proc and proc.poll() is None:
-            proc.send_signal(signal.SIGINT)
+        p = proc  # snapshot to avoid TOCTOU with assignment below
+        if p and p.poll() is None:
+            p.send_signal(signal.SIGINT)
             try:
-                proc.wait(timeout=10)
+                p.wait(timeout=10)
             except subprocess.TimeoutExpired:
-                proc.kill()
+                p.kill()
         print(_c("Server stopped.", GREEN))
         sys.exit(0)
 
@@ -243,7 +262,7 @@ def run_server(env: dict):
 
     # Wait for the process; re-raise if it crashes
     exit_code = proc.wait()
-    if exit_code not in (0, -2):   # -2 = SIGINT (normal Ctrl+C)
+    if exit_code > 0:   # negative = killed by signal (normal); 0 = clean exit
         die(f"Server exited unexpectedly with code {exit_code}.\n"
             "  Check the output above for error details.")
 

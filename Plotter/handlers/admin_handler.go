@@ -123,6 +123,10 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid role"})
 		return
 	}
+	if err := services.ValidatePasswordStrength(req.Password); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	user, err := h.authService.CreateUser(req.Username, req.Password, req.Email, req.FullName, req.Organization, req.Role, nil)
 	if err != nil {
@@ -213,6 +217,10 @@ func (h *AdminHandler) UpdateUser(c *gin.Context) {
 		user.IsActive = *req.IsActive
 	}
 	if req.Password != "" {
+		if err := services.ValidatePasswordStrength(req.Password); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 		hash, err := h.authService.HashPassword(req.Password)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash password"})

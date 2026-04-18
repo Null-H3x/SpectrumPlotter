@@ -22,6 +22,7 @@ import urllib.request
 import tarfile
 import tempfile
 from pathlib import Path
+from typing import NoReturn
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -63,7 +64,7 @@ def step(msg):   print(f"\n{_c('▶', BLUE)} {msg}")
 def ok(msg):     print(f"  {_c('✓', GREEN)} {msg}")
 def warn(msg):   print(f"  {_c('⚠', YELLOW)} {msg}")
 def info(msg):   print(f"  {_c('·', CYAN)} {msg}")
-def die(msg):
+def die(msg) -> NoReturn:
     print(f"\n{_c('✗ FATAL:', RED)} {msg}")
     sys.exit(1)
 
@@ -101,7 +102,14 @@ def load_env(path: Path) -> dict:
         if not line or line.startswith("#") or "=" not in line:
             continue
         k, _, v = line.partition("=")
-        env[k.strip()] = v.strip()
+        v = v.strip()
+        if v and not v.startswith(("'", '"')):
+            v = v.split("#")[0].strip()
+        elif v and v[0] in ("'", '"'):
+            quote = v[0]
+            end = v.find(quote, 1)
+            v = v[1:end] if end != -1 else v[1:]
+        env[k.strip()] = v
     return env
 
 def go_bin() -> str:
@@ -242,6 +250,20 @@ def init_database():
     )
     ok("Database schema initialised")
 
+def grant_schema_permissions(env: dict):
+    """Ensure the app user can access all tables regardless of who created them."""
+    step("Granting schema permissions")
+    db_user = env["DB_USER"]
+    db_name = env["DB_NAME"]
+    for sql in [
+        f'GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "{db_user}";',
+        f'GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "{db_user}";',
+        f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "{db_user}";',
+        f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO "{db_user}";',
+    ]:
+        run(["sudo", "-u", "postgres", "psql", "-d", db_name, "-c", sql])
+    ok(f"Schema permissions granted to '{db_user}'")
+
 def _user_exists(username: str) -> bool:
     """Return True if a user row with this username already exists."""
     result = subprocess.run(
@@ -350,6 +372,7 @@ def main():
     setup_postgresql(env)
     go_mod_download()
     init_database()
+    grant_schema_permissions(env)
     create_first_user()
     print_summary(env)
 

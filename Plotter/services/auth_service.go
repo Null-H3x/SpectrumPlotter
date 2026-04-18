@@ -8,6 +8,7 @@ import (
 	"sfaf-plotter/models"
 	"sfaf-plotter/repositories"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -23,6 +24,39 @@ func NewAuthService(userRepo *repositories.UserRepository, sessionRepo *reposito
 		userRepo:    userRepo,
 		sessionRepo: sessionRepo,
 	}
+}
+
+// ValidatePasswordStrength enforces complexity requirements.
+func ValidatePasswordStrength(password string) error {
+	if len(password) < 16 {
+		return fmt.Errorf("password must be at least 16 characters")
+	}
+	var upper, lower, digits, special int
+	for _, ch := range password {
+		switch {
+		case unicode.IsUpper(ch):
+			upper++
+		case unicode.IsLower(ch):
+			lower++
+		case unicode.IsDigit(ch):
+			digits++
+		case unicode.IsPunct(ch) || unicode.IsSymbol(ch):
+			special++
+		}
+	}
+	if upper < 2 {
+		return fmt.Errorf("password must contain at least 2 uppercase letters")
+	}
+	if lower < 2 {
+		return fmt.Errorf("password must contain at least 2 lowercase letters")
+	}
+	if digits < 2 {
+		return fmt.Errorf("password must contain at least 2 numbers")
+	}
+	if special < 2 {
+		return fmt.Errorf("password must contain at least 2 special characters")
+	}
+	return nil
 }
 
 // HashPassword generates a bcrypt hash of the password
