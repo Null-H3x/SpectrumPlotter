@@ -593,7 +593,7 @@ var validFieldRe = regexp.MustCompile(`^field\d{3,4}$`)
 // matching SFAF records plus the total match count.
 func (r *SFAFRepository) QueryFiltered(conditions []models.QueryCondition, sortField, sortOrder string, maxResults int) ([]*models.SFAF, int, error) {
 	isValidField := func(f string) bool {
-		return f == "created_at" || validFieldRe.MatchString(f)
+		return f == "created_at" || f == "sfaf_record_type" || validFieldRe.MatchString(f)
 	}
 
 	// Group conditions the same way the frontend does:
@@ -728,7 +728,7 @@ func (r *SFAFRepository) QueryFiltered(conditions []models.QueryCondition, sortF
 	}
 	dbSort, ok := sortMap[sortField]
 	if !ok {
-		if validFieldRe.MatchString(sortField) {
+		if validFieldRe.MatchString(sortField) || sortField == "sfaf_record_type" {
 			dbSort = sortField
 		} else {
 			dbSort = "created_at"

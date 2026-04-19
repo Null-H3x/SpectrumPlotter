@@ -576,6 +576,7 @@ Object.assign(DatabaseViewer.prototype, {
 
         // Generate field options from MC4EB Pub 7 CHG 1 fields
         const fieldOptions = [
+            '<option value="sfaf_record_type">Record Type (A/P/S/T)</option>',
             '<option value="field005">005 - Security Classification</option>',
             '<option value="field006">006 - Security Classification Modification</option>',
             '<option value="field007">007 - Missing Data Indicator</option>',
