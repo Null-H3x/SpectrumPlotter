@@ -397,9 +397,13 @@ func main() {
 			argN++
 		}
 
-		cols = append(cols, "created_at", "updated_at")
-		placeholders = append(placeholders, fmt.Sprintf("$%d", argN), fmt.Sprintf("$%d", argN+1))
-		args = append(args, now, now)
+		cols = append(cols, "sfaf_record_type", "created_at", "updated_at")
+		recordType := pick([]string{"A", "P", "S", "T"})
+		placeholders = append(placeholders,
+			fmt.Sprintf("$%d", argN),
+			fmt.Sprintf("$%d", argN+1),
+			fmt.Sprintf("$%d", argN+2))
+		args = append(args, recordType, now, now)
 
 		query := fmt.Sprintf("INSERT INTO sfafs (%s) VALUES (%s)",
 			strings.Join(cols, ", "),

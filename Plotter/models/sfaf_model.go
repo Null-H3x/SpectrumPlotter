@@ -23,10 +23,11 @@ type QueryCondition struct {
 // Maps directly to the sfafs table in PostgreSQL (Source: table_info.txt)
 type SFAF struct {
 	// Core identification fields
-	ID        uuid.UUID  `json:"id" db:"id"`
-	MarkerID  *uuid.UUID `json:"marker_id,omitempty" db:"marker_id"` // Nullable - SFAF may not have associated marker
-	CreatedAt time.Time  `json:"created_at" db:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at" db:"updated_at"`
+	ID             uuid.UUID  `json:"id" db:"id"`
+	MarkerID       *uuid.UUID `json:"marker_id,omitempty" db:"marker_id"`
+	SFAFRecordType string     `json:"sfaf_record_type" db:"sfaf_record_type"` // A=Permanent Assignment, P=Permanent Proposal, S=Special Temporary, T=Temporary
+	CreatedAt      time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at" db:"updated_at"`
 
 	// Individual SFAF fields matching database schema (Source: table_info.txt)
 	// 000 Series - Basic Information

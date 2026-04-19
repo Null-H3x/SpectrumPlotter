@@ -50,7 +50,8 @@ func (r *SFAFRepository) Create(sfaf *models.SFAF) error {
             field801, field803, field804, field805, field806,
             field901, field903, field904, field905, field906, field907, field910, field911, field924, field926, field927, field928,
             field952, field953, field956, field957, field958, field959, field963, field964, field965,
-            field982, field983, field984, field985, field986, field987, field988, field989, field990, field991, field992, field993, field994, field995, field996, field997, field998, field999
+            field982, field983, field984, field985, field986, field987, field988, field989, field990, field991, field992, field993, field994, field995, field996, field997, field998, field999,
+            sfaf_record_type
         ) VALUES (
             $1, $2, $3, $4,
             $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
@@ -71,7 +72,8 @@ func (r *SFAFRepository) Create(sfaf *models.SFAF) error {
             $139, $140, $141, $142, $143,
             $144, $145, $146, $147, $148, $149, $150, $151, $152, $153, $154, $155,
             $156, $157, $158, $159, $160, $161, $162, $163, $164,
-            $165, $166, $167, $168, $169, $170, $171, $172, $173, $174, $175, $176, $177, $178, $179, $180, $181, $182
+            $165, $166, $167, $168, $169, $170, $171, $172, $173, $174, $175, $176, $177, $178, $179, $180, $181, $182,
+            $183
         )`
 
 	_, err := r.db.Exec(query,
@@ -112,6 +114,7 @@ func (r *SFAFRepository) Create(sfaf *models.SFAF) error {
 		sfaf.Field952, sfaf.Field953, sfaf.Field956, sfaf.Field957, sfaf.Field958, sfaf.Field959, sfaf.Field963, sfaf.Field964, sfaf.Field965,
 		// 980+ Series - System and Archive Information
 		sfaf.Field982, sfaf.Field983, sfaf.Field984, sfaf.Field985, sfaf.Field986, sfaf.Field987, sfaf.Field988, sfaf.Field989, sfaf.Field990, sfaf.Field991, sfaf.Field992, sfaf.Field993, sfaf.Field994, sfaf.Field995, sfaf.Field996, sfaf.Field997, sfaf.Field998, sfaf.Field999,
+		sfaf.SFAFRecordType,
 	)
 
 	return err
@@ -144,7 +147,8 @@ func (r *SFAFRepository) GetByID(id string) (*models.SFAF, error) {
                COALESCE(field801, ''), COALESCE(field803, ''), COALESCE(field804, ''), field805, COALESCE(field806, ''),
                COALESCE(field901, ''), COALESCE(field903, ''), field904, COALESCE(field905, ''), COALESCE(field906, ''), COALESCE(field907, ''), COALESCE(field910, ''), field911, COALESCE(field924, ''), field926, field927, field928,
                COALESCE(field952, ''), COALESCE(field953, ''), COALESCE(field956, ''), field957, COALESCE(field958, ''), COALESCE(field959, ''), COALESCE(field963, ''), field964, field965,
-               COALESCE(field982, ''), COALESCE(field983, ''), COALESCE(field984, ''), COALESCE(field985, ''), COALESCE(field986, ''), COALESCE(field987, ''), COALESCE(field988, ''), COALESCE(field989, ''), COALESCE(field990, ''), COALESCE(field991, ''), COALESCE(field992, ''), COALESCE(field993, ''), COALESCE(field994, ''), COALESCE(field995, ''), COALESCE(field996, ''), COALESCE(field997, ''), COALESCE(field998, ''), COALESCE(field999, '')
+               COALESCE(field982, ''), COALESCE(field983, ''), COALESCE(field984, ''), COALESCE(field985, ''), COALESCE(field986, ''), COALESCE(field987, ''), COALESCE(field988, ''), COALESCE(field989, ''), COALESCE(field990, ''), COALESCE(field991, ''), COALESCE(field992, ''), COALESCE(field993, ''), COALESCE(field994, ''), COALESCE(field995, ''), COALESCE(field996, ''), COALESCE(field997, ''), COALESCE(field998, ''), COALESCE(field999, ''),
+               sfaf_record_type
         FROM sfafs 
         WHERE id = $1`
 
@@ -167,7 +171,8 @@ func (r *SFAFRepository) GetByID(id string) (*models.SFAF, error) {
 		&sfaf.Field801, &sfaf.Field803, &sfaf.Field804, &sfaf.Field805, &sfaf.Field806,
 		&sfaf.Field901, &sfaf.Field903, &sfaf.Field904, &sfaf.Field905, &sfaf.Field906, &sfaf.Field907, &sfaf.Field910, &sfaf.Field911, &sfaf.Field924, &sfaf.Field926, &sfaf.Field927, &sfaf.Field928,
 		&sfaf.Field952, &sfaf.Field953, &sfaf.Field956, &sfaf.Field957, &sfaf.Field958, &sfaf.Field959, &sfaf.Field963, &sfaf.Field964, &sfaf.Field965,
-		&sfaf.Field982, &sfaf.Field983, &sfaf.Field984, &sfaf.Field985, &sfaf.Field986, &sfaf.Field987, &sfaf.Field988, &sfaf.Field989, &sfaf.Field990, &sfaf.Field991, &sfaf.Field992, &sfaf.Field993, &sfaf.Field994, &sfaf.Field995, &sfaf.Field996, &sfaf.Field997, &sfaf.Field998, &sfaf.Field999)
+		&sfaf.Field982, &sfaf.Field983, &sfaf.Field984, &sfaf.Field985, &sfaf.Field986, &sfaf.Field987, &sfaf.Field988, &sfaf.Field989, &sfaf.Field990, &sfaf.Field991, &sfaf.Field992, &sfaf.Field993, &sfaf.Field994, &sfaf.Field995, &sfaf.Field996, &sfaf.Field997, &sfaf.Field998, &sfaf.Field999,
+		&sfaf.SFAFRecordType)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -206,7 +211,8 @@ func (r *SFAFRepository) GetByMarkerID(markerID string) (*models.SFAF, error) {
                COALESCE(field801, ''), COALESCE(field803, ''), COALESCE(field804, ''), field805, COALESCE(field806, ''),
                COALESCE(field901, ''), COALESCE(field903, ''), field904, COALESCE(field905, ''), COALESCE(field906, ''), COALESCE(field907, ''), COALESCE(field910, ''), field911, COALESCE(field924, ''), field926, field927, field928,
                COALESCE(field952, ''), COALESCE(field953, ''), COALESCE(field956, ''), field957, COALESCE(field958, ''), COALESCE(field959, ''), COALESCE(field963, ''), field964, field965,
-               COALESCE(field982, ''), COALESCE(field983, ''), COALESCE(field984, ''), COALESCE(field985, ''), COALESCE(field986, ''), COALESCE(field987, ''), COALESCE(field988, ''), COALESCE(field989, ''), COALESCE(field990, ''), COALESCE(field991, ''), COALESCE(field992, ''), COALESCE(field993, ''), COALESCE(field994, ''), COALESCE(field995, ''), COALESCE(field996, ''), COALESCE(field997, ''), COALESCE(field998, ''), COALESCE(field999, '')
+               COALESCE(field982, ''), COALESCE(field983, ''), COALESCE(field984, ''), COALESCE(field985, ''), COALESCE(field986, ''), COALESCE(field987, ''), COALESCE(field988, ''), COALESCE(field989, ''), COALESCE(field990, ''), COALESCE(field991, ''), COALESCE(field992, ''), COALESCE(field993, ''), COALESCE(field994, ''), COALESCE(field995, ''), COALESCE(field996, ''), COALESCE(field997, ''), COALESCE(field998, ''), COALESCE(field999, ''),
+               sfaf_record_type
         FROM sfafs 
         WHERE marker_id = $1`
 
@@ -229,7 +235,8 @@ func (r *SFAFRepository) GetByMarkerID(markerID string) (*models.SFAF, error) {
 		&sfaf.Field801, &sfaf.Field803, &sfaf.Field804, &sfaf.Field805, &sfaf.Field806,
 		&sfaf.Field901, &sfaf.Field903, &sfaf.Field904, &sfaf.Field905, &sfaf.Field906, &sfaf.Field907, &sfaf.Field910, &sfaf.Field911, &sfaf.Field924, &sfaf.Field926, &sfaf.Field927, &sfaf.Field928,
 		&sfaf.Field952, &sfaf.Field953, &sfaf.Field956, &sfaf.Field957, &sfaf.Field958, &sfaf.Field959, &sfaf.Field963, &sfaf.Field964, &sfaf.Field965,
-		&sfaf.Field982, &sfaf.Field983, &sfaf.Field984, &sfaf.Field985, &sfaf.Field986, &sfaf.Field987, &sfaf.Field988, &sfaf.Field989, &sfaf.Field990, &sfaf.Field991, &sfaf.Field992, &sfaf.Field993, &sfaf.Field994, &sfaf.Field995, &sfaf.Field996, &sfaf.Field997, &sfaf.Field998, &sfaf.Field999)
+		&sfaf.Field982, &sfaf.Field983, &sfaf.Field984, &sfaf.Field985, &sfaf.Field986, &sfaf.Field987, &sfaf.Field988, &sfaf.Field989, &sfaf.Field990, &sfaf.Field991, &sfaf.Field992, &sfaf.Field993, &sfaf.Field994, &sfaf.Field995, &sfaf.Field996, &sfaf.Field997, &sfaf.Field998, &sfaf.Field999,
+		&sfaf.SFAFRecordType)
 
 	if err == sql.ErrNoRows {
 		return nil, nil // No SFAF record found for this marker
@@ -262,7 +269,8 @@ func (r *SFAFRepository) GetBySerial(serial string) (*models.SFAF, error) {
                COALESCE(field801, ''), COALESCE(field803, ''), COALESCE(field804, ''), field805, COALESCE(field806, ''),
                COALESCE(field901, ''), COALESCE(field903, ''), field904, COALESCE(field905, ''), COALESCE(field906, ''), COALESCE(field907, ''), COALESCE(field910, ''), field911, COALESCE(field924, ''), field926, field927, field928,
                COALESCE(field952, ''), COALESCE(field953, ''), COALESCE(field956, ''), field957, COALESCE(field958, ''), COALESCE(field959, ''), COALESCE(field963, ''), field964, field965,
-               COALESCE(field982, ''), COALESCE(field983, ''), COALESCE(field984, ''), COALESCE(field985, ''), COALESCE(field986, ''), COALESCE(field987, ''), COALESCE(field988, ''), COALESCE(field989, ''), COALESCE(field990, ''), COALESCE(field991, ''), COALESCE(field992, ''), COALESCE(field993, ''), COALESCE(field994, ''), COALESCE(field995, ''), COALESCE(field996, ''), COALESCE(field997, ''), COALESCE(field998, ''), COALESCE(field999, '')
+               COALESCE(field982, ''), COALESCE(field983, ''), COALESCE(field984, ''), COALESCE(field985, ''), COALESCE(field986, ''), COALESCE(field987, ''), COALESCE(field988, ''), COALESCE(field989, ''), COALESCE(field990, ''), COALESCE(field991, ''), COALESCE(field992, ''), COALESCE(field993, ''), COALESCE(field994, ''), COALESCE(field995, ''), COALESCE(field996, ''), COALESCE(field997, ''), COALESCE(field998, ''), COALESCE(field999, ''),
+               sfaf_record_type
         FROM sfafs
         WHERE field102 = $1
         LIMIT 1`
@@ -285,7 +293,8 @@ func (r *SFAFRepository) GetBySerial(serial string) (*models.SFAF, error) {
 		&sfaf.Field801, &sfaf.Field803, &sfaf.Field804, &sfaf.Field805, &sfaf.Field806,
 		&sfaf.Field901, &sfaf.Field903, &sfaf.Field904, &sfaf.Field905, &sfaf.Field906, &sfaf.Field907, &sfaf.Field910, &sfaf.Field911, &sfaf.Field924, &sfaf.Field926, &sfaf.Field927, &sfaf.Field928,
 		&sfaf.Field952, &sfaf.Field953, &sfaf.Field956, &sfaf.Field957, &sfaf.Field958, &sfaf.Field959, &sfaf.Field963, &sfaf.Field964, &sfaf.Field965,
-		&sfaf.Field982, &sfaf.Field983, &sfaf.Field984, &sfaf.Field985, &sfaf.Field986, &sfaf.Field987, &sfaf.Field988, &sfaf.Field989, &sfaf.Field990, &sfaf.Field991, &sfaf.Field992, &sfaf.Field993, &sfaf.Field994, &sfaf.Field995, &sfaf.Field996, &sfaf.Field997, &sfaf.Field998, &sfaf.Field999)
+		&sfaf.Field982, &sfaf.Field983, &sfaf.Field984, &sfaf.Field985, &sfaf.Field986, &sfaf.Field987, &sfaf.Field988, &sfaf.Field989, &sfaf.Field990, &sfaf.Field991, &sfaf.Field992, &sfaf.Field993, &sfaf.Field994, &sfaf.Field995, &sfaf.Field996, &sfaf.Field997, &sfaf.Field998, &sfaf.Field999,
+		&sfaf.SFAFRecordType)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -514,7 +523,8 @@ func (r *SFAFRepository) GetPaginated(offset, limit int) ([]*models.SFAF, error)
                COALESCE(field801, ''), COALESCE(field803, ''), COALESCE(field804, ''), field805, COALESCE(field806, ''),
                COALESCE(field901, ''), COALESCE(field903, ''), field904, COALESCE(field905, ''), COALESCE(field906, ''), COALESCE(field907, ''), COALESCE(field910, ''), field911, COALESCE(field924, ''), field926, field927, field928,
                COALESCE(field952, ''), COALESCE(field953, ''), COALESCE(field956, ''), field957, COALESCE(field958, ''), COALESCE(field959, ''), COALESCE(field963, ''), field964, field965,
-               COALESCE(field982, ''), COALESCE(field983, ''), COALESCE(field984, ''), COALESCE(field985, ''), COALESCE(field986, ''), COALESCE(field987, ''), COALESCE(field988, ''), COALESCE(field989, ''), COALESCE(field990, ''), COALESCE(field991, ''), COALESCE(field992, ''), COALESCE(field993, ''), COALESCE(field994, ''), COALESCE(field995, ''), COALESCE(field996, ''), COALESCE(field997, ''), COALESCE(field998, ''), COALESCE(field999, '')
+               COALESCE(field982, ''), COALESCE(field983, ''), COALESCE(field984, ''), COALESCE(field985, ''), COALESCE(field986, ''), COALESCE(field987, ''), COALESCE(field988, ''), COALESCE(field989, ''), COALESCE(field990, ''), COALESCE(field991, ''), COALESCE(field992, ''), COALESCE(field993, ''), COALESCE(field994, ''), COALESCE(field995, ''), COALESCE(field996, ''), COALESCE(field997, ''), COALESCE(field998, ''), COALESCE(field999, ''),
+               sfaf_record_type
         FROM sfafs
         ORDER BY created_at DESC
         LIMIT $1 OFFSET $2`
@@ -758,7 +768,8 @@ func (r *SFAFRepository) QueryFiltered(conditions []models.QueryCondition, sortF
                COALESCE(field801, ''), COALESCE(field803, ''), COALESCE(field804, ''), field805, COALESCE(field806, ''),
                COALESCE(field901, ''), COALESCE(field903, ''), field904, COALESCE(field905, ''), COALESCE(field906, ''), COALESCE(field907, ''), COALESCE(field910, ''), field911, COALESCE(field924, ''), field926, field927, field928,
                COALESCE(field952, ''), COALESCE(field953, ''), COALESCE(field956, ''), field957, COALESCE(field958, ''), COALESCE(field959, ''), COALESCE(field963, ''), field964, field965,
-               COALESCE(field982, ''), COALESCE(field983, ''), COALESCE(field984, ''), COALESCE(field985, ''), COALESCE(field986, ''), COALESCE(field987, ''), COALESCE(field988, ''), COALESCE(field989, ''), COALESCE(field990, ''), COALESCE(field991, ''), COALESCE(field992, ''), COALESCE(field993, ''), COALESCE(field994, ''), COALESCE(field995, ''), COALESCE(field996, ''), COALESCE(field997, ''), COALESCE(field998, ''), COALESCE(field999, '')
+               COALESCE(field982, ''), COALESCE(field983, ''), COALESCE(field984, ''), COALESCE(field985, ''), COALESCE(field986, ''), COALESCE(field987, ''), COALESCE(field988, ''), COALESCE(field989, ''), COALESCE(field990, ''), COALESCE(field991, ''), COALESCE(field992, ''), COALESCE(field993, ''), COALESCE(field994, ''), COALESCE(field995, ''), COALESCE(field996, ''), COALESCE(field997, ''), COALESCE(field998, ''), COALESCE(field999, ''),
+               sfaf_record_type
         FROM sfafs
         %s
         ORDER BY %s %s

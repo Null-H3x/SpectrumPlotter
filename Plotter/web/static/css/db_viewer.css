@@ -1148,6 +1148,27 @@ table.sfaf-records-table thead tr.filter-row th.actions-col.sticky-col {
     font-weight: 600;
 }
 
+.record-type-col {
+    width: 52px;
+    min-width: 52px;
+    text-align: center;
+}
+
+.record-type-badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.rt-permanent  { background: #1e3a5f; color: #60a5fa; border: 1px solid #2563eb; }
+.rt-proposal   { background: #3b2a0a; color: #fbbf24; border: 1px solid #d97706; }
+.rt-sta        { background: #1a3a2a; color: #34d399; border: 1px solid #059669; }
+.rt-temporary  { background: #2a1a3a; color: #c084fc; border: 1px solid #7c3aed; }
+
 .validation-badge,
 .status-badge {
     padding: 4px 10px;

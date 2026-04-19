@@ -410,6 +410,7 @@ Object.assign(DatabaseViewer.prototype, {
             summary: [
                 { field: 'select', label: '<input type="checkbox" id="selectAllCheckbox" title="Select All">', class: 'checkbox-col sticky-col', filterable: false },
                 { field: 'field102', label: '102 - Agency Serial', class: 'serial-col' },
+                { field: 'record_type', label: 'Type', class: 'record-type-col' },
                 { field: 'field110', label: '110 - Frequency', class: 'frequency-col' },
                 { field: 'field301', label: '301 - Antenna Location', class: 'location-col' },
                 { field: 'field200', label: '200 - Agency', class: 'agency-col' },
@@ -484,7 +485,8 @@ Object.assign(DatabaseViewer.prototype, {
         // Create headers for all SFAF fields (005-999)
         const headers = [
             { field: 'select', label: '<input type="checkbox" id="selectAllCheckbox" title="Select All">', class: 'checkbox-col sticky-col', filterable: false },
-            { field: 'serial', label: 'Serial (102)', class: 'serial-col sticky-col frozen-col' }
+            { field: 'serial', label: 'Serial (102)', class: 'serial-col sticky-col frozen-col' },
+            { field: 'record_type', label: 'Type', class: 'record-type-col' }
         ];
 
         // MC4EB Pub 7 CHG 1 field labels - authoritative names from publication
@@ -724,6 +726,16 @@ Object.assign(DatabaseViewer.prototype, {
                 </td>`;
             }
 
+            // Static record type badge
+            if (field === 'record_type') {
+                const rt = record.sfaf_record_type || record.sfafFields?.sfaf_record_type || '';
+                const labels = { A: 'Permanent Assignment', P: 'Permanent Proposal', S: 'Special Temporary', T: 'Temporary' };
+                const classes = { A: 'rt-permanent', P: 'rt-proposal', S: 'rt-sta', T: 'rt-temporary' };
+                return `<td class="record-type-col">
+                    <span class="record-type-badge ${classes[rt] || ''}" title="${labels[rt] || 'Unknown'}">${rt || '–'}</span>
+                </td>`;
+            }
+
             // Special handling for actions
             if (field === 'actions') {
                 return `<td class="actions-col sticky-col">
@@ -762,6 +774,16 @@ Object.assign(DatabaseViewer.prototype, {
             if (field === 'actions') {
                 return `<td class="actions-col ${header.class || ''}">
                     ${this.generateActionButtons(record)}
+                </td>`;
+            }
+
+            // Static record type badge
+            if (field === 'record_type') {
+                const rt = record.sfaf_record_type || record.sfafFields?.sfaf_record_type || '';
+                const labels = { A: 'Permanent Assignment', P: 'Permanent Proposal', S: 'Special Temporary', T: 'Temporary' };
+                const classes = { A: 'rt-permanent', P: 'rt-proposal', S: 'rt-sta', T: 'rt-temporary' };
+                return `<td class="${header.class || ''}">
+                    <span class="record-type-badge ${classes[rt] || ''}" title="${labels[rt] || 'Unknown'}">${rt || '–'}</span>
                 </td>`;
             }
 
