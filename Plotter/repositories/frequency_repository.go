@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"sfaf-plotter/cache"
 	"sfaf-plotter/models"
 
 	"github.com/google/uuid"
@@ -68,8 +69,8 @@ func (r *FrequencyRepository) GetUserUnits(userID uuid.UUID) ([]models.Unit, err
 	query := `
 		SELECT u.* FROM units u
 		INNER JOIN user_units uu ON u.id = uu.unit_id
-		WHERE uu.user_id = $1 AND u.is_active = true
-		ORDER BY uu.is_primary DESC, u.name`
+		WHERE uu.user_id = $1 AND uu.is_primary = true AND u.is_active = true
+		ORDER BY u.name`
 	err := r.db.Select(&units, query, userID)
 	return units, err
 }
@@ -109,18 +110,35 @@ func (r *FrequencyRepository) GetUserISMUnit(userID uuid.UUID) (*models.Unit, er
 	return &unit, nil
 }
 
+func (r *FrequencyRepository) invalidateUnitCache() {
+	cache.Ref.Delete("units:all")
+	cache.Ref.Delete("units:majcom")
+}
+
 func (r *FrequencyRepository) GetAllUnits() ([]models.Unit, error) {
+	if v, ok := cache.Ref.Get("units:all"); ok {
+		return v.([]models.Unit), nil
+	}
 	var units []models.Unit
 	// ISM offices are not units (field 207); exclude unit_type = 'ISM'
 	query := `SELECT * FROM units WHERE is_active = true AND (unit_type IS NULL OR unit_type != 'ISM') ORDER BY organization, name`
 	err := r.db.Select(&units, query)
+	if err == nil {
+		cache.Ref.Set("units:all", units)
+	}
 	return units, err
 }
 
 func (r *FrequencyRepository) GetMajcomUnits() ([]models.Unit, error) {
+	if v, ok := cache.Ref.Get("units:majcom"); ok {
+		return v.([]models.Unit), nil
+	}
 	var units []models.Unit
 	err := r.db.Select(&units,
 		`SELECT * FROM units WHERE is_active = true AND unit_type = 'MAJCOM' ORDER BY name`)
+	if err == nil {
+		cache.Ref.Set("units:majcom", units)
+	}
 	return units, err
 }
 
@@ -151,6 +169,7 @@ func (r *FrequencyRepository) UpdateUnit(unit *models.Unit) error {
 	if err != nil {
 		return err
 	}
+	r.invalidateUnitCache()
 
 	rows, err := result.RowsAffected()
 	if err != nil {
@@ -183,14 +202,29 @@ func (r *FrequencyRepository) SearchUnitsByName(query string) ([]models.Unit, er
 // ============================================
 
 func (r *FrequencyRepository) AssignUserToUnit(userID, unitID uuid.UUID, role string, isPrimary bool, assignedBy *uuid.UUID) error {
-	query := `
+	tx, err := r.db.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if isPrimary {
+		if _, err := tx.Exec(`UPDATE user_units SET is_primary = false WHERE user_id = $1`, userID); err != nil {
+			return err
+		}
+	}
+
+	_, err = tx.Exec(`
 		INSERT INTO user_units (user_id, unit_id, role, is_primary, assigned_by)
 		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (user_id, unit_id) DO UPDATE
-		SET role = $3, is_primary = $4, assigned_at = CURRENT_TIMESTAMP`
+		SET role = $3, is_primary = $4, assigned_at = CURRENT_TIMESTAMP`,
+		userID, unitID, role, isPrimary, assignedBy)
+	if err != nil {
+		return err
+	}
 
-	_, err := r.db.Exec(query, userID, unitID, role, isPrimary, assignedBy)
-	return err
+	return tx.Commit()
 }
 
 func (r *FrequencyRepository) RemoveUserFromUnit(userID, unitID uuid.UUID) error {
@@ -262,7 +296,7 @@ func (r *FrequencyRepository) GetUserUnitFrequencyAssignments(userID uuid.UUID) 
 	query := `
 		SELECT fa.* FROM frequency_assignments fa
 		INNER JOIN user_units uu ON fa.unit_id = uu.unit_id
-		WHERE uu.user_id = $1 AND fa.is_active = true
+		WHERE uu.user_id = $1 AND uu.is_primary = true AND fa.is_active = true
 		ORDER BY fa.assignment_type, fa.frequency_mhz`
 	err := r.db.Select(&assignments, query, userID)
 	return assignments, err
@@ -495,15 +529,22 @@ func (r *FrequencyRepository) GetUserFrequencyRequests(userID uuid.UUID) ([]mode
 	return requests, err
 }
 
-// GetPendingRequests returns pending/under_review requests visible to the caller's workboxes.
-// Unrouted requests (routed_to_workbox IS NULL) are visible to all ISMs.
-// Routed requests are visible to any workbox in the caller's assigned set.
-func (r *FrequencyRepository) GetPendingRequests(callerWorkboxes []string) ([]models.FrequencyRequest, error) {
+// GetPendingRequests returns pending/under_review requests visible to the caller.
+// Admin (isAdmin=true): all records regardless of routing.
+// Otherwise: records routed to one of callerWorkboxes OR unrouted (IS NULL).
+// An empty callerWorkboxes with isAdmin=false returns only unrouted records —
+// it does NOT fall back to "show everything" so routing is always respected.
+func (r *FrequencyRepository) GetPendingRequests(callerWorkboxes []string, isAdmin bool) ([]models.FrequencyRequest, error) {
 	var requests []models.FrequencyRequest
 	var query string
 	var args []interface{}
 
-	if len(callerWorkboxes) > 0 {
+	if isAdmin {
+		query = `
+			SELECT * FROM frequency_requests
+			WHERE status IN ('pending', 'under_review')
+			ORDER BY priority DESC, created_at`
+	} else if len(callerWorkboxes) > 0 {
 		query = `
 			SELECT * FROM frequency_requests
 			WHERE status IN ('pending', 'under_review')
@@ -514,6 +555,7 @@ func (r *FrequencyRepository) GetPendingRequests(callerWorkboxes []string) ([]mo
 		query = `
 			SELECT * FROM frequency_requests
 			WHERE status IN ('pending', 'under_review')
+			  AND routed_to_workbox IS NULL
 			ORDER BY priority DESC, created_at`
 	}
 
@@ -555,21 +597,23 @@ func (r *FrequencyRepository) BulkRouteRequests(ids []uuid.UUID, workbox *string
 	return result.RowsAffected()
 }
 
-// ReturnRequest routes a request back to the original submitter's ISM unit
-// and resets status to 'pending'. Used when a higher workbox rejects and
-// returns the record for correction.
-// Clears routed_to_workbox (NULL = visible to all base ISMs) so the originating
-// base ISM will see it again regardless of whether the requester has an ISM unit.
-func (r *FrequencyRepository) ReturnRequest(id uuid.UUID) error {
+// ReturnRequest resets the request to 'pending' and routes it to the specified
+// workbox in a single atomic update. If forwardTo is empty the record is
+// unrouted (NULL = visible to all base ISMs).
+func (r *FrequencyRepository) ReturnRequest(id uuid.UUID, forwardTo string) error {
+	var dest interface{}
+	if forwardTo != "" {
+		dest = forwardTo
+	}
 	result, err := r.db.Exec(`
 		UPDATE frequency_requests
-		SET routed_to_workbox     = NULL,
-		    edit_authority_workbox = NULL,
+		SET routed_to_workbox     = $2,
+		    edit_authority_workbox = $2,
 		    status                = 'pending',
 		    denied_reason         = NULL,
 		    updated_at            = NOW()
 		WHERE id = $1
-		  AND status IN ('pending', 'under_review')`, id)
+		  AND status IN ('pending', 'under_review')`, id, dest)
 	if err != nil {
 		return err
 	}
@@ -807,6 +851,39 @@ func (r *FrequencyRepository) UpdateFrequencyRequestStatus(
 		WHERE id = $8`,
 		status, reviewedBy, now, reviewNotes, approvalNotes, deniedReason, now, id)
 	return err
+}
+
+// RejectAndForwardRequest logs a REJECTED BY event and routes the record back to
+// forwardTo for correction. Per SXXI A.1.2, REJECTED BY is always followed by
+// FORWARDED TO — the record stays active (pending) so the receiving workbox can
+// correct and resubmit it. forwardTo must be non-empty.
+func (r *FrequencyRepository) RejectAndForwardRequest(id uuid.UUID, rejectedBy uuid.UUID, notes, forwardTo string) error {
+	now := time.Now()
+	var dest interface{}
+	if forwardTo != "" {
+		dest = forwardTo
+	}
+	result, err := r.db.Exec(`
+		UPDATE frequency_requests SET
+			status                = 'pending',
+			reviewed_by           = $1,
+			reviewed_at           = $2,
+			review_notes          = $3,
+			denied_reason         = NULL,
+			routed_to_workbox     = $4,
+			edit_authority_workbox = $4,
+			updated_at            = $2
+		WHERE id = $5
+		  AND status IN ('pending', 'under_review')`,
+		rejectedBy, now, notes, dest, id)
+	if err != nil {
+		return err
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("request not found or not in a rejectable state")
+	}
+	return nil
 }
 
 func (r *FrequencyRepository) ApproveFrequencyRequest(id uuid.UUID, approvedBy uuid.UUID, assignmentID uuid.UUID) error {
@@ -1312,12 +1389,23 @@ func (r *FrequencyRepository) GetUserWorkboxAssignments(userID uuid.UUID) ([]mod
 // Used for routing visibility: a user sees requests routed to ANY of their workboxes.
 func (r *FrequencyRepository) GetUserWorkboxNames(userID uuid.UUID) ([]string, error) {
 	var names []string
+	// Primary source: explicit workbox assignments.
 	err := r.db.Select(&names, `
 		SELECT w.name
 		FROM user_workbox_assignments a
 		JOIN workboxes w ON w.id = a.workbox_id
 		WHERE a.user_id = $1 AND w.is_active = true
 		ORDER BY a.is_primary DESC, w.name`, userID)
+	if err != nil || len(names) > 0 {
+		return names, err
+	}
+	// Fallback: derive workbox from the user's installation (ISM users without
+	// explicit assignments still need to see records routed to their base).
+	err = r.db.Select(&names, `
+		SELECT w.name
+		FROM users u
+		JOIN workboxes w ON w.installation_id = u.installation_id
+		WHERE u.id = $1 AND w.is_active = true`, userID)
 	return names, err
 }
 
@@ -1387,6 +1475,136 @@ func (r *FrequencyRepository) AddWorkboxMember(userID, workboxID uuid.UUID, isPr
 		return err
 	}
 	return tx.Commit()
+}
+
+// ── Status Log ────────────────────────────────────────────────────────────────
+
+// LogAssignmentStatus records a workflow event for a proposal/assignment.
+func (r *FrequencyRepository) LogAssignmentStatus(assignmentID uuid.UUID, statusCode, actorWorkbox string, actorUserID *uuid.UUID, targetWorkbox, notes string) error {
+	_, err := r.db.Exec(`
+		INSERT INTO assignment_status_log
+		    (assignment_id, status_code, actor_workbox, actor_user_id, target_workbox, notes)
+		VALUES ($1, $2, $3, $4, $5, $6)`,
+		assignmentID, statusCode, actorWorkbox, actorUserID, targetWorkbox, notes)
+	return err
+}
+
+// GetAssignmentStatusLog returns all status log entries for an assignment, oldest first.
+func (r *FrequencyRepository) GetAssignmentStatusLog(assignmentID uuid.UUID) ([]models.StatusLogEntry, error) {
+	var rows []models.StatusLogEntry
+	err := r.db.Select(&rows, `
+		SELECT l.id,
+		       l.assignment_id AS record_id,
+		       l.status_code,
+		       l.actor_workbox,
+		       l.actor_user_id,
+		       l.target_workbox,
+		       l.notes,
+		       l.created_at,
+		       COALESCE(u.full_name, '') AS actor_name
+		FROM assignment_status_log l
+		LEFT JOIN users u ON u.id = l.actor_user_id
+		WHERE l.assignment_id = $1
+		ORDER BY l.created_at ASC`, assignmentID)
+	if rows == nil {
+		rows = []models.StatusLogEntry{}
+	}
+	return rows, err
+}
+
+// LogRequestStatus records a workflow event for a frequency request.
+func (r *FrequencyRepository) LogRequestStatus(requestID uuid.UUID, statusCode, actorWorkbox string, actorUserID *uuid.UUID, targetWorkbox, notes string) error {
+	_, err := r.db.Exec(`
+		INSERT INTO request_status_log
+		    (request_id, status_code, actor_workbox, actor_user_id, target_workbox, notes)
+		VALUES ($1, $2, $3, $4, $5, $6)`,
+		requestID, statusCode, actorWorkbox, actorUserID, targetWorkbox, notes)
+	return err
+}
+
+// GetRequestStatusLog returns all status log entries for a request, oldest first.
+func (r *FrequencyRepository) GetRequestStatusLog(requestID uuid.UUID) ([]models.StatusLogEntry, error) {
+	var rows []models.StatusLogEntry
+	err := r.db.Select(&rows, `
+		SELECT l.id,
+		       l.request_id AS record_id,
+		       l.status_code,
+		       l.actor_workbox,
+		       l.actor_user_id,
+		       l.target_workbox,
+		       l.notes,
+		       l.created_at,
+		       COALESCE(u.full_name, '') AS actor_name
+		FROM request_status_log l
+		LEFT JOIN users u ON u.id = l.actor_user_id
+		WHERE l.request_id = $1
+		ORDER BY l.created_at ASC`, requestID)
+	if rows == nil {
+		rows = []models.StatusLogEntry{}
+	}
+	return rows, err
+}
+
+// BulkGetAssignmentStatusLog fetches status log entries for multiple assignments
+// in a single query and returns them grouped by assignment ID.
+func (r *FrequencyRepository) BulkGetAssignmentStatusLog(ids []uuid.UUID) (map[uuid.UUID][]models.StatusLogEntry, error) {
+	result := make(map[uuid.UUID][]models.StatusLogEntry, len(ids))
+	if len(ids) == 0 {
+		return result, nil
+	}
+	var rows []models.StatusLogEntry
+	err := r.db.Select(&rows, `
+		SELECT l.id,
+		       l.assignment_id AS record_id,
+		       l.status_code,
+		       l.actor_workbox,
+		       l.actor_user_id,
+		       l.target_workbox,
+		       l.notes,
+		       l.created_at,
+		       COALESCE(u.full_name, '') AS actor_name
+		FROM assignment_status_log l
+		LEFT JOIN users u ON u.id = l.actor_user_id
+		WHERE l.assignment_id = ANY($1)
+		ORDER BY l.created_at ASC`, pq.Array(ids))
+	if err != nil {
+		return result, err
+	}
+	for _, entry := range rows {
+		result[entry.RecordID] = append(result[entry.RecordID], entry)
+	}
+	return result, nil
+}
+
+// BulkGetRequestStatusLog fetches status log entries for multiple requests
+// in a single query and returns them grouped by request ID.
+func (r *FrequencyRepository) BulkGetRequestStatusLog(ids []uuid.UUID) (map[uuid.UUID][]models.StatusLogEntry, error) {
+	result := make(map[uuid.UUID][]models.StatusLogEntry, len(ids))
+	if len(ids) == 0 {
+		return result, nil
+	}
+	var rows []models.StatusLogEntry
+	err := r.db.Select(&rows, `
+		SELECT l.id,
+		       l.request_id AS record_id,
+		       l.status_code,
+		       l.actor_workbox,
+		       l.actor_user_id,
+		       l.target_workbox,
+		       l.notes,
+		       l.created_at,
+		       COALESCE(u.full_name, '') AS actor_name
+		FROM request_status_log l
+		LEFT JOIN users u ON u.id = l.actor_user_id
+		WHERE l.request_id = ANY($1)
+		ORDER BY l.created_at ASC`, pq.Array(ids))
+	if err != nil {
+		return result, err
+	}
+	for _, entry := range rows {
+		result[entry.RecordID] = append(result[entry.RecordID], entry)
+	}
+	return result, nil
 }
 
 // RemoveWorkboxMember removes a user from a workbox.
