@@ -181,7 +181,7 @@ func randomDate(from, to time.Time) time.Time {
 
 func buildGenerators(serial, coordStr string, now, past, future time.Time) map[string]func() interface{} {
 	return map[string]func() interface{}{
-		"005": func() interface{} { return pick(classificationCodes) },
+		"005": func() interface{} { return "DEMO" },
 		"006": func() interface{} { return pick(classificationCodes) },
 		"007": func() interface{} { return pick(recordTypes) },
 		"010": func() interface{} { return pick(statusCodes) },
