@@ -171,7 +171,7 @@ func main() {
 				field200, field201, field207,
 				field300, field301, field303,
 				field340, field341,
-				field400, field404,
+				field400, field401,
 				field007, field010,
 				field140, field143,
 				created_at, updated_at
@@ -187,25 +187,25 @@ func main() {
 				NOW(), NOW()
 			)`,
 			id, markerID,
-			ser,                  // field102 - serial
+			ser,                       // field102 - serial
 			expDate.Format("20060102"), // field103 - expiration
-			freqMHz(),            // field110 - frequency
-			pick(emissionDesignators), // field114
-			erpWatts(),           // field115 - ERP watts
-			pick(agencies),       // field200 - agency
-			pick(unifiedCommands), // field201 - unified command
-			pick(locations),      // field207 - station
-			pick(states),         // field300 - state
-			pick(locations),      // field301 - antenna location
-			coords(),             // field303 - coordinates
-			pick(equipmentMakes), // field340 - equipment make
-			pick(equipmentModels), // field341 - equipment model
-			pick(states),         // field400 - receiver state
-			pick(emissionDesignators), // field404 - emission designator
-			pick(recordTypes),    // field007 - record type
-			pick(statusCodes),    // field010 - status
-			startDate,            // field140 - start date
-			expDate,              // field143 - expiration date
+			freqMHz(),                 // field110 - frequency
+			pick(emissionDesignators), // field114 - emission designator
+			erpWatts(),                // field115 - ERP watts
+			pick(agencies),            // field200 - agency
+			pick(unifiedCommands),     // field201 - unified command
+			pick(locations),           // field207 - station
+			pick(states),              // field300 - state
+			pick(locations),           // field301 - antenna location
+			coords(),                  // field303 - coordinates
+			pick(equipmentMakes),      // field340 - equipment make
+			pick(equipmentModels),     // field341 - equipment model
+			pick(states),              // field400 - receiver state
+			pick(locations),           // field401 - receiver location name
+			pick(recordTypes),         // field007 - record type
+			pick(statusCodes),         // field010 - status
+			startDate,                 // field140 - start date
+			expDate,                   // field143 - expiration date
 		)
 		if err != nil {
 			log.Printf("row %d failed: %v", i, err)
