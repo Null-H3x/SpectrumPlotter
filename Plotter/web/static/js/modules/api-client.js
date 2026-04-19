@@ -54,6 +54,14 @@ const APIClient = (() => {
     }
 
     /**
+     * GET /api/markers/bounds?minLat=&maxLat=&minLng=&maxLng=
+     */
+    async function fetchMarkersByBounds(minLat, maxLat, minLng, maxLng) {
+        const params = new URLSearchParams({ minLat, maxLat, minLng, maxLng });
+        return request(`/markers/bounds?${params}`);
+    }
+
+    /**
      * Create a new marker
      * POST /api/markers
      */
@@ -278,6 +286,7 @@ const APIClient = (() => {
     return {
         // Markers
         fetchMarkers,
+        fetchMarkersByBounds,
         createMarker,
         updateMarker,
         deleteMarker,

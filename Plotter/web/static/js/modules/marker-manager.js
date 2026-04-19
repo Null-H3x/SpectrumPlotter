@@ -21,8 +21,39 @@ const MarkerManager = (() => {
         importedIcon = imported;
     }
 
+    // Track which marker IDs are already on the map to avoid duplicates
+    const loadedMarkerIds = new Set();
+    let viewportDebounceTimer = null;
+
     /**
-     * Load existing markers from backend (with clustering for performance)
+     * Fetch and render markers within the current map viewport.
+     * Called on init and after pan/zoom.
+     */
+    async function loadMarkersInViewport() {
+        if (!window.map) return;
+        const bounds = window.map.getBounds();
+        try {
+            const data = await APIClient.fetchMarkersByBounds(
+                bounds.getSouth(), bounds.getNorth(),
+                bounds.getWest(),  bounds.getEast()
+            );
+            const incoming = Array.isArray(data) ? data : (data.markers || []);
+            let added = 0;
+            incoming.forEach(markerData => {
+                if (!loadedMarkerIds.has(markerData.id)) {
+                    loadedMarkerIds.add(markerData.id);
+                    createMarkerOnMap(markerData);
+                    added++;
+                }
+            });
+            if (added > 0) console.log(`✅ Loaded ${added} new markers (${loadedMarkerIds.size} total)`);
+        } catch (error) {
+            console.error('❌ Failed to load viewport markers:', error);
+        }
+    }
+
+    /**
+     * Load existing markers from backend (viewport-based with clustering).
      */
     async function loadExistingMarkers() {
         try {
@@ -31,27 +62,20 @@ const MarkerManager = (() => {
                 return;
             }
 
-            // Initialize marker cluster group for imported markers
             if (!window.markerClusterGroup) {
                 window.markerClusterGroup = L.markerClusterGroup({
                     maxClusterRadius: 60,
                     spiderfyOnMaxZoom: true,
                     showCoverageOnHover: false,
                     zoomToBoundsOnClick: true,
-                    disableClusteringAtZoom: 15 // Show individual markers at zoom 15+
+                    disableClusteringAtZoom: 15
                 });
 
-                // Add click handler for markers within clusters
                 window.markerClusterGroup.on('click', function(e) {
-                    console.log('🎯 Cluster marker clicked:', e.layer);
                     if (e.layer && e.layer.markerId) {
-                        console.log('🖱️ Marker clicked (from cluster):', e.layer.markerId, e.layer.markerData);
                         currentSelectedMarker = e.layer;
                         UIHelpers.manageObjectTabVisibility(true);
-
-                        // Open sidebar if SFAFIntegration is available
                         if (window.SFAFIntegration && window.SFAFIntegration.openSidebar) {
-                            console.log('✅ SFAFIntegration available, calling openSidebar');
                             window.SFAFIntegration.openSidebar(e.layer.markerId);
                         } else {
                             console.warn('⚠️ SFAFIntegration not available');
@@ -62,17 +86,15 @@ const MarkerManager = (() => {
                 window.map.addLayer(window.markerClusterGroup);
             }
 
-            // Fetch markers from API (LIMIT 500)
-            const data = await APIClient.fetchMarkers();
+            // Load initial viewport
+            await loadMarkersInViewport();
 
-            if (data.markers) {
-                // Add markers to cluster group
-                data.markers.forEach(markerData => {
-                    createMarkerOnMap(markerData);
-                });
+            // Reload on pan/zoom with debounce to avoid hammering the server
+            window.map.on('moveend zoomend', () => {
+                clearTimeout(viewportDebounceTimer);
+                viewportDebounceTimer = setTimeout(loadMarkersInViewport, 300);
+            });
 
-                console.log(`✅ Loaded ${data.markers.length} markers (clustered)`);
-            }
         } catch (error) {
             console.error('❌ Failed to load markers:', error);
         }
