@@ -28,17 +28,27 @@ import (
 
 var agencies = []string{"AF", "ARMY", "NAVY", "USMC", "USCG", "DHS", "DOE"}
 
-var unifiedCommands = []string{"USCENTCOM", "USEUCOM", "USINDOPACOM", "USNORTHCOM", "USSOUTHCOM", "USSOCOM", "USTRANSCOM"}
+// VARCHAR(8) max
+var unifiedCommands = []string{"CENTCOM", "EUCOM", "INDOPAC", "NORTHCOM", "SOUTHCOM", "SOCOM", "TRANSCOM"}
 
 var states = []string{"AL", "AK", "AZ", "CA", "CO", "FL", "GA", "HI", "IL", "KY", "MD", "NC", "NM", "NV", "OK", "SC", "TX", "VA", "WA"}
 
-var locations = []string{
+// VARCHAR(18) max — used for field207
+var locationsShort = []string{
 	"Eglin AFB", "Hurlburt Field", "MacDill AFB", "Patrick SFB", "Tyndall AFB",
 	"Fort Bragg", "Fort Campbell", "Fort Hood", "Fort Lewis", "Fort Benning",
-	"Camp Pendleton", "Twenty-nine Palms", "Quantico", "Cherry Point",
-	"Naval Station Norfolk", "NAS Pensacola", "NAS Whidbey Island",
-	"Peterson SFB", "Schriever SFB", "Buckley SFB",
-	"Joint Base Lewis-McChord", "Joint Base San Antonio", "Joint Base Andrews",
+	"Camp Pendleton", "29 Palms", "Quantico", "Cherry Point",
+	"NAVSTA Norfolk", "NAS Pensacola", "Peterson SFB", "Schriever SFB",
+	"Buckley SFB", "JB Lewis-McChord", "JB San Antonio", "JB Andrews",
+}
+
+// VARCHAR(24) max — used for field301, field401
+var locations = []string{
+	"Eglin AFB", "Hurlburt Field", "MacDill AFB", "Patrick SFB",
+	"Fort Bragg", "Fort Campbell", "Fort Hood", "Fort Benning",
+	"Camp Pendleton", "29 Palms", "Quantico", "Cherry Point",
+	"NAVSTA Norfolk", "NAS Pensacola", "Peterson SFB", "Schriever SFB",
+	"Joint Base Andrews", "JB Lewis-McChord", "JB San Antonio",
 }
 
 var emissionDesignators = []string{
@@ -90,15 +100,17 @@ func erpWatts() string {
 
 func serial(n int) string { return fmt.Sprintf("A%07d", n) }
 
+// coords returns a 15-char SFAF coordinate string: DDMMSSN DDDMMSSW
 func coords() string {
 	lat := 25.0 + rand.Float64()*24.0
-	lng := -125.0 + rand.Float64()*58.0
-	latDir := "N"
-	lngDir := "W"
-	if lng > 0 {
-		lngDir = "E"
-	}
-	return fmt.Sprintf("%07.4f%s%08.4f%s", lat, latDir, -lng, lngDir)
+	lng := 70.0 + rand.Float64()*55.0 // CONUS west longitudes
+	latD := int(lat)
+	latM := int((lat - float64(latD)) * 60)
+	latS := int(((lat-float64(latD))*60-float64(latM))*60)
+	lngD := int(lng)
+	lngM := int((lng - float64(lngD)) * 60)
+	lngS := int(((lng-float64(lngD))*60-float64(lngM))*60)
+	return fmt.Sprintf("%02d%02d%02dN%03d%02d%02dW", latD, latM, latS, lngD, lngM, lngS)
 }
 
 func randomDate(from, to time.Time) time.Time {
@@ -194,7 +206,7 @@ func main() {
 			erpWatts(),                // field115 - ERP watts
 			pick(agencies),            // field200 - agency
 			pick(unifiedCommands),     // field201 - unified command
-			pick(locations),           // field207 - station
+			pick(locationsShort),      // field207 - station (VARCHAR 18)
 			pick(states),              // field300 - state
 			pick(locations),           // field301 - antenna location
 			coords(),                  // field303 - coordinates
