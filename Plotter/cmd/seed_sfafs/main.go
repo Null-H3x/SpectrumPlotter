@@ -146,8 +146,11 @@ func main() {
 	}
 	log.Printf("✓ Connected — seeding %d SFAF records", *count)
 
-	// Fetch existing marker IDs for optional linkage
-	rows, _ := db.Query(`SELECT id FROM markers ORDER BY random() LIMIT 2000`)
+	// Fetch unlinked marker IDs (markers without an existing SFAF)
+	rows, _ := db.Query(`
+		SELECT id FROM markers
+		WHERE id NOT IN (SELECT marker_id FROM sfafs WHERE marker_id IS NOT NULL)
+		ORDER BY random()`)
 	var markerIDs []string
 	if rows != nil {
 		for rows.Next() {
@@ -157,6 +160,7 @@ func main() {
 		}
 		rows.Close()
 	}
+	markerIdx := 0 // consume sequentially — no duplicates
 
 	now := time.Now()
 	past := now.AddDate(-3, 0, 0)
@@ -171,9 +175,10 @@ func main() {
 		expDate := randomDate(now, future)
 
 		var markerID *string
-		if len(markerIDs) > 0 && rand.Intn(3) != 0 {
-			m := markerIDs[rand.Intn(len(markerIDs))]
+		if markerIdx < len(markerIDs) && rand.Intn(3) != 0 {
+			m := markerIDs[markerIdx]
 			markerID = &m
+			markerIdx++
 		}
 
 		_, err := db.Exec(`
