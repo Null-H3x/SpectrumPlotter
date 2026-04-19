@@ -147,6 +147,35 @@ func (ss *SFAFService) LinkSFAFToMarker(sfafID, markerID string) error {
 	return ss.sfafRepo.LinkMarker(sfafUUID, markerUUID)
 }
 
+// ValidateSFAFSerial checks that a field102 serial conforms to the required format:
+// exactly 10 characters — approved 1-2 char prefix left-justified in 4-char field
+// (space-padded) followed by 6 decimal digits.
+// Approved prefixes: N (Navy), AR (Army), MC (USMC), CG (USCG), AF (Air Force).
+func ValidateSFAFSerial(serial string) error {
+	if len(serial) != 10 {
+		return fmt.Errorf("serial %q must be exactly 10 characters (got %d); format: prefix left-justified in 4 chars + 6 digits, e.g. \"AF  000001\"", serial, len(serial))
+	}
+	validPrefixes := []string{"N   ", "AR  ", "MC  ", "CG  ", "AF  "}
+	prefix := serial[:4]
+	found := false
+	for _, p := range validPrefixes {
+		if prefix == p {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("serial %q has invalid prefix %q; approved prefixes are N (Navy), AR (Army), MC (USMC), CG (USCG), AF (Air Force) — left-justified and space-padded to 4 characters", serial, strings.TrimRight(prefix, " "))
+	}
+	digits := serial[4:]
+	for _, c := range digits {
+		if c < '0' || c > '9' {
+			return fmt.Errorf("serial %q: last 6 characters must be digits, got %q", serial, digits)
+		}
+	}
+	return nil
+}
+
 func (ss *SFAFService) CreateSFAF(req models.CreateSFAFRequest) (*models.SFAF, error) {
 	// Validate required MC4EB Publication 7, Change 1 fields
 	requiredFields := []string{"field005", "field010", "field102", "field110", "field200"}
@@ -161,6 +190,13 @@ func (ss *SFAFService) CreateSFAF(req models.CreateSFAFRequest) (*models.SFAF, e
 
 	if len(missingFields) > 0 {
 		return nil, fmt.Errorf("missing required MC4EB fields: %v. Required fields are: field005 (Security Classification), field010 (Type of Action), field102 (Agency Serial Number), field110 (Frequency), field200 (Agency Code)", missingFields)
+	}
+
+	// Validate serial number format
+	if serial, ok := req.Fields["field102"]; ok && serial != "" {
+		if err := ValidateSFAFSerial(serial); err != nil {
+			return nil, err
+		}
 	}
 
 	// Convert request to SFAF model

@@ -34,9 +34,8 @@ import (
 // ── Serial number ─────────────────────────────────────────────────────────────
 // Format: [1-4 alphas, left-justified, space-padded to 4][6 digits] = 10 chars
 
-var serialPrefixes = []string{
-	"AF", "ARMY", "NAVY", "USMC", "USCG", "N", "A", "M", "USA", "USN",
-}
+// Approved SFAF serial prefixes (MC4EB Pub 7)
+var serialPrefixes = []string{"N", "AR", "MC", "CG", "AF"}
 
 func sfafSerial(prefix string, n int) string {
 	return fmt.Sprintf("%-4s%06d", prefix, n)
