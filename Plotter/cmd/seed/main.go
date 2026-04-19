@@ -232,6 +232,9 @@ func buildGenerators(serial, coordStr string, now, past, future time.Time) map[s
 		"347": func() interface{} { return erpWatts() },
 		"348": func() interface{} { return pick(emissionDesignators) },
 		"349": func() interface{} { return pick(freqTolerances) },
+		"357": func() interface{} { return float64(rand.Intn(200)-50) / 10.0 },  // Antenna Gain dBi, NUMERIC(5,2)
+		"362": func() interface{} { return fmt.Sprintf("%03d", rand.Intn(360)) }, // Antenna Orientation 000-359, VARCHAR(3)
+		"363": func() interface{} { return pick([]string{"H", "V", "C", "X"}) }, // Antenna Polarization, VARCHAR(1)
 		"400": func() interface{} { return pick(states) },
 		"401": func() interface{} { return pick(locations) },
 		"403": func() interface{} { return pick(siteNames) },
@@ -247,6 +250,7 @@ func buildGenerators(serial, coordStr string, now, past, future time.Time) map[s
 		"503": func() interface{} { return pick(purposeCodes) },
 		"504": func() interface{} { return pick(statusCodes) },
 		"506": func() interface{} { return pick(purposeCodes) },
+		"511": func() interface{} { return pick([]string{"C2", "ISR", "LOG", "FIRES", "MANEUVER", "AVIATION", "SOCOM", "MEDEVAC"}) }, // Major Function Identifier, VARCHAR(30)
 		"700": func() interface{} { return pick(agencies) },
 		"701": func() interface{} { return pick(agencies) },
 		"702": func() interface{} { return pick(unifiedCommands) },
