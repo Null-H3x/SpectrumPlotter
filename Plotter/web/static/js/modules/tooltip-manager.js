@@ -86,10 +86,10 @@ const TooltipManager = (() => {
      */
     function bindMarkerTooltip(marker, content) {
         marker.bindTooltip(content, {
-            permanent: true,
+            permanent: false,
             direction: 'top',
             offset: L.point(0, -15)
-        }).openTooltip();
+        });
     }
 
     /**
