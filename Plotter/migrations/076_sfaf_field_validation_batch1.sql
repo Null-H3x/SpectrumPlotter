@@ -25,7 +25,7 @@ COMMENT ON COLUMN sfaf_field_definitions.example_value IS
 
 -- ── 010  Type of Action ───────────────────────────────────────────────────────
 -- Pub7 §3f: N=New, M=Modification, D=Deletion, R=Review, A=Administrative Mod
--- Single character, uppercase, from defined set only.
+-- Single character, uppercase, from defined set only. Mandatory on all records.
 UPDATE sfaf_field_definitions SET
     input_type         = 'select',
     validation_pattern = '^[NMDRA]$',
@@ -34,7 +34,7 @@ UPDATE sfaf_field_definitions SET
 WHERE field_number = '010';
 
 -- ── 102  Agency Serial Number ─────────────────────────────────────────────────
--- Pub7 §3b(1): exactly 10 characters.
+-- Pub7 §3b(1): exactly 10 characters. Mandatory on all records.
 -- Approved prefixes: N (Navy), AR (Army), MC (USMC), CG (USCG), AF (Air Force).
 -- Format: prefix left-justified in 4-char field (space-padded) + 6 decimal digits.
 -- Examples: "AF  007814", "AR  733489", "N   773101"
@@ -46,7 +46,7 @@ UPDATE sfaf_field_definitions SET
 WHERE field_number = '102';
 
 -- ── 110  Frequency(ies) ───────────────────────────────────────────────────────
--- Pub7 Appendix A / §3d: stored with ITU unit prefix.
+-- Pub7 Appendix A / §3d: stored with ITU unit prefix. Mandatory on all records.
 --   K = kilohertz (KHz)
 --   M = megahertz (MHz)
 --   G = gigahertz (GHz)
@@ -65,10 +65,11 @@ WHERE field_number = '110';
 --         emission class (letter) + modulation (digit) + info type (letter) +
 --         optional 2-char suffix for multiplexing/nature.
 -- Max 11 characters (VARCHAR(11) in schema).
+-- Required for CENTCOM; optional for others — blank allowed.
 -- Examples: "6K00A3E", "11K00F3E", "100K00F1D", "100M00D7WET", "0H00N0N"
 UPDATE sfaf_field_definitions SET
     input_type         = 'emission',
-    validation_pattern = '^\d{0,4}\.?\d{0,2}[HKMGhkmg]\d{0,2}[A-Z0-9]\d[A-Z0-9]([A-Z0-9]{2})?$',
+    validation_pattern = '^(\d{0,4}\.?\d{0,2}[HKMGhkmg]\d{0,2}[A-Z0-9]\d[A-Z0-9]([A-Z0-9]{2})?)?$',
     validation_message = 'Emission designator must follow ITU format: bandwidth (e.g. 6K, 100M) + class + modulation + info type. Example: "6K00A3E" or "100K00F1D".',
     example_value      = '6K00A3E'
 WHERE field_number = '114';
@@ -77,10 +78,11 @@ WHERE field_number = '114';
 -- Pub7 Appendix A: stored with unit prefix.
 --   W = watts
 --   K = kilowatts
+-- Required for CENTCOM; optional for others — blank allowed.
 -- Examples: "W10", "W300", "K1.5", "K25", "W50"
 UPDATE sfaf_field_definitions SET
     input_type         = 'power',
-    validation_pattern = '^[WKwk]\d+(\.\d+)?$',
+    validation_pattern = '^([WKwk]\d+(\.\d+)?)?$',
     validation_message = 'Transmitter power must begin with W (watts) or K (kilowatts) followed by the numeric value. Example: "W50" or "K1.5".',
     example_value      = 'W50'
 WHERE field_number = '115';
