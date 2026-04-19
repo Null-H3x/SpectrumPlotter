@@ -701,10 +701,13 @@ func (r *SFAFRepository) QueryFiltered(conditions []models.QueryCondition, sortF
 		}
 	}
 
-	whereSQL := ""
-	if len(groupSQLs) > 0 {
-		whereSQL = "WHERE " + strings.Join(groupSQLs, " OR ")
+	if len(groupSQLs) == 0 {
+		// Every supplied condition was either unsupported server-side (e.g.
+		// "contained_in") or had an invalid field/value — return nothing rather
+		// than a full table scan.
+		return []*models.SFAF{}, 0, nil
 	}
+	whereSQL := "WHERE " + strings.Join(groupSQLs, " OR ")
 
 	// Validate sort field to prevent injection
 	sortMap := map[string]string{

@@ -2001,8 +2001,13 @@
                 <div style="display:flex; align-items:center; gap:8px;">
                     <label id="mapRadiusLabel" style="font-size:0.78rem; color:#64b5f6; font-weight:600; white-space:nowrap; margin:0;">306 — Radius</label>
                     <input type="number" id="mapRadiusInput" class="form-control" style="width:90px; font-size:0.8rem; padding:4px 8px; height:auto;"
-                        placeholder="km" min="0" step="1" oninput="onMapRadiusInput(this.value);">
-                    <span style="font-size:0.8rem; color:#94a3b8; white-space:nowrap;">km</span>
+                        placeholder="radius" min="0" step="any" oninput="onMapRadiusInput(this.value);">
+                    <select id="mapRadiusUnit" onchange="onMapRadiusUnitChange()"
+                        style="font-size:0.8rem; padding:4px 6px; height:auto; background:#1a2535; color:#c8d8e8; border:1px solid rgba(100,150,255,0.3); border-radius:4px; cursor:pointer;">
+                        <option value="km">km</option>
+                        <option value="NM">NM</option>
+                        <option value="mi">Miles</option>
+                    </select>
                     <button type="button" class="btn btn-sm btn-secondary" onclick="clearApprovalMap()" style="padding:4px 10px; font-size:0.78rem; margin-left:auto;">
                         <i class="fas fa-times"></i> Clear
                     </button>
@@ -2686,6 +2691,18 @@
             <p style="font-size:0.82rem;color:#94a3b8;margin-bottom:12px;" id="rejectModalDesc">
                 Provide a reason. This entry is required and will appear in the record's Status Log.
             </p>
+            <div class="form-group" style="margin-bottom:14px;">
+                <label for="rejectToWorkboxText">Forward / Return To <span class="required">*</span></label>
+                <div class="lookup-combo" style="margin-top:4px;">
+                    <input type="text" id="rejectToWorkboxText" class="form-control lookup-combo-input"
+                        placeholder="Type to filter workboxes…" autocomplete="off">
+                    <input type="hidden" id="rejectToWorkbox">
+                    <div class="lookup-combo-list" id="rejectToWorkboxList" style="display:none"></div>
+                </div>
+                <div id="rejectToWorkboxHint" style="font-size:0.72rem;color:#64748b;margin-top:3px;">
+                    Per SXXI, a rejection must specify where the record is forwarded.
+                </div>
+            </div>
             <div class="form-group">
                 <label for="rejectComment">Reason / Status Log Entry <span class="required">*</span></label>
                 <textarea id="rejectComment" class="form-control" rows="4"

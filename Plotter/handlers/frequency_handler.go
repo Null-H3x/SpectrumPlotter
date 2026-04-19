@@ -20,6 +20,26 @@ func NewFrequencyHandler(service *services.FrequencyService) *FrequencyHandler {
 	return &FrequencyHandler{service: service}
 }
 
+// callerOwnsEditAuthority returns true when the caller is allowed to edit a
+// record whose edit_authority_workbox is editAuth.
+// Agency-level and above may always edit. Below agency, the caller must be a
+// member of the workbox named in editAuth.
+func (h *FrequencyHandler) callerOwnsEditAuthority(c *gin.Context, callerID uuid.UUID, editAuth *string) bool {
+	if editAuth == nil || *editAuth == "" {
+		return true // no authority set — anyone with ISM+ may edit
+	}
+	if atLeast(c, "agency") {
+		return true // AFSMO / NTIA / admin override all
+	}
+	workboxes, _ := h.service.GetUserWorkboxNames(callerID)
+	for _, wb := range workboxes {
+		if wb == *editAuth {
+			return true
+		}
+	}
+	return false
+}
+
 // ============================================
 // Unit Endpoints
 // ============================================
@@ -391,7 +411,7 @@ func (h *FrequencyHandler) GetPendingRequests(c *gin.Context) {
 		return
 	}
 
-	requests, err := h.service.GetPendingRequestsWithDetails(userID.(uuid.UUID))
+	requests, err := h.service.GetPendingRequestsWithDetails(userID.(uuid.UUID), atLeast(c, "admin"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -514,29 +534,46 @@ func (h *FrequencyHandler) RetractFrequencyRequest(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "request retracted", "request": request})
 }
 
-// ReturnRequest routes a request back to the originating ISM workbox.
+// ReturnRequest routes a request back to the specified workbox and resets status to pending.
 // PUT /api/frequency/requests/:id/return
 func (h *FrequencyHandler) ReturnRequest(c *gin.Context) {
 	if !atLeast(c, "ism") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "ISM-level access or higher required"})
 		return
 	}
+	userID, _ := c.Get("userID")
 	requestID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request id"})
 		return
 	}
-	if err := h.service.ReturnRequest(requestID); err != nil {
+	var body struct {
+		ForwardTo string `json:"forward_to"`
+	}
+	_ = c.ShouldBindJSON(&body)
+
+	if err := h.service.ReturnRequest(requestID, body.ForwardTo); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "request returned to originating workbox"})
+	uid := userID.(uuid.UUID)
+	h.service.LogRequestEvent(requestID, &uid, "RETURNED TO", body.ForwardTo, "")
+	if body.ForwardTo != "" {
+		h.service.LogRequestEvent(requestID, &uid, "FORWARDED TO", body.ForwardTo, "")
+		h.service.LogRequestEventAs(requestID, body.ForwardTo, "RECEIVED BY", "", "")
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "request returned"})
 }
 
 // SaveRequestSFAFDraft persists in-progress SFAF form fields on the request
 // so edits made by one workbox are visible to all reviewers across browsers.
 // PUT /api/frequency/requests/:id/sfaf-draft
 func (h *FrequencyHandler) SaveRequestSFAFDraft(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
 	if !atLeast(c, "ism") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "ISM-level access or higher required"})
 		return
@@ -546,6 +583,20 @@ func (h *FrequencyHandler) SaveRequestSFAFDraft(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request id"})
 		return
 	}
+
+	// Enforce edit authority before persisting any draft changes.
+	req, err := h.service.GetRequestByID(requestID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "request not found"})
+		return
+	}
+	if !h.callerOwnsEditAuthority(c, userID.(uuid.UUID), req.EditAuthorityWorkbox) {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "your workbox does not have edit authority over this record (edit authority: " + *req.EditAuthorityWorkbox + ")",
+		})
+		return
+	}
+
 	// Read raw JSON body — we store it as-is in the JSONB column.
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil || len(body) == 0 {
@@ -556,6 +607,8 @@ func (h *FrequencyHandler) SaveRequestSFAFDraft(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	uid := userID.(uuid.UUID)
+	h.service.LogRequestEvent(requestID, &uid, "MODIFIED BY", "", "SFAF draft saved")
 	c.JSON(http.StatusOK, gin.H{"message": "draft saved"})
 }
 
@@ -617,6 +670,20 @@ func (h *FrequencyHandler) ApproveFrequencyRequest(c *gin.Context) {
 	requestID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request id"})
+		return
+	}
+
+	// Enforce edit authority: the caller's workbox must own this record unless
+	// they are agency-level or higher.
+	req, err := h.service.GetRequestByID(requestID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "request not found"})
+		return
+	}
+	if !h.callerOwnsEditAuthority(c, userID.(uuid.UUID), req.EditAuthorityWorkbox) {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "your workbox does not have edit authority over this record (edit authority: " + *req.EditAuthorityWorkbox + ")",
+		})
 		return
 	}
 
@@ -734,6 +801,15 @@ func (h *FrequencyHandler) RetractAssignment(c *gin.Context) {
 	assignmentID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid assignment id"})
+		return
+	}
+	assignment, err := h.service.GetAssignmentByID(assignmentID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "assignment not found"})
+		return
+	}
+	if !h.callerOwnsEditAuthority(c, userID.(uuid.UUID), assignment.EditAuthorityWorkbox) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "your workbox does not have edit authority over this proposal"})
 		return
 	}
 	resetCount, err := h.service.RetractProposalAssignment(assignmentID, userID.(uuid.UUID))
@@ -997,6 +1073,16 @@ func (h *FrequencyHandler) ElevateAssignment(c *gin.Context) {
 		return
 	}
 
+	existing, err := h.service.GetAssignmentByID(assignmentID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "assignment not found"})
+		return
+	}
+	if !h.callerOwnsEditAuthority(c, userID.(uuid.UUID), existing.EditAuthorityWorkbox) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "your workbox does not have edit authority over this proposal"})
+		return
+	}
+
 	var body struct {
 		Notes string `json:"notes"`
 	}
@@ -1062,6 +1148,15 @@ func (h *FrequencyHandler) BulkRouteRequests(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	uid := userID.(uuid.UUID)
+	if workbox != nil && *workbox != "" {
+		for _, id := range ids {
+			// Per SXXI A.1.1: FORWARDED TO (sender's perspective) followed immediately
+			// by RECEIVED BY (recipient's perspective, auto-applied by the server).
+			h.service.LogRequestEvent(id, &uid, "FORWARDED TO", *workbox, "")
+			h.service.LogRequestEventAs(id, *workbox, "RECEIVED BY", "", "")
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{"updated": count})
 }
 
@@ -1113,12 +1208,25 @@ func (h *FrequencyHandler) BulkRouteAssignments(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	uid := userID.(uuid.UUID)
+	if workbox != nil && *workbox != "" {
+		for _, id := range ids {
+			// Per SXXI A.1.1: FORWARDED TO then RECEIVED BY (auto-applied server-side).
+			h.service.LogAssignmentEvent(id, &uid, "FORWARDED TO", *workbox, "")
+			h.service.LogAssignmentEventAs(id, *workbox, "RECEIVED BY", "", "")
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{"updated": count})
 }
 
 // SetCoordinations replaces the lateral coordination workboxes for a proposal.
 // PUT /api/frequency/assignments/:id/coordinations
 func (h *FrequencyHandler) SetCoordinations(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
 	if !atLeast(c, "ism") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "ism-level access required"})
 		return
@@ -1126,6 +1234,15 @@ func (h *FrequencyHandler) SetCoordinations(c *gin.Context) {
 	assignmentID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid assignment id"})
+		return
+	}
+	assignment, err := h.service.GetAssignmentByID(assignmentID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "assignment not found"})
+		return
+	}
+	if !h.callerOwnsEditAuthority(c, userID.(uuid.UUID), assignment.EditAuthorityWorkbox) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "your workbox does not have edit authority over this proposal"})
 		return
 	}
 	var body struct {
@@ -1142,6 +1259,8 @@ func (h *FrequencyHandler) SetCoordinations(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	uid := userID.(uuid.UUID)
+	h.service.LogAssignmentEvent(assignmentID, &uid, "LATERAL COORDINATION", "", "")
 	c.JSON(http.StatusOK, gin.H{"workboxes": body.Workboxes})
 }
 
@@ -1264,6 +1383,7 @@ func (h *FrequencyHandler) SetRequestCoordinations(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "ism-level access required"})
 		return
 	}
+	userID, _ := c.Get("userID")
 	requestID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request id"})
@@ -1283,6 +1403,8 @@ func (h *FrequencyHandler) SetRequestCoordinations(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	uid := userID.(uuid.UUID)
+	h.service.LogRequestEvent(requestID, &uid, "LATERAL COORDINATION", "", "")
 	c.JSON(http.StatusOK, gin.H{"workboxes": body.Workboxes})
 }
 
@@ -1368,4 +1490,92 @@ func (h *FrequencyHandler) DeleteControlNumber(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
+}
+
+// ── Status History ────────────────────────────────────────────────────────────
+
+// RejectAndForwardRequest denies a request and simultaneously routes it to a specified
+// workbox. Per SXXI A.2, REJECTED BY is always followed by FORWARDED TO.
+// PUT /api/frequency/requests/:id/reject
+func (h *FrequencyHandler) RejectAndForwardRequest(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+	if !atLeast(c, "ism") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "ISM-level access or higher required"})
+		return
+	}
+	requestID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request id"})
+		return
+	}
+	var body struct {
+		Notes     string `json:"notes"`
+		ForwardTo string `json:"forward_to"` // empty = unrouted (return to requestor with no workbox)
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	req, err := h.service.GetRequestByID(requestID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "request not found"})
+		return
+	}
+	if !h.callerOwnsEditAuthority(c, userID.(uuid.UUID), req.EditAuthorityWorkbox) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "your workbox does not have edit authority over this record"})
+		return
+	}
+	if err := h.service.RejectAndForwardRequest(requestID, userID.(uuid.UUID), body.Notes, body.ForwardTo); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	dest := body.ForwardTo
+	if dest == "" {
+		dest = "requestor (unrouted)"
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "request rejected and forwarded to " + dest})
+}
+
+// GetAssignmentHistory returns the status log for a proposal/assignment.
+// GET /api/frequency/assignments/:id/history
+func (h *FrequencyHandler) GetAssignmentHistory(c *gin.Context) {
+	if !atLeast(c, "ism") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "ism-level access required"})
+		return
+	}
+	assignmentID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid assignment id"})
+		return
+	}
+	history, err := h.service.GetAssignmentHistory(assignmentID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"history": history})
+}
+
+// GetRequestHistory returns the status log for a frequency request.
+// GET /api/frequency/requests/:id/history
+func (h *FrequencyHandler) GetRequestHistory(c *gin.Context) {
+	if !atLeast(c, "ism") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "ism-level access required"})
+		return
+	}
+	requestID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request id"})
+		return
+	}
+	history, err := h.service.GetRequestHistory(requestID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"history": history})
 }

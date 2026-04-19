@@ -149,10 +149,7 @@ async function loadAssignments() {
         const res  = await fetch('/api/frequency/units');
         const data = await res.json();
         if (data.units) {
-            // Operators see only their primary unit; higher roles see all assigned units
-            unitsData = (uf_userRole === 'operator' && uf_unitID)
-                ? data.units.filter(ud => ud.unit?.id === uf_unitID)
-                : data.units;
+            unitsData = data.units;
             populateUnitFilters(unitsData);
             updateStats(unitsData);
             renderAssignmentTab('permanent');

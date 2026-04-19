@@ -410,6 +410,7 @@ func main() {
 			frequency.PUT("/assignments/:id/coordinations", frequencyHandler.SetCoordinations)
 			frequency.GET("/assignments/:id/comments", frequencyHandler.GetComments)
 			frequency.POST("/assignments/:id/comments", frequencyHandler.AddComment)
+			frequency.GET("/assignments/:id/history", frequencyHandler.GetAssignmentHistory)
 
 			// Frequency request routes
 			frequency.GET("/requests", frequencyHandler.GetUserRequests)
@@ -418,6 +419,7 @@ func main() {
 			frequency.DELETE("/requests/:id", frequencyHandler.DeleteFrequencyRequest)
 			frequency.PUT("/requests/:id/resubmit", frequencyHandler.ResubmitFrequencyRequest)
 			frequency.PUT("/requests/:id/retract", frequencyHandler.RetractFrequencyRequest)
+			frequency.PUT("/requests/:id/reject", frequencyHandler.RejectAndForwardRequest)
 			frequency.PUT("/requests/:id/review", frequencyHandler.ReviewFrequencyRequest)
 			frequency.PUT("/requests/:id/return", frequencyHandler.ReturnRequest)
 			frequency.PUT("/requests/:id/sfaf-draft", frequencyHandler.SaveRequestSFAFDraft)
@@ -425,6 +427,7 @@ func main() {
 			frequency.GET("/requests/:id/comments", frequencyHandler.GetRequestComments)
 			frequency.POST("/requests/:id/comments", frequencyHandler.AddRequestComment)
 			frequency.PUT("/requests/:id/coordinations", frequencyHandler.SetRequestCoordinations)
+			frequency.GET("/requests/:id/history", frequencyHandler.GetRequestHistory)
 
 			// Admin cleanup routes
 			frequency.POST("/cleanup-orphaned", frequencyHandler.CleanupOrphanedAssignments)

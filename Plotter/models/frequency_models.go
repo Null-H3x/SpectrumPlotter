@@ -195,6 +195,19 @@ type UnitWithAssignments struct {
 	MemberCount         int                    `json:"member_count"`
 }
 
+// StatusLogEntry records a single workflow event in the life of a proposal or request.
+type StatusLogEntry struct {
+	ID            uuid.UUID  `json:"id" db:"id"`
+	RecordID      uuid.UUID  `json:"record_id" db:"record_id"`
+	StatusCode    string     `json:"status_code" db:"status_code"`
+	ActorWorkbox  string     `json:"actor_workbox" db:"actor_workbox"`
+	ActorUserID   *uuid.UUID `json:"actor_user_id,omitempty" db:"actor_user_id"`
+	ActorName     string     `json:"actor_name,omitempty" db:"actor_name"`
+	TargetWorkbox string     `json:"target_workbox,omitempty" db:"target_workbox"`
+	Notes         string     `json:"notes,omitempty" db:"notes"`
+	CreatedAt     time.Time  `json:"created_at" db:"created_at"`
+}
+
 // FrequencyRequestWithDetails includes request and related information
 type FrequencyRequestWithDetails struct {
 	Request              *FrequencyRequest    `json:"request"`
@@ -205,11 +218,15 @@ type FrequencyRequestWithDetails struct {
 	ApprovedBy           *User                `json:"approved_by,omitempty"`
 	Assignment           *FrequencyAssignment `json:"assignment,omitempty"`
 	Comments             []RequestComment     `json:"comments,omitempty"`
+	History              []StatusLogEntry     `json:"history,omitempty"`
 	CoordinatedWith      []string             `json:"coordinated_with,omitempty"`
 	// EditAuthorityWorkbox is the ISM workbox that currently holds edit authority.
 	// For pending requests this is the submitter's ISM unit; after assignment creation
 	// it mirrors the assignment's edit_authority_workbox.
 	EditAuthorityWorkbox *string              `json:"edit_authority_workbox,omitempty"`
+	// OriginWorkbox is the primary ISM workbox of the original requestor.
+	// Always set; used to populate the "Return to Requestor" option in the reject modal.
+	OriginWorkbox        *string              `json:"origin_workbox,omitempty"`
 }
 
 // FrequencyAssignmentWithDetails includes assignment and unit info
@@ -221,6 +238,7 @@ type FrequencyAssignmentWithDetails struct {
 	RoutedToWorkbox *string              `json:"routed_to_workbox,omitempty"`
 	CoordinatedWith []string             `json:"coordinated_with,omitempty"`
 	Comments        []AssignmentComment  `json:"comments,omitempty"`
+	History         []StatusLogEntry     `json:"history,omitempty"`
 	Conflicts       []FrequencyConflict  `json:"conflicts,omitempty"`
 	UsageLogs       []FrequencyUsageLog  `json:"usage_logs,omitempty"`
 }

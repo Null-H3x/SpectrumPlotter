@@ -1163,14 +1163,17 @@ function renderWorkbox(reqs, filtered = false) {
         const actionBtns = [
             `<button class="btn-xs btn-xs-info" onclick="viewRequest('${req.id}')"><i class="fas fa-eye"></i> View</button>`
         ];
-        const editAuth = r.edit_authority_workbox;
+        const editAuth       = r.edit_authority_workbox;
+        const isAgencyPlus   = ['agency', 'ntia', 'admin'].includes(userRole);
         const myWorkboxOwnsIt = userWorkbox && editAuth && editAuth === userWorkbox;
+        const canEdit        = myWorkboxOwnsIt || isAgencyPlus;
         if ((isPending || isUnderReview) && !myWorkboxOwnsIt) {
             actionBtns.push(
                 `<button class="btn-xs btn-xs-review" onclick="markUnderReview('${req.id}')"><i class="fas fa-clipboard-check"></i> Mark Under Review</button>`
             );
         }
-        if (isUnderReview && REVIEWER_ROLES.includes(userRole)) {
+        // Review (opens SFAF approval modal) — only for the owning workbox or agency+
+        if (isUnderReview && REVIEWER_ROLES.includes(userRole) && canEdit) {
             actionBtns.push(
                 `<button class="btn-xs btn-xs-approve" onclick="currentRequestId='${req.id}'; openApprovalModal()"><i class="fas fa-clipboard-check"></i> Review</button>`
             );
@@ -1182,6 +1185,7 @@ function renderWorkbox(reqs, filtered = false) {
         }
 
         const commentLogHtml = renderRequestCommentLog(req.id, r.comments || []);
+        const historyHtml    = renderStatusHistory('req', req.id, r.history || []);
 
         return `
         <div class="request-card workbox-card pri-${pri}${checked ? ' wb-card-selected' : ''}" style="position:relative;">
@@ -1236,6 +1240,7 @@ function renderWorkbox(reqs, filtered = false) {
             </div>
             <div id="req-comment-row-${req.id}" style="display:none;padding:0 12px 8px;">
                 ${commentLogHtml}
+                ${historyHtml}
             </div>
         </div>`;
     }).join('');
@@ -1260,7 +1265,8 @@ function renderInboundAssignments(assignments) {
             `<span class="coord-chip" title="Lateral coordination">${wb}</span>`
         ).join('');
 
-        const commentLog = renderCommentLog(a.id, p.comments || []);
+        const commentLog  = renderCommentLog(a.id, p.comments || []);
+        const historyHtml = renderStatusHistory('asgn', a.id, p.history || []);
 
         return `
         <div class="request-card workbox-card" style="border-left:3px solid #6366f1;">
@@ -1293,6 +1299,7 @@ function renderInboundAssignments(assignments) {
             </div>
             <div id="inbound-comment-row-${a.id}" style="display:none;padding:0 12px 8px;">
                 ${commentLog}
+                ${historyHtml}
             </div>
         </div>`;
     }).join('');
@@ -1317,26 +1324,91 @@ window.markUnderReview = async function(requestId) {
     }
 };
 
-window.quickReject = function(requestId) {
+let _rejectWorkboxCache = null;
+
+async function _loadRejectWorkboxes(preferredWorkbox, originWorkbox) {
+    const textEl   = document.getElementById('rejectToWorkboxText');
+    const hiddenEl = document.getElementById('rejectToWorkbox');
+    const listEl   = document.getElementById('rejectToWorkboxList');
+    if (!textEl || !hiddenEl || !listEl) return;
+
+    if (!_rejectWorkboxCache) {
+        try {
+            const res  = await fetch('/api/frequency/reviewers');
+            const data = res.ok ? await res.json() : {};
+            _rejectWorkboxCache = data.workboxes || [];
+        } catch (_) {
+            _rejectWorkboxCache = [];
+        }
+    }
+
+    const entries = [];
+    // Always include a Requestor option first.
+    // If the requestor has an ISM workbox, route there; otherwise empty string → NULL (unrouted).
+    const requestorLabel = originWorkbox
+        ? `${originWorkbox} — Requestor`
+        : 'Requestor (no workbox — unrouted)';
+    entries.push({ value: originWorkbox || '', label: 'Requestor' });
+    _rejectWorkboxCache.forEach(wb => {
+        if (wb !== originWorkbox) entries.push({ value: wb, label: '' });
+    });
+
+    // Pre-fill: use previous sender, fall back to requestor
+    const fill      = preferredWorkbox || originWorkbox || '';
+    const fillLabel = fill === (originWorkbox || '') ? requestorLabel : fill;
+    hiddenEl.value = fill;
+    textEl.value   = fillLabel;
+    textEl.dataset.comboInit = '';  // allow re-init each open
+
+    _initLookupComboByEl(textEl, hiddenEl, listEl, entries);
+}
+
+function _lastSenderWorkbox(history, fallback) {
+    if (!history) return fallback || '';
+    for (let i = history.length - 1; i >= 0; i--) {
+        if (history[i].status_code === 'FORWARDED TO') return history[i].actor_workbox || '';
+    }
+    return fallback || '';
+}
+
+window.quickReject = async function(requestId) {
     _rejectModalMode    = 'return';
     _rejectModalTarget  = requestId;
     document.getElementById('rejectModalTitle').textContent        = 'Return Record';
     document.getElementById('rejectModalDesc').textContent         = 'Provide a reason. This entry is required and will appear in the record\'s Status Log.';
     document.getElementById('rejectModalConfirmLabel').textContent = 'Return & Log';
     document.getElementById('rejectComment').value = '';
+
+    const entry     = pendingRequests.find(r => r.request.id === requestId);
+    const preferred = _lastSenderWorkbox(entry?.history, entry?.request?.edit_authority_workbox);
+    await _loadRejectWorkboxes(preferred, entry?.origin_workbox || null);
+
     document.getElementById('rejectModal').style.display = 'flex';
     setTimeout(() => document.getElementById('rejectComment').focus(), 50);
 };
 
 window.closeRejectModal = function() {
     document.getElementById('rejectModal').style.display = 'none';
+    const textEl = document.getElementById('rejectToWorkboxText');
+    const hiddenEl = document.getElementById('rejectToWorkbox');
+    const listEl = document.getElementById('rejectToWorkboxList');
+    if (textEl)   { textEl.value = ''; textEl.dataset.comboInit = ''; }
+    if (hiddenEl) hiddenEl.value = '';
+    if (listEl)   listEl.style.display = 'none';
 };
 
 let _rejectModalMode   = 'return'; // 'return' | 'deny'
 let _rejectModalTarget = null;
 
 window.confirmReject = async function() {
-    const comment = document.getElementById('rejectComment').value.trim();
+    const comment   = document.getElementById('rejectComment').value.trim();
+    const forwardTo = (document.getElementById('rejectToWorkbox')?.value || '').trim();
+
+    if (!forwardTo) {
+        showAlert('Select a destination workbox before confirming.', 'warning');
+        document.getElementById('rejectToWorkboxText')?.focus();
+        return;
+    }
     if (!comment) {
         showAlert('A reason is required before rejecting or returning a record.', 'warning');
         document.getElementById('rejectComment').focus();
@@ -1347,31 +1419,31 @@ window.confirmReject = async function() {
 
     try {
         if (_rejectModalMode === 'return') {
-            // Post the comment first, then return the record
             await fetch(`/api/frequency/requests/${_rejectModalTarget}/comments`, {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body:    JSON.stringify({ body: comment, workbox: userWorkbox || '' }),
             });
-            const res = await fetch(`/api/frequency/requests/${_rejectModalTarget}/return`, {
-                method: 'PUT',
+            const retRes = await fetch(`/api/frequency/requests/${_rejectModalTarget}/return`, {
+                method:  'PUT',
                 headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ forward_to: forwardTo }),
             });
-            if (res.ok) {
-                showAlert('Record returned to originating workbox.', 'success');
+            if (retRes.ok) {
+                showAlert(`Record returned and forwarded to ${forwardTo}.`, 'success');
             } else {
-                const d = await res.json();
+                const d = await retRes.json();
                 showAlert('Error: ' + (d.error || 'Failed to return'), 'danger');
             }
         } else {
-            // 'deny' — set status to denied with the comment as the reason
-            const res = await fetch(`/api/frequency/requests/${_rejectModalTarget}/review`, {
+            // 'deny' — atomic reject + forward via SXXI-compliant endpoint
+            const res = await fetch(`/api/frequency/requests/${_rejectModalTarget}/reject`, {
                 method:  'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ status: 'denied', notes: comment }),
+                body:    JSON.stringify({ notes: comment, forward_to: forwardTo }),
             });
             if (res.ok) {
-                showAlert('Request rejected.', 'success');
+                showAlert(`Request rejected and forwarded to ${forwardTo}.`, 'success');
                 closeRequestModal();
             } else {
                 const d = await res.json();
@@ -2972,6 +3044,20 @@ function _latlngToSFAF(lat, lon) {
 }
 
 // Parse SFAF field 306 radius: "100B" → metres (km × 1000), "UNL" → null
+function _radiusToKm(value, unit) {
+    const n = parseFloat(value);
+    if (isNaN(n)) return null;
+    if (unit === 'NM') return n * 1.852;
+    if (unit === 'mi') return n * 1.60934;
+    return n;
+}
+
+function _kmToUnit(km, unit) {
+    if (unit === 'NM') return km / 1.852;
+    if (unit === 'mi') return km / 1.60934;
+    return km;
+}
+
 function _parseSFAFRadius(str) {
     if (!str) return null;
     const s = str.trim().toUpperCase();
@@ -2991,11 +3077,13 @@ window.updateApprovalMap = function(panToLocation) {
     // For map circle: use 306 first (strip T/B suffix), fall back to 406
     const radiusStr = radius306 || radius406;
 
-    // Keep map-panel radius input in sync (value is km, ceil to whole number)
+    // Keep map-panel radius input in sync; convert km value to selected display unit
     const mapRadiusEl = document.getElementById('mapRadiusInput');
     if (mapRadiusEl && mapRadiusEl !== document.activeElement) {
-        const kmRaw = parseFloat(radiusStr.replace(/[TBtb]$/, ''));
-        mapRadiusEl.value = isNaN(kmRaw) ? '' : Math.ceil(kmRaw);
+        const kmRaw  = parseFloat(radiusStr.replace(/[TBtb]$/, ''));
+        const unit   = document.getElementById('mapRadiusUnit')?.value || 'km';
+        const display = isNaN(kmRaw) ? '' : Math.round(_kmToUnit(kmRaw, unit) * 100) / 100;
+        mapRadiusEl.value = display || '';
     }
     _syncRadiusSuffixCheckboxes(radius306, radius406);
 
@@ -3123,7 +3211,9 @@ function _updateRadiusLabel(suffix) {
 // Called when user types in the map-panel radius input (value is km, whole numbers)
 window.onMapRadiusInput = function(raw) {
     const numeric = String(raw).replace(/[TBtb]$/, '').trim();
-    const kmVal   = numeric ? String(Math.ceil(parseFloat(numeric)) || '') : '';
+    const unit    = document.getElementById('mapRadiusUnit')?.value || 'km';
+    const km      = _radiusToKm(numeric, unit);
+    const kmVal   = km !== null ? String(Math.ceil(km) || '') : '';
     const checked = [...document.querySelectorAll('input[name="radiusSuffix"]')].find(c => c.checked);
     const suffix = checked?.value || 'T';
     const f306 = document.getElementById('sfaf_306');
@@ -3148,28 +3238,45 @@ window.onRadiusSuffixChange = function(cb) {
         if (other !== cb) other.checked = false;
     });
     const mapRadiusEl = document.getElementById('mapRadiusInput');
-    const numeric = (mapRadiusEl?.value || '').replace(/[TBtb]$/, '').trim();
+    const rawInput    = (mapRadiusEl?.value || '').replace(/[TBtb]$/, '').trim();
+    const unit        = document.getElementById('mapRadiusUnit')?.value || 'km';
+    const km          = _radiusToKm(rawInput, unit);
+    const numeric     = km !== null ? String(Math.ceil(km) || '') : '';
     const f306 = document.getElementById('sfaf_306');
     const f406 = document.getElementById('sfaf_406');
     const activeSuffix = cb.checked ? cb.value : 'T';
     _updateRadiusLabel(cb.checked ? cb.value : '');
     if (activeSuffix === 'R') {
-        // Receiver only → field 406 (plain numeric), clear 306
+        // Receiver only → field 406 (plain numeric km), clear 306
         if (f306) f306.value = '';
         if (f406) f406.value = numeric;
     } else if (activeSuffix === 'B') {
-        // Both → field 306 with 'B' suffix, clear 406
+        // Both → field 306 with 'B' suffix (km), clear 406
         if (f306) f306.value = numeric ? numeric + 'B' : '';
         if (f406) f406.value = '';
     } else {
-        // Transmitter only → field 306 with 'T' suffix, clear 406
+        // Transmitter only → field 306 with 'T' suffix (km), clear 406
         if (f306) f306.value = numeric ? numeric + 'T' : '';
         if (f406) f406.value = '';
     }
-    if (mapRadiusEl) mapRadiusEl.value = numeric; // keep input clean (no suffix)
+    // keep display input clean (no suffix); value stays in display unit
+    if (mapRadiusEl) mapRadiusEl.value = rawInput;
     updateApprovalMap();
 };
 
+
+// Called when the unit dropdown changes — convert the stored km value to the new unit
+window.onMapRadiusUnitChange = function() {
+    const f306 = document.getElementById('sfaf_306')?.value || '';
+    const f406 = document.getElementById('sfaf_406')?.value || '';
+    const stored = f306 || f406;
+    const kmRaw  = parseFloat(stored.replace(/[TBtb]$/, ''));
+    const unit   = document.getElementById('mapRadiusUnit')?.value || 'km';
+    const mapRadiusEl = document.getElementById('mapRadiusInput');
+    if (mapRadiusEl) {
+        mapRadiusEl.value = isNaN(kmRaw) ? '' : Math.round(_kmToUnit(kmRaw, unit) * 100) / 100;
+    }
+};
 
 // ── Frequency Deconfliction ────────────────────────────────────────────────────
 
@@ -3612,13 +3719,19 @@ async function submitApproval() {
     }
 }
 
-function rejectRequest() {
+async function rejectRequest() {
     _rejectModalMode    = 'deny';
     _rejectModalTarget  = currentRequestId;
     document.getElementById('rejectModalTitle').textContent        = 'Reject Request';
     document.getElementById('rejectModalDesc').textContent         = 'Provide a reason for rejection. This entry is required and will be recorded in the Status Log.';
     document.getElementById('rejectModalConfirmLabel').textContent = 'Reject & Log';
     document.getElementById('rejectComment').value = '';
+
+    const entry     = allRequests.find(r => r.request.id === currentRequestId)
+                   || pendingRequests.find(r => r.request.id === currentRequestId);
+    const preferred = _lastSenderWorkbox(entry?.history, entry?.request?.edit_authority_workbox);
+    await _loadRejectWorkboxes(preferred, entry?.origin_workbox || null);
+
     document.getElementById('rejectModal').style.display = 'flex';
     setTimeout(() => document.getElementById('rejectComment').focus(), 50);
 }
@@ -3772,8 +3885,12 @@ function renderSubmitted(records) {
         const originatorLabel = p.created_by?.default_ism_office || p.created_by?.organization || p.created_by?.full_name || '—';
         const editAuthority   = (a.sfaf_record_type === 'P' || a.sfaf_record_type === 'S') ? originatorLabel : '';
 
+        const isAgencyPlus = ['agency', 'ntia', 'admin'].includes(userRole);
+        const editAuth     = a.edit_authority_workbox;
+        const canEditThis  = isAgencyPlus || !editAuth || (userWorkbox && editAuth === userWorkbox);
+        const isProposal   = (a.sfaf_record_type === 'P' || a.sfaf_record_type === 'S');
         const checked = selectedCloneIds.has(a.id) ? 'checked' : '';
-        const retractBtn = (a.sfaf_record_type === 'P' || a.sfaf_record_type === 'S')
+        const retractBtn = isProposal && canEditThis
             ? `<button class="btn-xs btn-xs-danger" title="Retract this proposal"
                 onclick="retractAssignment('${a.id}')">
                 <i class="fas fa-undo-alt"></i> Retract
@@ -3782,7 +3899,7 @@ function renderSubmitted(records) {
         const coordChips = (p.coordinated_with || []).map(wb =>
             `<span class="coord-chip" title="Lateral coordination">${wb}</span>`
         ).join('');
-        const coordBtn = (a.sfaf_record_type === 'P' || a.sfaf_record_type === 'S')
+        const coordBtn = isProposal && canEditThis
             ? `<button class="btn-xs" style="font-size:0.68rem;" title="Set lateral coordination workboxes"
                 onclick="openCoordModal('${a.id}', ${JSON.stringify(p.coordinated_with || []).replace(/"/g, '&quot;')})">
                 <i class="fas fa-handshake"></i>
@@ -3794,6 +3911,7 @@ function renderSubmitted(records) {
             <i class="fas fa-comments"></i> Status Log${commentCount ? ` <span style="color:#60a5fa;margin-left:2px;">(${commentCount})</span>` : ''}
            </button>`;
         const commentLogHtml = renderCommentLog(a.id, p.comments || []);
+        const historyHtml    = renderStatusHistory('asgn', a.id, p.history || []);
         const colCount = 10;
         return `<tr>
             <td><input type="checkbox" class="submitted-clone-cb" data-id="${a.id}" ${checked} onchange="toggleCloneSelect(this)"></td>
@@ -3810,6 +3928,7 @@ function renderSubmitted(records) {
         <tr id="comment-row-${a.id}" style="display:none;">
             <td colspan="${colCount}" style="padding:0 0 4px 0;background:rgba(10,10,28,0.5);">
                 ${commentLogHtml}
+                ${historyHtml}
             </td>
         </tr>`;
     }).join('');
@@ -4620,6 +4739,7 @@ function renderProposals(proposals) {
             </div>
             ${a.notes ? `<div class="request-card-notes" style="font-size:0.8rem;color:#94a3b8;padding:0.3rem 0;">${a.notes}</div>` : ''}
             ${renderCommentLog(a.id, p.comments || [])}
+            ${renderStatusHistory('asgn', a.id, p.history || [])}
         </div>`;
     }).join('');
 
@@ -5322,6 +5442,106 @@ function renderCommentLog(assignmentId, comments) {
         </div>
     </div>`;
 }
+
+// ── Status History ────────────────────────────────────────────────────────────
+
+const STATUS_CODE_ICONS = {
+    'ORIGINATED BY':        'fa-file-alt',
+    'IN-PROCESS AT':        'fa-spinner',
+    'FORWARDED TO':         'fa-arrow-right',
+    'RECEIVED BY':          'fa-inbox',
+    'RETURNED TO':          'fa-reply',
+    'APPROVED BY':          'fa-check-circle',
+    'ASSIGNED BY':          'fa-broadcast-tower',
+    'REJECTED BY':          'fa-times-circle',
+    'RESUBMITTED BY':       'fa-redo',
+    'MODIFIED BY':          'fa-edit',
+    'LATERAL COORDINATION': 'fa-handshake',
+    'NOTIFIED BY':          'fa-bell',
+    'REGISTERED WITH':      'fa-stamp',
+    'TABLED BY':            'fa-pause-circle',
+};
+
+const STATUS_CODE_COLORS = {
+    'ORIGINATED BY':        '#60a5fa',
+    'IN-PROCESS AT':        '#f59e0b',
+    'FORWARDED TO':         '#a78bfa',
+    'RECEIVED BY':          '#38bdf8',
+    'RETURNED TO':          '#fb923c',
+    'APPROVED BY':          '#34d399',
+    'ASSIGNED BY':          '#10b981',
+    'REJECTED BY':          '#f87171',
+    'RESUBMITTED BY':       '#60a5fa',
+    'MODIFIED BY':          '#e2e8f0',
+    'LATERAL COORDINATION': '#c084fc',
+    'NOTIFIED BY':          '#fbbf24',
+    'REGISTERED WITH':      '#4ade80',
+    'TABLED BY':            '#f472b6',
+};
+
+function renderStatusHistory(prefix, recordId, history) {
+    const domId = `hist-body-${prefix}-${recordId}`;
+    const chevId = `hist-chev-${prefix}-${recordId}`;
+    if (!history || history.length === 0) {
+        return `
+        <div class="comment-log" style="border-top:1px solid rgba(100,150,255,0.1);margin-top:4px;">
+            <div class="comment-log-header" onclick="toggleStatusHistory('${domId}','${chevId}')">
+                <span><i class="fas fa-history" style="margin-right:4px;"></i>Record History (0)</span>
+                <i class="fas fa-chevron-down" id="${chevId}"></i>
+            </div>
+            <div id="${domId}" style="display:none;font-size:0.75rem;color:#64748b;padding:4px 0;">No history yet.</div>
+        </div>`;
+    }
+
+    const entries = history.map((e, i) => {
+        const icon  = STATUS_CODE_ICONS[e.status_code]  || 'fa-circle';
+        const color = STATUS_CODE_COLORS[e.status_code] || '#94a3b8';
+        const isLast = i === history.length - 1;
+        const actorParts = [];
+        if (e.actor_name)   actorParts.push(e.actor_name);
+        if (e.actor_workbox) actorParts.push(e.actor_workbox);
+        const actor = actorParts.join(' — ');
+        const target = e.target_workbox ? ` → <strong style="color:#a78bfa;">${escHtml(e.target_workbox)}</strong>` : '';
+        const notes = e.notes ? `<div style="margin-top:2px;color:#94a3b8;font-size:0.72rem;">${escHtml(e.notes)}</div>` : '';
+        return `
+        <div style="display:flex;gap:10px;padding:4px 0;position:relative;">
+            <div style="display:flex;flex-direction:column;align-items:center;width:20px;flex-shrink:0;">
+                <div style="width:20px;height:20px;border-radius:50%;background:rgba(15,23,42,0.9);border:2px solid ${color};display:flex;align-items:center;justify-content:center;flex-shrink:0;z-index:1;">
+                    <i class="fas ${icon}" style="font-size:0.55rem;color:${color};"></i>
+                </div>
+                ${!isLast ? `<div style="width:2px;flex:1;background:rgba(100,150,255,0.15);margin-top:2px;"></div>` : ''}
+            </div>
+            <div style="flex:1;padding-bottom:${isLast ? '0' : '8px'};">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;">
+                    <span style="font-size:0.74rem;font-weight:600;color:${color};">${escHtml(e.status_code)}${target}</span>
+                    <span style="font-size:0.67rem;color:#475569;flex-shrink:0;margin-left:8px;">${formatDate(e.created_at)}</span>
+                </div>
+                ${actor ? `<div style="font-size:0.7rem;color:#64748b;">${escHtml(actor)}</div>` : ''}
+                ${notes}
+            </div>
+        </div>`;
+    }).join('');
+
+    return `
+    <div class="comment-log" style="border-top:1px solid rgba(100,150,255,0.1);margin-top:4px;">
+        <div class="comment-log-header" onclick="toggleStatusHistory('${domId}','${chevId}')">
+            <span><i class="fas fa-history" style="margin-right:4px;"></i>Record History (${history.length})</span>
+            <i class="fas fa-chevron-down" id="${chevId}"></i>
+        </div>
+        <div id="${domId}" style="display:none;padding:6px 0 2px;">
+            ${entries}
+        </div>
+    </div>`;
+}
+
+window.toggleStatusHistory = function(domId, chevId) {
+    const body   = document.getElementById(domId);
+    const chevron = document.getElementById(chevId);
+    if (!body) return;
+    const open = body.style.display === 'none';
+    body.style.display = open ? '' : 'none';
+    if (chevron) chevron.style.transform = open ? 'rotate(180deg)' : '';
+};
 
 function escHtml(str) {
     if (!str) return '';

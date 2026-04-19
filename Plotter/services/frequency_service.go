@@ -260,6 +260,11 @@ func (s *FrequencyService) CreateFrequencyAssignment(
 		return nil, fmt.Errorf("failed to create frequency assignment: %w", err)
 	}
 
+	statusCode := "ORIGINATED BY"
+	if recordType == "A" || recordType == "T" {
+		statusCode = "ASSIGNED BY"
+	}
+	s.LogAssignmentEvent(assignment.ID, &createdBy, statusCode, "", "")
 	return assignment, nil
 }
 
@@ -401,6 +406,7 @@ func (s *FrequencyService) SubmitFrequencyRequest(
 		return nil, fmt.Errorf("failed to create frequency request: %w", err)
 	}
 
+	s.LogRequestEvent(request.ID, &requestedBy, "ORIGINATED BY", "", "")
 	return request, nil
 }
 
@@ -426,11 +432,15 @@ func (s *FrequencyService) ReviewFrequencyRequest(
 		return nil, err
 	}
 
-	// When marking under_review, claim edit authority for the caller's primary workbox.
+	// When marking under_review, claim edit authority for the caller's primary workbox
+	// only if the record does not already have an edit authority assigned.
 	var editAuth *string
 	if status == "under_review" {
-		if name, ismErr := s.repo.GetUserPrimaryWorkboxName(reviewedBy); ismErr == nil {
-			editAuth = name
+		existing, _ := s.repo.GetFrequencyRequestByID(requestID)
+		if existing != nil && (existing.EditAuthorityWorkbox == nil || *existing.EditAuthorityWorkbox == "") {
+			if name, ismErr := s.repo.GetUserPrimaryWorkboxName(reviewedBy); ismErr == nil {
+				editAuth = name
+			}
 		}
 	}
 
@@ -438,6 +448,13 @@ func (s *FrequencyService) ReviewFrequencyRequest(
 	err = s.repo.UpdateFrequencyRequestStatus(requestID, status, &reviewedBy, notes, "", "", editAuth)
 	if err != nil {
 		return nil, err
+	}
+
+	switch status {
+	case "under_review":
+		s.LogRequestEvent(requestID, &reviewedBy, "IN-PROCESS AT", "", notes)
+	case "denied":
+		s.LogRequestEvent(requestID, &reviewedBy, "REJECTED BY", "", notes)
 	}
 
 	// Get updated request
@@ -473,6 +490,14 @@ func (s *FrequencyService) ApproveAndCreateAssignment(
 		return nil, nil, fmt.Errorf("failed to approve request: %w", err)
 	}
 
+	s.LogRequestEvent(requestID, &approvedBy, "APPROVED BY", "", "")
+	recordType := assignment.SFAFRecordType
+	if recordType == "A" || recordType == "T" {
+		s.LogAssignmentEvent(assignment.ID, &approvedBy, "ASSIGNED BY", "", "")
+	} else {
+		s.LogAssignmentEvent(assignment.ID, &approvedBy, "ORIGINATED BY", "", "")
+	}
+
 	// Get updated request
 	updatedRequest, _ := s.repo.GetFrequencyRequestByID(requestID)
 	return updatedRequest, assignment, nil
@@ -491,7 +516,11 @@ func (s *FrequencyService) ResubmitFrequencyRequest(requestID, userID uuid.UUID,
 			workbox = name
 		}
 	}
-	return s.repo.ResubmitFrequencyRequest(requestID, userID, input, workbox)
+	req, err := s.repo.ResubmitFrequencyRequest(requestID, userID, input, workbox)
+	if err == nil {
+		s.LogRequestEvent(requestID, &userID, "RESUBMITTED BY", "", "")
+	}
+	return req, err
 }
 
 func (s *FrequencyService) GetUserRequestsWithDetails(userID uuid.UUID) ([]models.FrequencyRequestWithDetails, error) {
@@ -515,12 +544,21 @@ func (s *FrequencyService) GetUserRequestsWithDetails(userID uuid.UUID) ([]model
 	return result, nil
 }
 
-func (s *FrequencyService) GetPendingRequestsWithDetails(callerID uuid.UUID) ([]models.FrequencyRequestWithDetails, error) {
-	callerWorkboxes, _ := s.repo.GetUserWorkboxNames(callerID)
-	requests, err := s.repo.GetPendingRequests(callerWorkboxes)
+func (s *FrequencyService) GetPendingRequestsWithDetails(callerID uuid.UUID, isAdmin bool) ([]models.FrequencyRequestWithDetails, error) {
+	var callerWorkboxes []string
+	if !isAdmin {
+		callerWorkboxes, _ = s.repo.GetUserWorkboxNames(callerID)
+	}
+	requests, err := s.repo.GetPendingRequests(callerWorkboxes, isAdmin)
 	if err != nil {
 		return nil, err
 	}
+
+	requestIDs := make([]uuid.UUID, len(requests))
+	for i, req := range requests {
+		requestIDs[i] = req.ID
+	}
+	historyMap, _ := s.repo.BulkGetRequestStatusLog(requestIDs)
 
 	result := make([]models.FrequencyRequestWithDetails, 0, len(requests))
 	for _, request := range requests {
@@ -533,6 +571,10 @@ func (s *FrequencyService) GetPendingRequestsWithDetails(callerID uuid.UUID) ([]
 		}
 
 		comments, _ := s.repo.GetRequestComments(request.ID)
+		history := historyMap[request.ID]
+		if history == nil {
+			history = []models.StatusLogEntry{}
+		}
 		coordinated, _ := s.repo.GetRequestCoordinations(request.ID)
 
 		// Resolve linked assignment and edit authority.
@@ -554,10 +596,12 @@ func (s *FrequencyService) GetPendingRequestsWithDetails(callerID uuid.UUID) ([]
 				}
 			}
 		}
+		var originWorkbox *string
+		if name, err := s.repo.GetUserPrimaryWorkboxName(request.RequestedBy); err == nil && name != nil {
+			originWorkbox = name
+		}
 		if editAuthority == nil {
-			if name, err := s.repo.GetUserPrimaryWorkboxName(request.RequestedBy); err == nil {
-				editAuthority = name
-			}
+			editAuthority = originWorkbox
 		}
 
 		result = append(result, models.FrequencyRequestWithDetails{
@@ -567,8 +611,10 @@ func (s *FrequencyService) GetPendingRequestsWithDetails(callerID uuid.UUID) ([]
 			RequestedBy:          requester,
 			Assignment:           linkedAssignment,
 			Comments:             comments,
+			History:              history,
 			CoordinatedWith:      coordinated,
 			EditAuthorityWorkbox: editAuthority,
+			OriginWorkbox:        originWorkbox,
 		})
 	}
 
@@ -643,6 +689,12 @@ func (s *FrequencyService) GetInboundAssignments(userID uuid.UUID) ([]models.Fre
 	if err != nil {
 		return nil, err
 	}
+	asnIDs := make([]uuid.UUID, len(assignments))
+	for i, a := range assignments {
+		asnIDs[i] = a.ID
+	}
+	historyMap, _ := s.repo.BulkGetAssignmentStatusLog(asnIDs)
+
 	result := make([]models.FrequencyAssignmentWithDetails, 0, len(assignments))
 	for _, a := range assignments {
 		unit, _ := s.repo.GetUnitByID(a.UnitID)
@@ -652,6 +704,10 @@ func (s *FrequencyService) GetInboundAssignments(userID uuid.UUID) ([]models.Fre
 		}
 		detail.CoordinatedWith, _ = s.repo.GetCoordinations(a.ID)
 		detail.Comments, _ = s.repo.GetComments(a.ID)
+		detail.History = historyMap[a.ID]
+		if detail.History == nil {
+			detail.History = []models.StatusLogEntry{}
+		}
 		result = append(result, detail)
 	}
 	return result, nil
@@ -664,6 +720,12 @@ func (s *FrequencyService) GetProposalAssignments(userID uuid.UUID, role string)
 	if err != nil {
 		return nil, err
 	}
+	asnIDs := make([]uuid.UUID, len(assignments))
+	for i, a := range assignments {
+		asnIDs[i] = a.ID
+	}
+	historyMap, _ := s.repo.BulkGetAssignmentStatusLog(asnIDs)
+
 	result := make([]models.FrequencyAssignmentWithDetails, 0, len(assignments))
 	for _, a := range assignments {
 		unit, _ := s.repo.GetUnitByID(a.UnitID)
@@ -673,6 +735,10 @@ func (s *FrequencyService) GetProposalAssignments(userID uuid.UUID, role string)
 		}
 		detail.CoordinatedWith, _ = s.repo.GetCoordinations(a.ID)
 		detail.Comments, _ = s.repo.GetComments(a.ID)
+		detail.History = historyMap[a.ID]
+		if detail.History == nil {
+			detail.History = []models.StatusLogEntry{}
+		}
 		result = append(result, detail)
 	}
 	return result, nil
@@ -752,7 +818,22 @@ func (s *FrequencyService) ElevateAssignment(assignmentID, elevatedBy uuid.UUID,
 	if err := s.repo.ElevateAssignment(assignmentID, elevatedBy, notes); err != nil {
 		return nil, fmt.Errorf("failed to elevate assignment: %w", err)
 	}
-	return s.repo.GetFrequencyAssignmentByID(assignmentID)
+	s.LogAssignmentEvent(assignmentID, &elevatedBy, "ASSIGNED BY", "", notes)
+	a, err := s.repo.GetFrequencyAssignmentByID(assignmentID)
+	if err != nil {
+		return nil, err
+	}
+	// Per SXXI A.2.1: after ASSIGNED BY for a Temporary Assignment, the assigning JA
+	// distributes/notifies the community → NOTIFIED BY is auto-applied.
+	// Per SXXI A.2.3: after ASSIGNED BY for a non-reportable Permanent Assignment,
+	// the record is registered with the register authority → REGISTERED WITH.
+	switch a.SFAFRecordType {
+	case "T":
+		s.LogAssignmentEvent(assignmentID, &elevatedBy, "NOTIFIED BY", "", "")
+	case "A":
+		s.LogAssignmentEvent(assignmentID, &elevatedBy, "REGISTERED WITH", "", "")
+	}
+	return a, nil
 }
 
 // CleanupOrphanedAssignments removes frequency assignments that don't have corresponding SFAF records
@@ -787,6 +868,16 @@ func (s *FrequencyService) BulkRouteRequests(ids []uuid.UUID, workbox *string, c
 }
 
 // DeleteFrequencyRequest permanently removes a cancelled/denied request.
+// GetRequestByID returns a frequency request by its ID.
+func (s *FrequencyService) GetRequestByID(id uuid.UUID) (*models.FrequencyRequest, error) {
+	return s.repo.GetFrequencyRequestByID(id)
+}
+
+// GetAssignmentByID returns a frequency assignment by its ID.
+func (s *FrequencyService) GetAssignmentByID(id uuid.UUID) (*models.FrequencyAssignment, error) {
+	return s.repo.GetFrequencyAssignmentByID(id)
+}
+
 // GetUserWorkboxNames returns all workbox names for a user. Used by the workbox handler.
 func (s *FrequencyService) GetUserWorkboxNames(userID uuid.UUID) ([]string, error) {
 	return s.repo.GetUserWorkboxNames(userID)
@@ -797,9 +888,9 @@ func (s *FrequencyService) GetUserISMUnit(userID uuid.UUID) (*models.Unit, error
 	return s.repo.GetUserISMUnit(userID)
 }
 
-// ReturnRequest sends a request back to the originating ISM workbox.
-func (s *FrequencyService) ReturnRequest(requestID uuid.UUID) error {
-	return s.repo.ReturnRequest(requestID)
+// ReturnRequest sends a request back to the specified workbox (or all ISMs if empty).
+func (s *FrequencyService) ReturnRequest(requestID uuid.UUID, forwardTo string) error {
+	return s.repo.ReturnRequest(requestID, forwardTo)
 }
 
 func (s *FrequencyService) SaveRequestSFAFDraft(requestID uuid.UUID, draft []byte) error {
@@ -808,6 +899,18 @@ func (s *FrequencyService) SaveRequestSFAFDraft(requestID uuid.UUID, draft []byt
 
 func (s *FrequencyService) DeleteFrequencyRequest(requestID, requestedBy uuid.UUID, isAdmin bool) error {
 	return s.repo.DeleteFrequencyRequest(requestID, requestedBy, isAdmin)
+}
+
+// RejectAndForwardRequest denies a request and routes it to the specified workbox.
+// Per SXXI A.2, REJECTED BY is always followed by FORWARDED TO back to the previous JA.
+func (s *FrequencyService) RejectAndForwardRequest(requestID, rejectedBy uuid.UUID, notes, forwardTo string) error {
+	if err := s.repo.RejectAndForwardRequest(requestID, rejectedBy, notes, forwardTo); err != nil {
+		return err
+	}
+	s.LogRequestEvent(requestID, &rejectedBy, "REJECTED BY", "", notes)
+	s.LogRequestEvent(requestID, &rejectedBy, "FORWARDED TO", forwardTo, "")
+	s.LogRequestEventAs(requestID, forwardTo, "RECEIVED BY", "", "")
+	return nil
 }
 
 // RetractFrequencyRequest cancels a pending/under_review request, verifying
@@ -912,4 +1015,51 @@ func (s *FrequencyService) SetPrimaryWorkbox(userID, workboxID uuid.UUID) error 
 		}
 	}
 	return fmt.Errorf("you are not assigned to that workbox")
+}
+
+// ── Status Log ────────────────────────────────────────────────────────────────
+
+// LogAssignmentEvent records a workflow transition for an assignment/proposal.
+// Failures are silent — the log is informational and must not block the workflow.
+// actorWorkboxOverride, when non-empty, is used as the actor_workbox instead of
+// deriving it from actorID — used for server-applied codes (e.g. RECEIVED BY).
+func (s *FrequencyService) LogAssignmentEvent(assignmentID uuid.UUID, actorID *uuid.UUID, statusCode, targetWorkbox, notes string) {
+	workbox := ""
+	if actorID != nil {
+		if wb, err := s.repo.GetUserPrimaryWorkboxName(*actorID); err == nil && wb != nil {
+			workbox = *wb
+		}
+	}
+	_ = s.repo.LogAssignmentStatus(assignmentID, statusCode, workbox, actorID, targetWorkbox, notes)
+}
+
+// LogAssignmentEventAs records a workflow event with an explicit actor workbox string
+// instead of deriving it from a user ID. Used for server-applied codes such as RECEIVED BY
+// where the actor is the recipient workbox, not the forwarding user.
+func (s *FrequencyService) LogAssignmentEventAs(assignmentID uuid.UUID, actorWorkbox, statusCode, targetWorkbox, notes string) {
+	_ = s.repo.LogAssignmentStatus(assignmentID, statusCode, actorWorkbox, nil, targetWorkbox, notes)
+}
+
+// LogRequestEvent records a workflow transition for a frequency request.
+func (s *FrequencyService) LogRequestEvent(requestID uuid.UUID, actorID *uuid.UUID, statusCode, targetWorkbox, notes string) {
+	workbox := ""
+	if actorID != nil {
+		if wb, err := s.repo.GetUserPrimaryWorkboxName(*actorID); err == nil && wb != nil {
+			workbox = *wb
+		}
+	}
+	_ = s.repo.LogRequestStatus(requestID, statusCode, workbox, actorID, targetWorkbox, notes)
+}
+
+// LogRequestEventAs records a workflow event with an explicit actor workbox string.
+func (s *FrequencyService) LogRequestEventAs(requestID uuid.UUID, actorWorkbox, statusCode, targetWorkbox, notes string) {
+	_ = s.repo.LogRequestStatus(requestID, statusCode, actorWorkbox, nil, targetWorkbox, notes)
+}
+
+func (s *FrequencyService) GetAssignmentHistory(assignmentID uuid.UUID) ([]models.StatusLogEntry, error) {
+	return s.repo.GetAssignmentStatusLog(assignmentID)
+}
+
+func (s *FrequencyService) GetRequestHistory(requestID uuid.UUID) ([]models.StatusLogEntry, error) {
+	return s.repo.GetRequestStatusLog(requestID)
 }
