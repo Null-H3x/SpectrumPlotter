@@ -906,6 +906,10 @@ func (ss *SFAFService) ImportSFAFFile(file io.Reader, filename string) (*models.
 	result.TotalRecords = len(records)
 	fmt.Printf("📊 Parsed %d records from file\n", len(records))
 
+	if len(records) == 0 {
+		return nil, fmt.Errorf("no SFAF records found in file — check that the file is a valid SFAF text export (dot-delimited, tab-delimited, or SXXI DOTS horizontal format)")
+	}
+
 	// Count Type of Action (field 010) for each record
 	for _, record := range records {
 		actionCode := ""
@@ -1149,6 +1153,14 @@ func (ss *SFAFService) parseSFAFTextFile(file io.Reader) ([]SFAFRecordData, erro
 	raw, err := io.ReadAll(file)
 	if err != nil {
 		return nil, fmt.Errorf("error reading file: %w", err)
+	}
+	fmt.Printf("📂 File received: %d bytes\n", len(raw))
+	if len(raw) > 0 {
+		preview := raw
+		if len(preview) > 120 {
+			preview = preview[:120]
+		}
+		fmt.Printf("📄 First bytes: %q\n", string(preview))
 	}
 
 	if isSXXIDotsHorizontal(raw) {

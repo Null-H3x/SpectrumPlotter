@@ -231,7 +231,7 @@ Object.assign(DatabaseViewer.prototype, {
 
         if (errors && errors.length > 0) {
             html += `<div>
-                <button class="irs-errors-toggle" onclick="databaseViewer.toggleImportErrors()">
+                <button id="toggleErrorsBtn" class="irs-errors-toggle" onclick="databaseViewer.toggleImportErrors()">
                     Show Errors (${errors.length}) ▼
                 </button>
                 <div id="importErrorDetails" style="display:none;">
@@ -476,7 +476,7 @@ Object.assign(DatabaseViewer.prototype, {
             this.showLoading(false);
 
             return {
-                success:        importResults.successful_count > 0,
+                success:        result.success === true,
                 imported:       importResults.successful_count,
                 errors:         importResults.error_count,
                 total:          importResults.total_records,

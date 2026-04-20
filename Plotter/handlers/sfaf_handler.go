@@ -578,8 +578,7 @@ func (sh *SFAFHandler) ImportSFAF(c *gin.Context) {
 	}
 	defer file.Close()
 
-	// Import SFAF file using service (Source: services.txt shows import capabilities)
-	fmt.Printf("\n🚀 Starting SFAF import for file: %s\n", header.Filename)
+	fmt.Printf("\n🚀 Starting SFAF import for file: %s (size: %d bytes)\n", header.Filename, header.Size)
 	results, err := sh.sfafService.ImportSFAFFile(file, header.Filename)
 	if err != nil {
 		fmt.Printf("❌ Import failed: %v\n", err)
