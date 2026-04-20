@@ -319,7 +319,12 @@ Object.assign(DatabaseViewer.prototype, {
 
         this.currentData = filteredData;
         this.currentPage = 1;
-        this.renderEnhancedSFAFTable(filteredData);
+        // Store filtered results so pagination stays within them (not server-side)
+        this._activeQueryResults = filteredData;
+        this._queryActive = true;
+        this._queryFilteredTotal = filteredData.length;
+        const pageSlice = filteredData.slice(0, this.itemsPerPage);
+        this.renderEnhancedSFAFTable(pageSlice);
         this.updatePagination();
         this.updateDBQueryStats();
 
@@ -478,11 +483,12 @@ Object.assign(DatabaseViewer.prototype, {
         // Clear queries array
         this.dbFilterQueries = [];
 
-        // Reload original data
-        this.currentData = this.currentSFAFData || [];
+        // Clear query state and go back to server-side pagination
+        this._queryActive = false;
+        this._activeQueryResults = null;
+        this._queryFilteredTotal = null;
         this.currentPage = 1;
-        this.renderEnhancedSFAFTable(this.currentSFAFData || []);
-        this.updatePagination();
+        this.loadSFAFRecords();
         this.updateDBQueryStats();
 
         console.log('✅ Cleared all DB filters');

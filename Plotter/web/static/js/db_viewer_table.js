@@ -379,21 +379,27 @@ Object.assign(DatabaseViewer.prototype, {
     previousPage() {
         if (this.currentPage > 1) {
             this.currentPage--;
-            // Load previous page from API
-            this.loadSFAFRecords();
-            // Scroll to top of table
+            this._loadCurrentPage();
             this.scrollToTopOfTable();
         }
     },
 
     nextPage() {
-        const totalPages = Math.ceil(this.totalDatabaseRecords / this.itemsPerPage);
+        const total = this._queryActive ? (this._queryFilteredTotal || 0) : (this.totalDatabaseRecords || 0);
+        const totalPages = Math.ceil(total / this.itemsPerPage);
         if (this.currentPage < totalPages) {
             this.currentPage++;
-            // Load next page from API
-            this.loadSFAFRecords();
-            // Scroll to top of table
+            this._loadCurrentPage();
             this.scrollToTopOfTable();
+        }
+    },
+
+    _loadCurrentPage() {
+        if (this._queryActive && this._activeQueryResults) {
+            const start = (this.currentPage - 1) * this.itemsPerPage;
+            this.renderEnhancedSFAFTable(this._activeQueryResults.slice(start, start + this.itemsPerPage));
+        } else {
+            this.loadSFAFRecords();
         }
     },
 
@@ -1043,8 +1049,9 @@ Object.assign(DatabaseViewer.prototype, {
     },
 
     updatePaginationControls(totalRecords) {
-        // Use total database records for pagination, not just current view count
-        const actualTotalRecords = this.totalDatabaseRecords || totalRecords;
+        const actualTotalRecords = this._queryActive
+            ? (this._queryFilteredTotal || 0)
+            : (this.totalDatabaseRecords || totalRecords);
         const totalPages = Math.ceil(actualTotalRecords / this.itemsPerPage);
 
         // Update button states
@@ -1171,19 +1178,14 @@ Object.assign(DatabaseViewer.prototype, {
 
     goToFirstPage() {
         this.currentPage = 1;
-        // Load first page from API
-        this.loadSFAFRecords();
-        // Scroll to top of table
+        this._loadCurrentPage();
         this.scrollToTopOfTable();
     },
 
     goToLastPage() {
-        // Calculate last page based on total database records
-        const totalPages = Math.ceil(this.totalDatabaseRecords / this.itemsPerPage);
-        this.currentPage = totalPages;
-        // Load last page from API
-        this.loadSFAFRecords();
-        // Scroll to top of table
+        const total = this._queryActive ? (this._queryFilteredTotal || 0) : (this.totalDatabaseRecords || 0);
+        this.currentPage = Math.ceil(total / this.itemsPerPage);
+        this._loadCurrentPage();
         this.scrollToTopOfTable();
     },
 
