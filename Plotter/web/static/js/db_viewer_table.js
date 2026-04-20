@@ -1536,6 +1536,17 @@ Object.assign(DatabaseViewer.prototype, {
                 filteredRecords = filteredRecords.filter(r => !r.isPool);
             }
 
+            // ✅ Apply column filters (persists across page turns)
+            const activeColumnFilters = Object.entries(this.columnFilters || {});
+            if (activeColumnFilters.length > 0) {
+                filteredRecords = filteredRecords.filter(record =>
+                    activeColumnFilters.every(([field, filterValue]) => {
+                        const value = this.getRecordFieldValue(record, field);
+                        return value && value.toString().toLowerCase().includes(filterValue.toLowerCase());
+                    })
+                );
+            }
+
             // ✅ Display filtered results
             this.renderEnhancedSFAFTable(filteredRecords);
             this.updateSFAFSummaryStats(filteredRecords);
