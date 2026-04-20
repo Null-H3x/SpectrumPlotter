@@ -450,8 +450,17 @@ Object.assign(DatabaseViewer.prototype, {
             });
 
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || `Import failed: HTTP ${response.status}`);
+                let errMsg = `Import failed: HTTP ${response.status}`;
+                try {
+                    const ct = response.headers.get('content-type') || '';
+                    if (ct.includes('application/json')) {
+                        const errorData = await response.json();
+                        errMsg = errorData.error || errMsg;
+                    } else if (response.status === 413) {
+                        errMsg = 'File too large — increase client_max_body_size in nginx config';
+                    }
+                } catch (_) {}
+                throw new Error(errMsg);
             }
 
             const result = await response.json();
