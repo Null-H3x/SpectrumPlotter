@@ -437,6 +437,8 @@ body {
     overflow-y: auto;
     max-height: calc(100vh - 320px);
     position: relative;
+    will-change: scroll-position;
+    transform: translateZ(0);
 }
 
 /* Custom Scrollbar */
@@ -494,7 +496,7 @@ body {
 }
 
 .data-table tbody tr {
-    transition: all 0.2s ease;
+    transition: background-color 0.1s ease;
     background: rgb(26, 26, 46);
 }
 
