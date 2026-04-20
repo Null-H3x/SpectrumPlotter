@@ -1158,6 +1158,8 @@ Object.assign(DatabaseViewer.prototype, {
         if (sfafGrid) sfafGrid.style.display = '';
         if (sfafPagination) sfafPagination.style.display = '';
         if (resultsSection) resultsSection.style.display = 'none';
+        // Reload the regular table so it's populated when query results are dismissed
+        this.loadSFAFRecords?.();
     },
 
     renderQueryResults() {
@@ -1337,7 +1339,7 @@ Object.assign(DatabaseViewer.prototype, {
         }
 
         if (totalCount) {
-            totalCount.textContent = this.currentSFAFData ? this.currentSFAFData.length : 0;
+            totalCount.textContent = this.totalDatabaseRecords || (this.currentSFAFData ? this.currentSFAFData.length : 0);
         }
     },
 

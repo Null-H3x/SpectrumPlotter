@@ -1258,6 +1258,8 @@ Object.assign(DatabaseViewer.prototype, {
                     await this.loadMarkers();
                     break;
                 case 'sfaf':
+                    // Don't reload the SFAF table while query results are being displayed
+                    if (this._queryHasRun) break;
                     await this.loadSFAFRecords();
                     break;
                 case 'irac':

@@ -268,12 +268,9 @@
         <!-- Query Results (shown after Run Query; hides SFAF grid) -->
         <div id="queryResultsSection" style="display:none;">
             <div class="results-header" style="padding:10px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(102,126,234,0.12);">
-                <h3 style="font-size:0.95rem;font-weight:600;color:#c7d2fe;display:flex;align-items:center;gap:8px;"><i class="fas fa-table"></i> Query Results</h3>
+                <h3 style="font-size:0.95rem;font-weight:600;color:#c7d2fe;display:flex;align-items:center;gap:8px;"><i class="fas fa-table"></i> Query Results — <span id="queryMatchingCount" class="stat-value" style="color:#4ade80;">0</span> of <span id="queryTotalCount" class="stat-value">0</span> records matched</h3>
                 <div style="display:flex;align-items:center;gap:16px;">
                     <div class="filter-results" style="display:flex;gap:20px;">
-                        <div class="stat-row"><span>Matching Records:</span> <span id="queryMatchingCount" class="stat-value">0</span></div>
-                        <div class="stat-row"><span>Total Records:</span> <span id="queryTotalCount" class="stat-value">0</span></div>
-                    </div>
                     <button onclick="databaseViewer.clearQueryResults()" class="btn btn-sm" title="Back to SFAF Records"><i class="fas fa-times"></i> Close Results</button>
                 </div>
             </div>
@@ -586,13 +583,13 @@
 
 <script src="/js/db_viewer_session.js?v=2"></script>
 <script src="/js/db_viewer_core.js?v=4"></script>
-<script src="/js/db_viewer_table.js?v=6"></script>
+<script src="/js/db_viewer_table.js?v=7"></script>
 <script src="/js/db_viewer_sfaf_fields.js?v=2"></script>
 <script src="/js/db_viewer_sfaf_records.js?v=2"></script>
 <script src="/js/db_viewer_validation.js?v=2"></script>
 <script src="/js/db_viewer_analytics.js?v=2"></script>
 <script src="/js/db_viewer_irac.js?v=2"></script>
-<script src="/js/db_viewer_filters.js?v=20"></script>
+<script src="/js/db_viewer_filters.js?v=21"></script>
 <script src="/js/db_viewer_views.js?v=3"></script>
 <script src="/js/db_viewer_import_export.js?v=3"></script>
 <script src="/js/db_viewer_ui.js?v=2"></script>
