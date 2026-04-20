@@ -1403,22 +1403,25 @@ Object.assign(DatabaseViewer.prototype, {
 
             console.log(`📊 Found ${sfafData.sfafs.length} SFAF records, loading markers...`);
 
-            // Load markers (may be empty for Pool Assignments)
-            let markersMap = new Map();
-            try {
-                const markersResponse = await fetch('/api/markers');
-                if (markersResponse.ok) {
-                    const markersData = await markersResponse.json();
-                    if (markersData.success && markersData.markers) {
-                        markersData.markers.forEach(marker => {
-                            markersMap.set(marker.id, marker);
-                        });
-                        console.log(`📊 Loaded ${markersMap.size} markers`);
+            // Load markers once and cache — skip re-fetch on pagination
+            if (!this._markersMap) {
+                this._markersMap = new Map();
+                try {
+                    const markersResponse = await fetch('/api/markers');
+                    if (markersResponse.ok) {
+                        const markersData = await markersResponse.json();
+                        if (markersData.success && markersData.markers) {
+                            markersData.markers.forEach(marker => {
+                                this._markersMap.set(marker.id, marker);
+                            });
+                            console.log(`📊 Loaded ${this._markersMap.size} markers (cached)`);
+                        }
                     }
+                } catch (markerError) {
+                    console.warn('⚠️ Failed to load markers:', markerError);
                 }
-            } catch (markerError) {
-                console.warn('⚠️ Failed to load markers, continuing with SFAF-only records:', markerError);
             }
+            const markersMap = this._markersMap;
 
             // ✅ ENHANCED: Process SFAF records (with or without markers)
             const enhancedRecords = [];
