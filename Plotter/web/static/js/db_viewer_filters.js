@@ -1256,8 +1256,7 @@ Object.assign(DatabaseViewer.prototype, {
     _prefetchAllRecordsInBackground() {
         const total = this.totalDatabaseRecords || 0;
         if (this._prefetchInProgress) return;
-        // Use _allRecordsCache (not currentSFAFData) so page changes don't retrigger prefetch
-        if (this._allRecordsCache && this._allRecordsCache.length >= total) return;
+        if ((this.currentSFAFData || []).length >= total) return;
         if (total > 10000) {
             console.log(`ℹ️ ${total} records — skipping background prefetch, server-side queries only`);
             return;
@@ -1265,7 +1264,7 @@ Object.assign(DatabaseViewer.prototype, {
         this._prefetchInProgress = true;
         this._fetchAllSFAFRecords()
             .then(records => {
-                this._allRecordsCache = records;
+                this.currentSFAFData = records;
                 console.log(`✅ Background prefetch complete: ${records.length} records cached`);
             })
             .catch(e => console.warn('Background prefetch failed (non-critical):', e))
