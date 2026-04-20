@@ -1155,11 +1155,18 @@ Object.assign(DatabaseViewer.prototype, {
         const sfafGrid  = document.getElementById('sfafDataGrid');
         const sfafPagination = document.querySelector('#sfaf-tab .pagination');
         const resultsSection = document.getElementById('queryResultsSection');
+        const historyPanel = document.getElementById('queryHistoryPanel');
         if (sfafGrid) sfafGrid.style.display = '';
         if (sfafPagination) sfafPagination.style.display = '';
         if (resultsSection) resultsSection.style.display = 'none';
-        // Reload the regular table so it's populated when query results are dismissed
+        if (historyPanel) historyPanel.style.display = 'none';
         this.loadSFAFRecords?.();
+    },
+
+    toggleQueryHistory() {
+        const panel = document.getElementById('queryHistoryPanel');
+        if (!panel) return;
+        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
     },
 
     renderQueryResults() {
@@ -1168,6 +1175,19 @@ Object.assign(DatabaseViewer.prototype, {
         const emptyState = document.getElementById('queryEmptyState');
         const sfafGrid = document.getElementById('sfafDataGrid');
         const sfafPagination = document.querySelector('#sfaf-tab .pagination');
+
+        // Show condition summary so the user can verify what was filtered
+        const summaryEl = document.getElementById('queryConditionsSummary');
+        if (summaryEl && this.queryConditions && this.queryConditions.length > 0) {
+            const parts = this.queryConditions
+                .filter(c => c.enabled && c.value)
+                .map((c, i) => {
+                    const connector = i > 0 ? `<strong style="color:#f59e0b">${(c.connector || 'and').toUpperCase()}</strong> ` : '';
+                    const neg = c.negate ? 'NOT ' : '';
+                    return `${connector}${neg}${c.field} ${c.operator} "${c.value}"`;
+                });
+            summaryEl.innerHTML = parts.length ? `<i class="fas fa-filter"></i> ${parts.join(' ')}` : '';
+        }
 
         if (!this.queryResults || this.queryResults.length === 0) {
             if (resultsSection) resultsSection.style.display = 'block';
