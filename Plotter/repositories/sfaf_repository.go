@@ -559,6 +559,7 @@ func (r *SFAFRepository) GetPaginated(offset, limit int) ([]*models.SFAF, error)
 			&sfaf.Field901, &sfaf.Field903, &sfaf.Field904, &sfaf.Field905, &sfaf.Field906, &sfaf.Field907, &sfaf.Field910, &sfaf.Field911, &sfaf.Field924, &sfaf.Field926, &sfaf.Field927, &sfaf.Field928,
 			&sfaf.Field952, &sfaf.Field953, &sfaf.Field956, &sfaf.Field957, &sfaf.Field958, &sfaf.Field959, &sfaf.Field963, &sfaf.Field964, &sfaf.Field965,
 			&sfaf.Field982, &sfaf.Field983, &sfaf.Field984, &sfaf.Field985, &sfaf.Field986, &sfaf.Field987, &sfaf.Field988, &sfaf.Field989, &sfaf.Field990, &sfaf.Field991, &sfaf.Field992, &sfaf.Field993, &sfaf.Field994, &sfaf.Field995, &sfaf.Field996, &sfaf.Field997, &sfaf.Field998, &sfaf.Field999,
+			&sfaf.SFAFRecordType,
 		)
 
 		if err != nil {
@@ -803,6 +804,7 @@ func (r *SFAFRepository) QueryFiltered(conditions []models.QueryCondition, sortF
 			&sfaf.Field901, &sfaf.Field903, &sfaf.Field904, &sfaf.Field905, &sfaf.Field906, &sfaf.Field907, &sfaf.Field910, &sfaf.Field911, &sfaf.Field924, &sfaf.Field926, &sfaf.Field927, &sfaf.Field928,
 			&sfaf.Field952, &sfaf.Field953, &sfaf.Field956, &sfaf.Field957, &sfaf.Field958, &sfaf.Field959, &sfaf.Field963, &sfaf.Field964, &sfaf.Field965,
 			&sfaf.Field982, &sfaf.Field983, &sfaf.Field984, &sfaf.Field985, &sfaf.Field986, &sfaf.Field987, &sfaf.Field988, &sfaf.Field989, &sfaf.Field990, &sfaf.Field991, &sfaf.Field992, &sfaf.Field993, &sfaf.Field994, &sfaf.Field995, &sfaf.Field996, &sfaf.Field997, &sfaf.Field998, &sfaf.Field999,
+			&sfaf.SFAFRecordType,
 		)
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to scan query result: %w", err)
