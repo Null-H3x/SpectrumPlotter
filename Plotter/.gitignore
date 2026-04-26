@@ -67,6 +67,10 @@ scripts/deploy-to-ec2.sh
 *.xlsm
 *.pdf
 *.docx
+*.csv
+
+# Seed Files (ignore until corrected)
+seed*
 
 # Claude workspace
 .claude/
