@@ -539,9 +539,9 @@ async function loadAccountRequests() {
                         <div class="user-avatar"><i class="fas fa-user-clock"></i></div>
                         <div>
                             <strong>${escHtml(r.username)}</strong>
-                            <small>${escHtml(r.full_name)}</small>
-                            <small style="color:var(--text-muted)">${escHtml(r.email)}</small>
-                            ${r.phone ? `<small style="color:var(--text-muted)">${escHtml(r.phone)}</small>` : ''}
+                            <small style="display:block">${escHtml(r.full_name)}</small>
+                            <small style="display:block;color:var(--text-muted)"><span style="opacity:0.6">Email:</span> ${escHtml(r.email)}</small>
+                            ${r.phone ? r.phone.split(' | ').map(p => `<small style="display:block;color:var(--text-muted)">${escHtml(p)}</small>`).join('') : ''}
                         </div>
                     </div>
                 </td>
