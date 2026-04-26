@@ -1269,6 +1269,22 @@ func (r *FrequencyRepository) GetPublicUnits(installationID string) ([]PublicUni
 	return units, err
 }
 
+// GetPublicISMUnits returns all active ISM-type units (spectrum offices) for the
+// account-request form's Default Spectrum Office dropdown.
+func (r *FrequencyRepository) GetPublicISMUnits() ([]PublicUnit, error) {
+	var units []PublicUnit
+	err := r.db.Select(&units, `
+		SELECT id::text, name, unit_code,
+		       COALESCE(organization, '') AS organization
+		FROM units
+		WHERE is_active = true AND unit_type = 'ISM'
+		ORDER BY name`)
+	if units == nil {
+		units = []PublicUnit{}
+	}
+	return units, err
+}
+
 // ── Control Numbers (702) ─────────────────────────────────────────────────────
 
 func (r *FrequencyRepository) GetControlNumbers() ([]models.ControlNumber, error) {

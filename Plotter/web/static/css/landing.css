@@ -1004,3 +1004,46 @@ textarea.form-input {
     color: #f87171;
     border: 1px solid rgba(220,38,38,0.3);
 }
+
+/* ── Searchable Select ── */
+.ss-wrap {
+    position: relative;
+}
+.ss-native {
+    display: none !important;
+}
+.ss-input {
+    width: 100%;
+    cursor: pointer;
+}
+.ss-input::placeholder {
+    color: #64748b;
+    font-style: italic;
+}
+.ss-list {
+    display: none;
+    position: absolute;
+    top: calc(100% + 2px);
+    left: 0;
+    right: 0;
+    background: #0f0f1e;
+    border: 1px solid rgba(102,126,234,0.35);
+    border-radius: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 9999;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.55);
+}
+.ss-list::-webkit-scrollbar { width: 5px; }
+.ss-list::-webkit-scrollbar-thumb { background: rgba(102,126,234,.3); border-radius: 3px; }
+.ss-item {
+    padding: 9px 14px;
+    cursor: pointer;
+    color: #cbd5e1;
+    font-size: 0.9rem;
+    transition: background .1s, color .1s;
+}
+.ss-item:hover { background: rgba(102,126,234,0.15); color: #a78bfa; }
+.ss-item.ss-active { background: rgba(102,126,234,0.22); color: #a78bfa; }
+.ss-placeholder { color: #475569; font-style: italic; }
+.ss-empty { padding: 9px 14px; color: #475569; font-style: italic; font-size: 0.85rem; }

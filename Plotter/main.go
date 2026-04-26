@@ -283,6 +283,16 @@ func main() {
 				}
 				c.JSON(http.StatusOK, gin.H{"units": units})
 			})
+
+			// Public: list active ISM spectrum offices for the Default Spectrum Office dropdown.
+			auth.GET("/public-ism-units", func(c *gin.Context) {
+				units, err := frequencyRepo.GetPublicISMUnits()
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load spectrum offices"})
+					return
+				}
+				c.JSON(http.StatusOK, gin.H{"units": units})
+			})
 		}
 
 		// All remaining API routes require a valid session

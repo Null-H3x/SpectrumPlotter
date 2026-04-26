@@ -1,7 +1,7 @@
 User Accounts 
 
 - No exchange needed, data is exchanged in real time.
-
+- login name should be case agnostic
 - Add AOI for database sync
     - Options for region or polygon
     - Leave option open for full database unless this causes issues
@@ -78,6 +78,13 @@ Add JRFL functionality
 Add FAS Agenda Functionality
 Add Compliance Checks
 Add Alottment/Channeling Plans
+
+Status Log
+- Add bulk reading of status logs
+
+Rejection
+- Rejection function to require user to select who record is rejected to.
+- 
 
 Operations page
 - Separate from Frequency Modules completely

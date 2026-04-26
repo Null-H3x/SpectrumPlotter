@@ -26,13 +26,13 @@ func (r *AccountRequestRepository) Create(req *models.AccountRequest) error {
 
 	query := `
 		INSERT INTO account_requests
-			(id, username, email, full_name, organization, unified_command, unit, phone, justification, requested_role, unit_id, requested_unit_name, installation_id, status, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+			(id, username, email, full_name, organization, unified_command, unit, phone, justification, requested_role, unit_id, requested_unit_name, installation_id, default_spectrum_office_id, status, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
 		RETURNING id`
 	return r.db.QueryRow(query,
 		req.ID, req.Username, req.Email, req.FullName, req.Organization, req.UnifiedCommand,
 		req.Unit, req.Phone, req.Justification, req.RequestedRole,
-		req.UnitID, req.RequestedUnitName, req.InstallationID,
+		req.UnitID, req.RequestedUnitName, req.InstallationID, req.DefaultSpectrumOfficeID,
 		req.Status, req.CreatedAt, req.UpdatedAt,
 	).Scan(&req.ID)
 }
@@ -42,11 +42,21 @@ func (r *AccountRequestRepository) List(status string) ([]*models.AccountRequest
 	var query string
 	var args []interface{}
 
+	base := `
+		SELECT ar.*,
+		       u.name   AS unit_name,
+		       i.name   AS installation_name,
+		       smo.name AS spectrum_office_name
+		FROM account_requests ar
+		LEFT JOIN units         u   ON u.id   = ar.unit_id
+		LEFT JOIN installations i   ON i.id   = ar.installation_id
+		LEFT JOIN units         smo ON smo.id = ar.default_spectrum_office_id`
+
 	if status != "" {
-		query = `SELECT * FROM account_requests WHERE status = $1 ORDER BY created_at DESC`
+		query = base + ` WHERE ar.status = $1 ORDER BY ar.created_at DESC`
 		args = []interface{}{status}
 	} else {
-		query = `SELECT * FROM account_requests ORDER BY created_at DESC`
+		query = base + ` ORDER BY ar.created_at DESC`
 	}
 
 	err := r.db.Select(&reqs, query, args...)

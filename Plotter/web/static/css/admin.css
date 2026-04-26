@@ -499,10 +499,9 @@ body {
 
 /* ── Request table ── */
 .justification-cell {
-    max-width: 240px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    max-width: 280px;
+    white-space: normal;
+    word-break: break-word;
     color: var(--text-muted);
     font-size: 0.85rem;
 }

@@ -132,23 +132,7 @@ function getCountryName(numericId) {
                 style: { color:'#000', weight:1.5, opacity:0.85, fill:false }
             }).addTo(borderLayer);
 
-            // Transparent click-target polygons
-            const features = topojson.feature(topo, topo.objects.countries);
-            L.geoJSON(features, {
-                style: { fillOpacity:0, color:'transparent', weight:0 },
-                onEachFeature(feat, lyr) {
-                    lyr.on('click', e => {
-                        L.DomEvent.stopPropagation(e);
-                        openCountrySidebar(getCountryName(feat.id));
-                    });
-                    lyr.on('mouseover', function() {
-                        this.setStyle({ fillColor:'#667eea', fillOpacity:0.12 });
-                    });
-                    lyr.on('mouseout', function() {
-                        this.setStyle({ fillOpacity:0 });
-                    });
-                }
-            }).addTo(map);
+            // No click-target polygons — country capabilities accessed via sidebar
         })
         .catch(e => console.warn('Country borders unavailable:', e));
 })();
@@ -282,10 +266,26 @@ async function csDelete(id) {
     } catch(e) { alert('Delete failed: ' + e.message); }
 }
 
-map.on('click', () => {
-    if (document.getElementById('countrySidebar')?.classList.contains('cs-open'))
-        closeCountrySidebar();
-});
+// ==================== Country Capabilities Sidebar Picker ====================
+
+(function initCountryPicker() {
+    const sel = document.getElementById('countryCapSelect');
+    const btn = document.getElementById('openCountryCapBtn');
+    if (!sel || !btn) return;
+
+    const sorted = Object.entries(COUNTRY_NAMES).sort((a, b) => a[1].localeCompare(b[1]));
+    sorted.forEach(([, name]) => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        sel.appendChild(opt);
+    });
+
+    btn.addEventListener('click', () => {
+        const country = sel.value;
+        if (country) openCountrySidebar(country);
+    });
+})();
 
 // ==================== Marker Icons ====================
 

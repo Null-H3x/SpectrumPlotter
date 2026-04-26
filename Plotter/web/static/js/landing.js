@@ -478,6 +478,9 @@
         performLogin(username, password, rememberMe);
     };
 
+    // Expose notification globally for use by account request form
+    window.showLandingNotification = showNotification;
+
     // Initialize on DOM ready
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
@@ -489,87 +492,152 @@
 
 // ─── Request Account Modal (global scope for onclick handlers) ────────────────
 
+// ── Searchable Select ──────────────────────────────────────────────────────────
+function makeSearchable(selectId) {
+    const sel = document.getElementById(selectId);
+    if (!sel || sel._ssInit) return;
+    sel._ssInit = true;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'ss-wrap';
+    sel.parentNode.insertBefore(wrap, sel);
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'form-input ss-input';
+    input.autocomplete = 'off';
+
+    const list = document.createElement('div');
+    list.className = 'ss-list';
+
+    wrap.appendChild(input);
+    wrap.appendChild(list);
+    wrap.appendChild(sel);
+
+    function placeholder() {
+        return Array.from(sel.options).find(o => !o.value)?.text || '— Select —';
+    }
+
+    function syncInput() {
+        const opt = Array.from(sel.options).find(o => o.value === sel.value && o.value !== '');
+        input.value = opt ? opt.text : '';
+        input.placeholder = placeholder();
+    }
+
+    function renderList(filter) {
+        const f = (filter || '').toLowerCase().trim();
+        list.innerHTML = '';
+        Array.from(sel.options).forEach(opt => {
+            if (!opt.value) {
+                if (!f) {
+                    const d = makeItem('', opt.text, true);
+                    list.appendChild(d);
+                }
+                return;
+            }
+            if (!f || opt.text.toLowerCase().includes(f)) {
+                list.appendChild(makeItem(opt.value, opt.text, false, opt.value === sel.value));
+            }
+        });
+        if (!list.children.length) {
+            const d = document.createElement('div');
+            d.className = 'ss-empty';
+            d.textContent = 'No matches';
+            list.appendChild(d);
+        }
+    }
+
+    function makeItem(value, text, isPlaceholder, isActive) {
+        const d = document.createElement('div');
+        d.className = 'ss-item' + (isPlaceholder ? ' ss-placeholder' : '') + (isActive ? ' ss-active' : '');
+        d.textContent = text;
+        d.addEventListener('mousedown', e => {
+            e.preventDefault();
+            sel.value = value;
+            sel.dispatchEvent(new Event('change'));
+            syncInput();
+            list.style.display = 'none';
+        });
+        return d;
+    }
+
+    input.addEventListener('focus', () => { renderList(''); list.style.display = 'block'; input.select(); });
+    input.addEventListener('input', () => { renderList(input.value); list.style.display = 'block'; });
+    input.addEventListener('blur', () => setTimeout(() => { list.style.display = 'none'; }, 160));
+
+    // Public refresh — call after dynamic options are loaded
+    sel._ssRefresh = () => syncInput();
+
+    syncInput();
+}
+
+// ── Phone Formatting ───────────────────────────────────────────────────────────
+function sanitizeUsername(input) {
+    const pos = input.selectionStart;
+    const cleaned = input.value.toLowerCase().replace(/[^a-z0-9._-]/g, '');
+    if (input.value !== cleaned) {
+        input.value = cleaned;
+        input.setSelectionRange(Math.max(0, pos - 1), Math.max(0, pos - 1));
+    }
+}
+
+function formatDSNInput(input) {
+    const digits = input.value.replace(/\D/g, '').slice(0, 10);
+    let formatted = digits;
+    if (digits.length > 6) {
+        formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6);
+    } else if (digits.length > 3) {
+        formatted = digits.slice(0,3) + '-' + digits.slice(3);
+    }
+    input.value = formatted;
+}
+
+function formatCommInput(input) {
+    const digits = input.value.replace(/\D/g, '').slice(0, 10);
+    let formatted = digits;
+    if (digits.length > 6) {
+        formatted = '(' + digits.slice(0,3) + ') ' + digits.slice(3,6) + '-' + digits.slice(6);
+    } else if (digits.length > 3) {
+        formatted = '(' + digits.slice(0,3) + ') ' + digits.slice(3);
+    } else if (digits.length > 0) {
+        formatted = '(' + digits;
+    }
+    input.value = formatted;
+}
+
+// ── Data loaders ───────────────────────────────────────────────────────────────
 async function openRequestModal() {
     document.getElementById('requestModal').style.display = 'flex';
     document.getElementById('requestAccountForm').reset();
     document.getElementById('requestResult').style.display = 'none';
     document.getElementById('newUnitSection').style.display = 'none';
-    await loadInstallationsForDropdown();
-    loadUnitsForDropdown(null); // reset units — user must pick installation first
-}
 
-async function loadUnitsForDropdown(installationId) {
-    const sel = document.getElementById('reqUnitSelect');
-    if (!sel) return;
+    // Clear any previously-typed phone / username
+    ['reqPhoneDSN','reqPhoneComm','reqUsername'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
 
-    if (!installationId) {
-        sel.innerHTML = '<option value="">— Select an installation first —</option>';
-        sel.disabled = true;
-        return;
-    }
+    await Promise.all([
+        loadInstallationsForDropdown(),
+        loadSpectrumOfficesForDropdown(),
+    ]);
+    loadUnitsForDropdown(null);
 
-    sel.innerHTML = '<option value="" disabled selected>Loading units...</option>';
-    sel.disabled = true;
-
-    try {
-        const res = await fetch('/api/auth/public-units?installation_id=' + encodeURIComponent(installationId));
-        if (!res.ok) throw new Error('Server returned ' + res.status);
-        const data = await res.json();
-        const units = data.units || [];
-
-        sel.innerHTML = '<option value="">— Select your unit —</option>';
-        units.forEach(u => {
-            const opt = document.createElement('option');
-            opt.value = u.id;
-            opt.textContent = u.unit_code + (u.organization ? ' — ' + u.organization : '');
-            sel.appendChild(opt);
-        });
-
-        if (units.length === 0) {
-            const noneOpt = document.createElement('option');
-            noneOpt.value = '';
-            noneOpt.disabled = true;
-            noneOpt.textContent = '— No units at this installation yet —';
-            sel.appendChild(noneOpt);
-        }
-
-        const requestOpt = document.createElement('option');
-        requestOpt.value = '__new__';
-        requestOpt.textContent = '+ Request New Unit (not listed above)';
-        sel.appendChild(requestOpt);
-
-        sel.disabled = false;
-    } catch (err) {
-        console.error('Failed to load units:', err);
-        sel.innerHTML = '<option value="__new__">⚠ Could not load units — enter unit name below</option>';
-        sel.disabled = false;
-        document.getElementById('newUnitSection').style.display = 'block';
-        document.getElementById('reqNewUnitName').required = true;
-    }
-}
-
-function handleInstallationSelectChange() {
-    const instId = document.getElementById('reqInstallationSelect').value;
-    // Reset unit when installation changes
-    document.getElementById('reqUnitSelect').value = '';
-    document.getElementById('newUnitSection').style.display = 'none';
-    document.getElementById('reqNewUnitName').required = false;
-    loadUnitsForDropdown(instId);
+    // Initialize searchable selects after options are loaded
+    ['reqOrganization','reqUnifiedCommand','reqInstallationSelect','reqUnitSelect','reqSpectrumOffice','reqRole']
+        .forEach(makeSearchable);
 }
 
 async function loadInstallationsForDropdown() {
     const sel = document.getElementById('reqInstallationSelect');
     if (!sel) return;
-
-    sel.innerHTML = '<option value="" disabled selected>Loading installations...</option>';
+    sel.innerHTML = '<option value="">Loading installations...</option>';
     sel.disabled = true;
-
     try {
         const res = await fetch('/api/auth/public-installations');
         if (!res.ok) throw new Error('Server returned ' + res.status);
-        const data = await res.json();
-        const list = data.installations || [];
-
+        const list = (await res.json()).installations || [];
         sel.innerHTML = '<option value="">— Select your installation —</option>';
         list.forEach(inst => {
             const opt = document.createElement('option');
@@ -577,21 +645,91 @@ async function loadInstallationsForDropdown() {
             opt.textContent = inst.name + (inst.code ? ' (' + inst.code + ')' : '');
             sel.appendChild(opt);
         });
-
-        if (list.length === 0) {
-            const noneOpt = document.createElement('option');
-            noneOpt.value = '';
-            noneOpt.disabled = true;
-            noneOpt.textContent = '— No installations configured yet —';
-            sel.appendChild(noneOpt);
+        if (!list.length) {
+            sel.innerHTML += '<option value="" disabled>— No installations configured —</option>';
         }
-
         sel.disabled = false;
     } catch (err) {
         console.error('Failed to load installations:', err);
         sel.innerHTML = '<option value="">⚠ Could not load installations</option>';
         sel.disabled = false;
     }
+}
+
+async function loadSpectrumOfficesForDropdown() {
+    const sel = document.getElementById('reqSpectrumOffice');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">Loading spectrum offices...</option>';
+    sel.disabled = true;
+    try {
+        const res = await fetch('/api/auth/public-ism-units');
+        if (!res.ok) throw new Error('Server returned ' + res.status);
+        const units = (await res.json()).units || [];
+        sel.innerHTML = '<option value="">— Select your spectrum office —</option>';
+        units.forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u.id;
+            opt.textContent = u.name + (u.unit_code ? ' (' + u.unit_code + ')' : '');
+            sel.appendChild(opt);
+        });
+        if (!units.length) {
+            sel.innerHTML += '<option value="" disabled>— No spectrum offices configured —</option>';
+        }
+        sel.disabled = false;
+    } catch (err) {
+        console.error('Failed to load spectrum offices:', err);
+        sel.innerHTML = '<option value="">⚠ Could not load spectrum offices</option>';
+        sel.disabled = false;
+    }
+    if (sel._ssRefresh) sel._ssRefresh();
+}
+
+async function loadUnitsForDropdown(installationId) {
+    const sel = document.getElementById('reqUnitSelect');
+    if (!sel) return;
+    if (!installationId) {
+        sel.innerHTML = '<option value="">— Select an installation first —</option>';
+        sel.disabled = true;
+        if (sel._ssRefresh) sel._ssRefresh();
+        return;
+    }
+    sel.innerHTML = '<option value="" disabled selected>Loading units...</option>';
+    sel.disabled = true;
+    try {
+        const res = await fetch('/api/auth/public-units?installation_id=' + encodeURIComponent(installationId));
+        if (!res.ok) throw new Error('Server returned ' + res.status);
+        const units = (await res.json()).units || [];
+        sel.innerHTML = '<option value="">— Select your unit —</option>';
+        units.forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u.id;
+            opt.textContent = u.name + (u.unit_code ? ' (' + u.unit_code + ')' : '');
+            sel.appendChild(opt);
+        });
+        if (!units.length) {
+            sel.innerHTML += '<option value="" disabled>— No units at this installation —</option>';
+        }
+        const reqOpt = document.createElement('option');
+        reqOpt.value = '__new__';
+        reqOpt.textContent = '+ Request New Unit (not listed above)';
+        sel.appendChild(reqOpt);
+        sel.disabled = false;
+    } catch (err) {
+        console.error('Failed to load units:', err);
+        sel.innerHTML = '<option value="__new__">⚠ Could not load units — enter name below</option>';
+        sel.disabled = false;
+        document.getElementById('newUnitSection').style.display = 'block';
+        document.getElementById('reqNewUnitName').required = true;
+    }
+    if (sel._ssRefresh) sel._ssRefresh();
+}
+
+function handleInstallationSelectChange() {
+    const instId = document.getElementById('reqInstallationSelect').value;
+    document.getElementById('reqUnitSelect').value = '';
+    document.getElementById('newUnitSection').style.display = 'none';
+    document.getElementById('reqNewUnitName').required = false;
+    loadUnitsForDropdown(instId);
 }
 
 function handleUnitSelectChange() {
@@ -614,69 +752,69 @@ function closeRequestModal() {
 async function handleRequestAccount(e) {
     e.preventDefault();
     const btn = document.getElementById('requestSubmitBtn');
-    const result = document.getElementById('requestResult');
+    const resultEl = document.getElementById('requestResult');
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
 
     const unitSelectVal = document.getElementById('reqUnitSelect').value;
     const isNewUnit = unitSelectVal === '__new__';
 
-    if (isNewUnit) {
-        const newUnitName = document.getElementById('reqNewUnitName').value.trim();
-        if (!newUnitName) {
-            const result = document.getElementById('requestResult');
-            result.className = 'request-result request-error';
-            result.innerHTML = '<i class="fas fa-exclamation-circle"></i> Please enter the name of the unit you are requesting.';
-            result.style.display = 'block';
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit Request';
-            return;
-        }
-    } else if (!unitSelectVal) {
-        const result = document.getElementById('requestResult');
-        result.className = 'request-result request-error';
-        result.innerHTML = '<i class="fas fa-exclamation-circle"></i> Please select a unit.';
-        result.style.display = 'block';
+    function showFormError(msg) {
+        resultEl.className = 'request-result request-error';
+        resultEl.innerHTML = '<i class="fas fa-exclamation-circle"></i> ' + msg;
+        resultEl.style.display = 'block';
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit Request';
-        return;
     }
 
-    const newUnitName = isNewUnit ? document.getElementById('reqNewUnitName').value.trim() : '';
-    const newUnitCode = isNewUnit ? document.getElementById('reqNewUnitCode').value.trim() : '';
+    if (isNewUnit) {
+        if (!document.getElementById('reqNewUnitName').value.trim())
+            return showFormError('Please enter the name of the unit you are requesting.');
+    } else if (!unitSelectVal) {
+        return showFormError('Please select a unit.');
+    }
+
+    // Validate phone lengths (10 digits required if filled in)
+    const dsnRaw  = document.getElementById('reqPhoneDSN').value.replace(/\D/g,'');
+    const commRaw = document.getElementById('reqPhoneComm').value.replace(/\D/g,'');
+    if (dsnRaw && dsnRaw.length !== 10)  return showFormError('DSN phone must be exactly 10 digits.');
+    if (commRaw && commRaw.length !== 10) return showFormError('Commercial phone must be exactly 10 digits.');
 
     const firstName = document.getElementById('reqFirstName').value.trim();
     const mi        = document.getElementById('reqMiddleInitial').value.trim().toUpperCase();
     const lastName  = document.getElementById('reqLastName').value.trim();
     const fullName  = [firstName, mi ? mi + '.' : '', lastName].filter(Boolean).join(' ');
 
-    const dsnPhone  = document.getElementById('reqPhoneDSN').value.trim();
-    const commPhone = document.getElementById('reqPhoneComm').value.trim();
-    const phone     = [dsnPhone ? 'DSN: ' + dsnPhone : '', commPhone ? 'Comm: ' + commPhone : ''].filter(Boolean).join(' | ');
+    const dsnFormatted  = dsnRaw  ? dsnRaw.slice(0,3)+'-'+dsnRaw.slice(3,6)+'-'+dsnRaw.slice(6) : '';
+    const commFormatted = commRaw ? '('+commRaw.slice(0,3)+') '+commRaw.slice(3,6)+'-'+commRaw.slice(6) : '';
+    const phone = [dsnFormatted ? 'DSN: '+dsnFormatted : '', commFormatted ? 'Comm: '+commFormatted : ''].filter(Boolean).join(' | ');
+
+    const newUnitName = isNewUnit ? document.getElementById('reqNewUnitName').value.trim() : '';
+    const newUnitCode = isNewUnit ? document.getElementById('reqNewUnitCode').value.trim() : '';
 
     const payload = {
-        username:         document.getElementById('reqUsername').value.trim(),
-        full_name:        fullName,
-        email:            document.getElementById('reqEmail').value.trim(),
-        phone:            phone,
-        organization:     document.getElementById('reqOrganization').value,
-        unified_command:  document.getElementById('reqUnifiedCommand').value,
-        unit:             isNewUnit ? (newUnitCode || newUnitName) : '',
-        requested_role:   document.getElementById('reqRole').value,
-        justification:    document.getElementById('reqJustification').value.trim(),
+        username:        document.getElementById('reqUsername').value.trim().toLowerCase(),
+        full_name:       fullName,
+        email:           document.getElementById('reqEmail').value.trim(),
+        phone:           phone,
+        organization:    document.getElementById('reqOrganization').value,
+        unified_command: document.getElementById('reqUnifiedCommand').value,
+        unit:            isNewUnit ? (newUnitCode || newUnitName) : '',
+        requested_role:  document.getElementById('reqRole').value,
+        justification:   document.getElementById('reqJustification').value.trim(),
     };
 
     if (isNewUnit) {
-        const fullNewUnitName = newUnitCode ? `${newUnitName} (${newUnitCode})` : newUnitName;
-        payload.requested_unit_name = fullNewUnitName;
+        payload.requested_unit_name = newUnitCode ? `${newUnitName} (${newUnitCode})` : newUnitName;
     } else {
         payload.unit_id = unitSelectVal;
     }
 
     const installationId = document.getElementById('reqInstallationSelect').value;
-    if (installationId) {
-        payload.installation_id = installationId;
-    }
+    if (installationId) payload.installation_id = installationId;
+
+    const spectrumOfficeId = document.getElementById('reqSpectrumOffice').value;
+    if (spectrumOfficeId) payload.default_spectrum_office_id = spectrumOfficeId;
 
     try {
         const res = await fetch('/api/auth/request-account', {
@@ -685,21 +823,15 @@ async function handleRequestAccount(e) {
             body: JSON.stringify(payload),
         });
         const data = await res.json();
-
         if (res.ok) {
-            result.className = 'request-result request-success';
-            result.innerHTML = '<i class="fas fa-check-circle"></i> ' + data.message;
-            result.style.display = 'block';
-            document.getElementById('requestAccountForm').reset();
-            btn.innerHTML = '<i class="fas fa-check"></i> Submitted';
+            closeRequestModal();
+            if (window.showLandingNotification) {
+                window.showLandingNotification('Account request submitted! An administrator will review your request.', 'success');
+            }
         } else {
             throw new Error(data.error || 'Submission failed');
         }
     } catch (err) {
-        result.className = 'request-result request-error';
-        result.innerHTML = '<i class="fas fa-exclamation-circle"></i> ' + err.message;
-        result.style.display = 'block';
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit Request';
+        showFormError(err.message);
     }
 }

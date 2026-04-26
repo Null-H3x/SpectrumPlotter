@@ -94,6 +94,11 @@ type AccountRequest struct {
 	RequestedUnitName *string    `json:"requested_unit_name,omitempty" db:"requested_unit_name"`
 	InstallationID    *uuid.UUID `json:"installation_id,omitempty" db:"installation_id"`
 	Status            string     `json:"status" db:"status"` // pending, approved, denied
+	DefaultSpectrumOfficeID *uuid.UUID `json:"default_spectrum_office_id,omitempty" db:"default_spectrum_office_id"`
+	// Joined fields (populated by List query)
+	UnitName                *string `json:"unit_name,omitempty" db:"unit_name"`
+	InstallationName        *string `json:"installation_name,omitempty" db:"installation_name"`
+	SpectrumOfficeName      *string `json:"spectrum_office_name,omitempty" db:"spectrum_office_name"`
 	ReviewedBy        *uuid.UUID `json:"reviewed_by,omitempty" db:"reviewed_by"`
 	ReviewNotes   *string    `json:"review_notes,omitempty" db:"review_notes"`
 	CreatedAt     time.Time  `json:"created_at" db:"created_at"`

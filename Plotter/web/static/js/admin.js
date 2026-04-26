@@ -540,19 +540,21 @@ async function loadAccountRequests() {
                         <div>
                             <strong>${escHtml(r.username)}</strong>
                             <small>${escHtml(r.full_name)}</small>
-                            <small style="color:var(--text-muted)">${escHtml(r.email)}${r.phone ? ' · ' + escHtml(r.phone) : ''}</small>
+                            <small style="color:var(--text-muted)">${escHtml(r.email)}</small>
+                            ${r.phone ? `<small style="color:var(--text-muted)">${escHtml(r.phone)}</small>` : ''}
                         </div>
                     </div>
                 </td>
                 <td>
                     ${escHtml(r.organization || '—')}
                     ${r.unified_command ? `<br><small style="color:var(--text-muted)"><i class="fas fa-globe"></i> ${escHtml(r.unified_command)}</small>` : ''}
-                    ${r.unit_id ? `<br><small style="color:var(--accent)"><i class="fas fa-flag"></i> ${escHtml(r.unit || 'Unit selected')}</small>` : ''}
+                    ${r.unit_id ? `<br><small style="color:var(--accent)"><i class="fas fa-flag"></i> ${escHtml(r.unit_name || r.unit || 'Unit selected')}</small>` : ''}
                     ${r.requested_unit_name ? `<br><small style="color:#ffa726"><i class="fas fa-plus-circle"></i> New: ${escHtml(r.requested_unit_name)}</small>` : ''}
-                    ${r.installation_id ? `<br><small style="color:#80cbc4"><i class="fas fa-map-marker-alt"></i> Installation assigned</small>` : ''}
+                    ${r.installation_id ? `<br><small style="color:#80cbc4"><i class="fas fa-map-marker-alt"></i> ${escHtml(r.installation_name || 'Installation assigned')}</small>` : ''}
+                    ${r.default_spectrum_office_id ? `<br><small style="color:#c084fc"><i class="fas fa-broadcast-tower"></i> 206: ${escHtml(r.spectrum_office_name || 'Spectrum office assigned')}</small>` : ''}
                 </td>
                 <td><span class="role-badge role-${r.requested_role}">${roleLabel(r.requested_role)}</span></td>
-                <td class="justification-cell">${escHtml(r.justification || '—')}</td>
+                <td class="justification-cell">${escHtml(r.justification || '—')}${r.review_notes ? `<br><small style="color:var(--text-muted);margin-top:4px;display:block"><i class="fas fa-comment-alt"></i> <em>${escHtml(r.review_notes)}</em></small>` : ''}</td>
                 <td>${formatDate(r.created_at)}</td>
                 <td><span class="status-badge status-req-${r.status}">${r.status}</span></td>
                 <td class="actions-cell">
