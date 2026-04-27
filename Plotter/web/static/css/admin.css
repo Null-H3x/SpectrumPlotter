@@ -541,7 +541,28 @@ body {
 .btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ── Wide modal (unit review) ── */
-.modal-wide { width: 820px; }
+.modal-wide { width: 860px; }
+
+/* ── Request review modal sections ── */
+.rv-section { margin-bottom: 16px; }
+.rv-section-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid var(--border);
+}
+.rv-admin-section {
+    background: rgba(100, 150, 255, 0.05);
+    border: 1px solid rgba(100, 150, 255, 0.15);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-top: 4px;
+}
+.rv-admin-section .form-row:last-child { margin-bottom: 0; }
 
 /* ── Unit review modal ── */
 .review-info-box {

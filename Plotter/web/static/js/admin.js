@@ -140,6 +140,7 @@ let editingUserId = null;
 let pendingRequestId = null;
 let selectedExistingUnitId = null;
 let unitReviewDebounceTimer = null;
+let allAdminISMUnits = [];
 
 // ─── Init ────────────────────────────────────────────────────────────────────
 
@@ -152,14 +153,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function loadAdminInstallations() {
     try {
-        const [instRes, wbRes] = await Promise.all([
+        const [instRes, wbRes, ismRes] = await Promise.all([
             fetch('/api/auth/public-installations'),
             fetch('/api/frequency/reviewers'),
+            fetch('/api/auth/public-ism-units'),
         ]);
         allAdminInstallations = instRes.ok ? (await instRes.json()).installations || [] : [];
-        // Use the full workbox objects (with id) from the new endpoint
         allAdminWorkboxes = wbRes.ok ? (await wbRes.json()).workbox_objects || [] : [];
-    } catch (_) { /* ISM dropdown will just be empty */ }
+        allAdminISMUnits = ismRes.ok ? (await ismRes.json()).units || [] : [];
+    } catch (_) { /* dropdowns will just be empty */ }
 }
 
 // ─── API ─────────────────────────────────────────────────────────────────────
@@ -613,25 +615,62 @@ function onReviewBranchChange() {
     updateReviewPayGradeDropdown(document.getElementById('rvServiceBranch').value, null);
 }
 
-function openRequestReviewModal(id) {
+function onReviewInstallationChange() {
+    loadReviewUnits(document.getElementById('rvInstallation').value, null);
+}
+
+async function loadReviewUnits(installationId, savedUnitId) {
+    const sel = document.getElementById('rvUnit');
+    if (!installationId) {
+        sel.innerHTML = '<option value="">— Select an installation first —</option>';
+        return;
+    }
+    sel.innerHTML = '<option value="">Loading units…</option>';
+    try {
+        const resp = await fetch(`/api/auth/public-units?installation_id=${installationId}`);
+        const json = await resp.json();
+        const units = json.units || [];
+        sel.innerHTML = '<option value="">— Select unit —</option>' +
+            units.map(u => {
+                const label = u.unit_code ? `${escHtml(u.name)} (${escHtml(u.unit_code)})` : escHtml(u.name);
+                return `<option value="${u.id}"${u.id === savedUnitId ? ' selected' : ''}>${label}</option>`;
+            }).join('');
+        if (savedUnitId) sel.value = savedUnitId;
+    } catch (_) {
+        sel.innerHTML = '<option value="">— Failed to load units —</option>';
+    }
+}
+
+function populateReviewInstallation(savedId) {
+    const sel = document.getElementById('rvInstallation');
+    const opts = allAdminInstallations.map(i =>
+        `<option value="${i.id}"${i.id === savedId ? ' selected' : ''}>${escHtml(i.name)}</option>`
+    ).join('');
+    sel.innerHTML = '<option value="">— None —</option>' + opts;
+    if (savedId) sel.value = savedId;
+}
+
+function populateReviewSpectrumOffice(savedId) {
+    const sel = document.getElementById('rvSpectrumOffice');
+    const opts = allAdminISMUnits.map(u =>
+        `<option value="${u.id}"${u.id === savedId ? ' selected' : ''}>${escHtml(u.name)}</option>`
+    ).join('');
+    sel.innerHTML = '<option value="">— None —</option>' + opts;
+    if (savedId) sel.value = savedId;
+}
+
+async function openRequestReviewModal(id) {
     const r = allRequests[id];
     if (!r) return;
     reviewingRequestId = id;
     reviewingUsername = r.username;
 
-    // Info banner: justification + request context
-    const infoLines = [`Submitted ${formatDate(r.created_at)} · Justification: ${r.justification || '—'}`];
-    if (r.installation_name) infoLines.push(`Installation: ${r.installation_name}`);
-    if (r.unit_name) infoLines.push(`Unit: ${r.unit_name}`);
-    else if (r.requested_unit_name) infoLines.push(`Requested new unit: ${r.requested_unit_name}`);
-    if (r.spectrum_office_name) infoLines.push(`206 Workbox requested: ${r.spectrum_office_name}`);
-    document.getElementById('rvRequestInfo').textContent = infoLines.join(' · ');
+    // Submitted info + justification
+    document.getElementById('rvSubmittedInfo').textContent =
+        `Submitted by ${r.username} on ${formatDate(r.created_at)}`;
+    document.getElementById('rvJustification').textContent = r.justification || '—';
 
-    // Username (readonly)
-    document.getElementById('rvUsername').value = r.username;
-    document.getElementById('rvTempPassword').value = '';
-
-    // Name
+    // Identity
     const parts = (r.full_name || '').trim().split(/\s+/);
     if (parts.length >= 3) {
         document.getElementById('rvFirstName').value = parts[0];
@@ -646,8 +685,6 @@ function openRequestReviewModal(id) {
         document.getElementById('rvMiddleInitial').value = '';
         document.getElementById('rvLastName').value = '';
     }
-
-    // Email
     document.getElementById('rvEmail').value = r.email || '';
 
     // Phones — parse "DSN: xxx | Comm: xxx" back into separate fields
@@ -657,17 +694,31 @@ function openRequestReviewModal(id) {
     document.getElementById('rvPhoneComm').value = commMatch ? commMatch[1].trim() : '';
     attachPhoneFormatters('rvPhoneComm', 'rvPhoneDSN');
 
-    // Organization / branch
-    document.getElementById('rvOrganization').value = '';
-    const branch = ORG_TO_BRANCH[r.organization] || '';
-    document.getElementById('rvServiceBranch').value = branch;
-    updateReviewPayGradeDropdown(branch, null);
-    updateReviewWorkboxDropdown(null);
+    // Organization
+    document.getElementById('rvOrganization').value = r.organization || '';
+    document.getElementById('rvUnifiedCommand').value = r.unified_command || '';
+
+    // Installation + Unit (cascading)
+    populateReviewInstallation(r.installation_id || null);
+    if (r.installation_id) {
+        await loadReviewUnits(r.installation_id, r.unit_id || null);
+    } else {
+        document.getElementById('rvUnit').innerHTML = '<option value="">— Select an installation first —</option>';
+    }
+
+    // Spectrum office
+    populateReviewSpectrumOffice(r.default_spectrum_office_id || null);
 
     // Role
     document.getElementById('rvRole').value = r.requested_role || 'operator';
 
-    // Notes
+    // Admin fields
+    document.getElementById('rvUsername').value = r.username;
+    document.getElementById('rvTempPassword').value = '';
+    const branch = ORG_TO_BRANCH[r.organization] || '';
+    document.getElementById('rvServiceBranch').value = branch;
+    updateReviewPayGradeDropdown(branch, null);
+    updateReviewWorkboxDropdown(null);
     document.getElementById('rvNotes').value = '';
 
     // Result area
@@ -697,21 +748,30 @@ async function submitReviewApproval() {
     const commRaw = document.getElementById('rvPhoneComm').value.replace(/\D/g, '');
     const dsnRaw  = document.getElementById('rvPhoneDSN').value.replace(/\D/g, '');
 
+    const spectrumId = document.getElementById('rvSpectrumOffice').value;
+    const spectrumName = spectrumId
+        ? (allAdminISMUnits.find(u => u.id === spectrumId)?.name || null)
+        : null;
+
     try {
         const data = await apiFetch(`/api/admin/account-requests/${reviewingRequestId}/approve`, {
             method: 'POST',
             body: JSON.stringify({
-                temp_password:  document.getElementById('rvTempPassword').value || '',
-                notes:          document.getElementById('rvNotes').value || '',
-                full_name:      fullName,
-                email:          document.getElementById('rvEmail').value,
-                organization:   document.getElementById('rvOrganization').value,
-                role:           document.getElementById('rvRole').value,
-                phone:          commRaw || null,
-                phone_dsn:      dsnRaw  || null,
-                service_branch: document.getElementById('rvServiceBranch').value || null,
-                pay_grade:      document.getElementById('rvPayGrade').value      || null,
-                workbox_id:     document.getElementById('rvWorkbox').value        || null,
+                temp_password:     document.getElementById('rvTempPassword').value || '',
+                notes:             document.getElementById('rvNotes').value || '',
+                full_name:         fullName,
+                email:             document.getElementById('rvEmail').value,
+                organization:      document.getElementById('rvOrganization').value,
+                role:              document.getElementById('rvRole').value,
+                phone:             commRaw || null,
+                phone_dsn:         dsnRaw  || null,
+                service_branch:    document.getElementById('rvServiceBranch').value || null,
+                pay_grade:         document.getElementById('rvPayGrade').value      || null,
+                workbox_id:        document.getElementById('rvWorkbox').value       || null,
+                unified_command:   document.getElementById('rvUnifiedCommand').value || null,
+                installation_id:   document.getElementById('rvInstallation').value  || null,
+                unit_id:           document.getElementById('rvUnit').value           || null,
+                default_ism_office: spectrumName,
             }),
         });
         res.className = 'approve-result approve-success';

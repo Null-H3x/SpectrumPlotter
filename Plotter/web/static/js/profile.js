@@ -192,6 +192,12 @@
         ],
     };
 
+    const ORG_TO_BRANCH = {
+        'USAF': 'Air Force', 'USSF': 'Space Force', 'USA': 'Army',
+        'USN': 'Navy', 'USMC': 'Marines', 'USCG': 'Coast Guard',
+        'Joint/DoD': 'Civilian', 'Other': 'Civilian',
+    };
+
     function updatePayGradeDropdown(selectEl, branch, savedValue) {
         if (!selectEl) return;
         const opts = PAY_GRADE_OPTIONS[branch];
@@ -339,7 +345,6 @@
             'accountUnifiedCommand',
             'accountInstallation',
             'accountUnit',
-            'accountServiceBranch',
             'accountPayGrade',
             'accountDefaultISM',
         ].forEach(id => new FilterableSelect(id));
@@ -454,15 +459,10 @@
         setSelectValue('accountUnifiedCommand', user.unified_command);
         setSelectValue('accountRole', user.role);
 
-        // Service branch + pay grade
-        if (user.service_branch) {
-            setSelectValue('accountServiceBranch', user.service_branch);
-            updatePayGradeDropdown(
-                document.getElementById('accountPayGrade'),
-                user.service_branch,
-                user.pay_grade
-            );
-            // ISM dropdown populated in populateInstallationDropdown (uses allInstallations)
+        // Pay grade — derive branch from organization code
+        const branch = ORG_TO_BRANCH[user.organization] || user.service_branch || '';
+        if (branch) {
+            updatePayGradeDropdown(document.getElementById('accountPayGrade'), branch, user.pay_grade);
         }
 
         const createdDate = user.created_at ? new Date(user.created_at) : null;
@@ -577,8 +577,9 @@
         loadUnitsForInstallation(null, null);
     };
 
-    window.onProfileBranchChange = function() {
-        const branch = document.getElementById('accountServiceBranch').value;
+    window.onProfileOrganizationChange = function() {
+        const org = document.getElementById('accountOrganization').value;
+        const branch = ORG_TO_BRANCH[org] || '';
         updatePayGradeDropdown(document.getElementById('accountPayGrade'), branch, null);
     };
 
@@ -613,7 +614,7 @@
             installation_id: installationID,
             unit_id: unitID,
             default_ism_office: document.getElementById('accountDefaultISM').value || '',
-            service_branch: document.getElementById('accountServiceBranch').value || '',
+            service_branch: ORG_TO_BRANCH[document.getElementById('accountOrganization').value] || '',
             pay_grade: document.getElementById('accountPayGrade').value || '',
         };
 

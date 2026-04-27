@@ -353,15 +353,19 @@ func (h *AdminHandler) ApproveAccountRequest(c *gin.Context) {
 		NewUnitCode    string     `json:"new_unit_code"`
 		OverrideUnitID *uuid.UUID `json:"override_unit_id"`
 		// Review-form overrides
-		FullName      string  `json:"full_name"`
-		Email         string  `json:"email"`
-		Organization  string  `json:"organization"`
-		Role          string  `json:"role"`
-		Phone         *string `json:"phone"`
-		PhoneDSN      *string `json:"phone_dsn"`
-		ServiceBranch *string `json:"service_branch"`
-		PayGrade      *string `json:"pay_grade"`
-		WorkboxID     *string `json:"workbox_id"`
+		FullName         string  `json:"full_name"`
+		Email            string  `json:"email"`
+		Organization     string  `json:"organization"`
+		Role             string  `json:"role"`
+		Phone            *string `json:"phone"`
+		PhoneDSN         *string `json:"phone_dsn"`
+		ServiceBranch    *string `json:"service_branch"`
+		PayGrade         *string `json:"pay_grade"`
+		WorkboxID        *string `json:"workbox_id"`
+		UnifiedCommand   *string `json:"unified_command"`
+		InstallationIDStr *string `json:"installation_id"`
+		UnitIDStr        *string `json:"unit_id"`
+		DefaultISMOffice *string `json:"default_ism_office"`
 	}
 	c.ShouldBindJSON(&body)
 
@@ -391,7 +395,15 @@ func (h *AdminHandler) ApproveAccountRequest(c *gin.Context) {
 		password = hex.EncodeToString(b)
 	}
 
-	user, err := h.authService.CreateUser(req.Username, password, email, fullName, org, role, req.InstallationID)
+	// Resolve installation: admin override takes precedence over request value
+	installationID := req.InstallationID
+	if body.InstallationIDStr != nil && *body.InstallationIDStr != "" {
+		if iID, parseErr := uuid.Parse(*body.InstallationIDStr); parseErr == nil {
+			installationID = &iID
+		}
+	}
+
+	user, err := h.authService.CreateUser(req.Username, password, email, fullName, org, role, installationID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to create user: " + err.Error()})
 		return
@@ -405,7 +417,7 @@ func (h *AdminHandler) ApproveAccountRequest(c *gin.Context) {
 		}
 	}
 
-	// Determine which unit to assign
+	// Determine which unit to assign (admin unit_id override > OverrideUnitID > request unit)
 	var assignUnitID *uuid.UUID
 	if body.CreateNewUnit && body.NewUnitName != "" && h.frequencyRepo != nil {
 		unitCode := body.NewUnitCode
@@ -415,12 +427,16 @@ func (h *AdminHandler) ApproveAccountRequest(c *gin.Context) {
 		newUnit := &models.Unit{
 			Name:           body.NewUnitName,
 			UnitCode:       unitCode,
-			InstallationID: req.InstallationID,
+			InstallationID: installationID,
 		}
 		if createErr := h.frequencyRepo.CreateUnit(newUnit); createErr != nil {
 			fmt.Printf("Warning: failed to create unit '%s': %v\n", body.NewUnitName, createErr)
 		} else {
 			assignUnitID = &newUnit.ID
+		}
+	} else if body.UnitIDStr != nil && *body.UnitIDStr != "" {
+		if uID, parseErr := uuid.Parse(*body.UnitIDStr); parseErr == nil {
+			assignUnitID = &uID
 		}
 	} else if body.OverrideUnitID != nil {
 		assignUnitID = body.OverrideUnitID
@@ -434,8 +450,11 @@ func (h *AdminHandler) ApproveAccountRequest(c *gin.Context) {
 		}
 	}
 
-	// Apply extended fields from review form if provided
-	if body.Phone != nil || body.PhoneDSN != nil || body.ServiceBranch != nil || body.PayGrade != nil || body.WorkboxID != nil {
+	// Apply extended fields from review form
+	needsUpdate := body.Phone != nil || body.PhoneDSN != nil ||
+		body.ServiceBranch != nil || body.PayGrade != nil || body.WorkboxID != nil ||
+		body.UnifiedCommand != nil || body.DefaultISMOffice != nil
+	if needsUpdate {
 		user.Phone = body.Phone
 		user.PhoneDSN = body.PhoneDSN
 		user.ServiceBranch = body.ServiceBranch
@@ -445,6 +464,12 @@ func (h *AdminHandler) ApproveAccountRequest(c *gin.Context) {
 			if wbErr == nil {
 				user.WorkboxID = &wbID
 			}
+		}
+		if body.UnifiedCommand != nil && *body.UnifiedCommand != "" {
+			user.UnifiedCommand = body.UnifiedCommand
+		}
+		if body.DefaultISMOffice != nil && *body.DefaultISMOffice != "" {
+			user.DefaultISMOffice = body.DefaultISMOffice
 		}
 		if updateErr := h.userRepo.UpdateUser(user); updateErr != nil {
 			fmt.Printf("Warning: failed to update extended fields for user %s: %v\n", user.ID, updateErr)

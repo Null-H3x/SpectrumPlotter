@@ -28,7 +28,7 @@
             <a href="/workbox" class="nav-link ism-nav-link" style="display:none">
                 <i class="fas fa-inbox"></i><span>Workbox</span>
             </a>
-            <div class="nav-dropdown">
+            <div class="nav-dropdown" data-operator-hide>
                 <button class="nav-link nav-dropdown-trigger">
                     <i class="fas fa-wrench"></i><span>Tools</span><i class="fas fa-caret-down nav-caret"></i>
                 </button>
@@ -130,7 +130,7 @@
                         </div>
                         <div class="form-group">
                             <label><i class="fas fa-sitemap"></i> Service / Organization</label>
-                            <select id="accountOrganization" class="form-input">
+                            <select id="accountOrganization" class="form-input" onchange="onProfileOrganizationChange()">
                                 <option value="">— Select service branch —</option>
                                 <option value="USAF">USAF — United States Air Force</option>
                                 <option value="USSF">USSF — United States Space Force</option>
@@ -174,6 +174,12 @@
                                 <option value="N/A">N/A — Not Applicable</option>
                             </select>
                         </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-medal"></i> Pay Grade</label>
+                            <select id="accountPayGrade" class="form-input">
+                                <option value="">— Select Service Branch First —</option>
+                            </select>
+                        </div>
                     </div>
 
                     <!-- Unit Assignment -->
@@ -189,30 +195,6 @@
                             <label><i class="fas fa-flag"></i> Unit</label>
                             <select id="accountUnit" class="form-input">
                                 <option value="">Loading...</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <!-- Service Branch / Pay Grade -->
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label><i class="fas fa-shield-alt"></i> Service Branch</label>
-                            <select id="accountServiceBranch" class="form-input" onchange="onProfileBranchChange()">
-                                <option value="">— Select Branch —</option>
-                                <option value="Air Force">Air Force</option>
-                                <option value="Space Force">Space Force</option>
-                                <option value="Army">Army</option>
-                                <option value="Navy">Navy</option>
-                                <option value="Marines">Marine Corps</option>
-                                <option value="Coast Guard">Coast Guard</option>
-                                <option value="Civilian">Civilian (DoD)</option>
-                                <option value="Contractor">Contractor</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label><i class="fas fa-medal"></i> Pay Grade</label>
-                            <select id="accountPayGrade" class="form-input">
-                                <option value="">— Select Branch First —</option>
                             </select>
                         </div>
                     </div>
