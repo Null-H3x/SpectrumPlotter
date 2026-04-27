@@ -576,6 +576,121 @@
         </div>
     </div>
 
+    <!-- Request Review Modal -->
+    <div id="requestReviewModal" class="modal-overlay" style="display:none">
+        <div class="modal modal-wide">
+            <div class="modal-header">
+                <h2><i class="fas fa-eye"></i> Review Account Request</h2>
+                <button class="modal-close" onclick="closeRequestReviewModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <p id="rvRequestInfo" style="color:var(--text-muted);font-size:0.85rem;margin-bottom:16px;padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:6px;border-left:3px solid var(--accent)"></p>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label><i class="fas fa-user"></i> Username</label>
+                        <input type="text" id="rvUsername" class="form-input" disabled style="opacity:0.6">
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-lock"></i> Temporary Password</label>
+                        <input type="text" id="rvTempPassword" class="form-input" placeholder="Leave blank to auto-generate" autocomplete="off">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group" style="flex:2">
+                        <label><i class="fas fa-id-card"></i> First Name *</label>
+                        <input type="text" id="rvFirstName" class="form-input" required>
+                    </div>
+                    <div class="form-group" style="flex:0 0 80px">
+                        <label>MI</label>
+                        <input type="text" id="rvMiddleInitial" class="form-input" placeholder="A" maxlength="1" style="text-transform:uppercase">
+                    </div>
+                    <div class="form-group" style="flex:2">
+                        <label>Last Name *</label>
+                        <input type="text" id="rvLastName" class="form-input" required>
+                    </div>
+                    <div class="form-group" style="flex:2">
+                        <label><i class="fas fa-envelope"></i> Email *</label>
+                        <input type="email" id="rvEmail" class="form-input" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label><i class="fas fa-phone"></i> Commercial Phone</label>
+                        <input type="tel" id="rvPhoneComm" class="form-input" placeholder="e.g. (555) 123-4567">
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-phone"></i> DSN Phone</label>
+                        <input type="tel" id="rvPhoneDSN" class="form-input" placeholder="e.g. 312-123-4567">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label><i class="fas fa-building"></i> Organization</label>
+                        <input type="text" id="rvOrganization" class="form-input" placeholder="e.g. 618th AOC">
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-shield-alt"></i> Service Branch</label>
+                        <select id="rvServiceBranch" class="form-select" onchange="onReviewBranchChange()">
+                            <option value="">— Select Branch —</option>
+                            <option value="Air Force">Air Force</option>
+                            <option value="Space Force">Space Force</option>
+                            <option value="Army">Army</option>
+                            <option value="Navy">Navy</option>
+                            <option value="Marines">Marine Corps</option>
+                            <option value="Coast Guard">Coast Guard</option>
+                            <option value="Civilian">Civilian (DoD)</option>
+                            <option value="Contractor">Contractor</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label><i class="fas fa-medal"></i> Pay Grade</label>
+                        <select id="rvPayGrade" class="form-select">
+                            <option value="">— Select Branch First —</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-inbox"></i> Workbox <span style="font-size:0.8em;color:#94a3b8;font-weight:400">(ISM+ only)</span></label>
+                        <select id="rvWorkbox" class="form-select">
+                            <option value="">— None —</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group" style="grid-column:1/-1">
+                        <label><i class="fas fa-user-tag"></i> Role *</label>
+                        <select id="rvRole" class="form-select" required>
+                            <option value="operator">Operator — submit frequency requests</option>
+                            <option value="ism">ISM — submit &amp; review requests</option>
+                            <option value="command">Command — submit &amp; review requests</option>
+                            <option value="combatant_command">Combatant Command — review requests</option>
+                            <option value="agency">Agency — review requests</option>
+                            <option value="ntia">NTIA — national-level review</option>
+                            <option value="admin">Admin — full system access</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group" style="grid-column:1/-1">
+                        <label><i class="fas fa-comment"></i> Notes (optional)</label>
+                        <input type="text" id="rvNotes" class="form-input" placeholder="e.g. Welcome to SFAF Plotter">
+                    </div>
+                </div>
+                <div id="rvResult" class="approve-result" style="display:none;margin-top:8px"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeRequestReviewModal()">Cancel</button>
+                <button class="btn-danger" onclick="closeRequestReviewModal(); setTimeout(() => openDenyModal(reviewingRequestId, reviewingUsername), 80)">
+                    <i class="fas fa-times"></i> Deny
+                </button>
+                <button class="btn-primary" id="rvApproveBtn" onclick="submitReviewApproval()">
+                    <i class="fas fa-check"></i> Approve &amp; Create Account
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Unit Review Modal (for account requests with a new unit request) -->
     <div id="unitReviewModal" class="modal-overlay" style="display:none">
         <div class="modal modal-wide">

@@ -352,8 +352,36 @@ func (h *AdminHandler) ApproveAccountRequest(c *gin.Context) {
 		NewUnitName    string     `json:"new_unit_name"`
 		NewUnitCode    string     `json:"new_unit_code"`
 		OverrideUnitID *uuid.UUID `json:"override_unit_id"`
+		// Review-form overrides
+		FullName      string  `json:"full_name"`
+		Email         string  `json:"email"`
+		Organization  string  `json:"organization"`
+		Role          string  `json:"role"`
+		Phone         *string `json:"phone"`
+		PhoneDSN      *string `json:"phone_dsn"`
+		ServiceBranch *string `json:"service_branch"`
+		PayGrade      *string `json:"pay_grade"`
+		WorkboxID     *string `json:"workbox_id"`
 	}
 	c.ShouldBindJSON(&body)
+
+	// Merge overrides with request data
+	fullName := req.FullName
+	if body.FullName != "" {
+		fullName = body.FullName
+	}
+	email := req.Email
+	if body.Email != "" {
+		email = body.Email
+	}
+	org := req.Organization
+	if body.Organization != "" {
+		org = body.Organization
+	}
+	role := req.RequestedRole
+	if body.Role != "" {
+		role = body.Role
+	}
 
 	// Generate a password if admin didn't provide one
 	password := body.TempPassword
@@ -363,7 +391,7 @@ func (h *AdminHandler) ApproveAccountRequest(c *gin.Context) {
 		password = hex.EncodeToString(b)
 	}
 
-	user, err := h.authService.CreateUser(req.Username, password, req.Email, req.FullName, req.Organization, req.RequestedRole, req.InstallationID)
+	user, err := h.authService.CreateUser(req.Username, password, email, fullName, org, role, req.InstallationID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to create user: " + err.Error()})
 		return
@@ -403,6 +431,23 @@ func (h *AdminHandler) ApproveAccountRequest(c *gin.Context) {
 	if assignUnitID != nil && h.frequencyRepo != nil {
 		if assignErr := h.frequencyRepo.AssignUserToUnit(user.ID, *assignUnitID, "member", true, reviewerID); assignErr != nil {
 			fmt.Printf("Warning: failed to assign user %s to unit %s: %v\n", user.ID, *assignUnitID, assignErr)
+		}
+	}
+
+	// Apply extended fields from review form if provided
+	if body.Phone != nil || body.PhoneDSN != nil || body.ServiceBranch != nil || body.PayGrade != nil || body.WorkboxID != nil {
+		user.Phone = body.Phone
+		user.PhoneDSN = body.PhoneDSN
+		user.ServiceBranch = body.ServiceBranch
+		user.PayGrade = body.PayGrade
+		if body.WorkboxID != nil && *body.WorkboxID != "" {
+			wbID, wbErr := uuid.Parse(*body.WorkboxID)
+			if wbErr == nil {
+				user.WorkboxID = &wbID
+			}
+		}
+		if updateErr := h.userRepo.UpdateUser(user); updateErr != nil {
+			fmt.Printf("Warning: failed to update extended fields for user %s: %v\n", user.ID, updateErr)
 		}
 	}
 

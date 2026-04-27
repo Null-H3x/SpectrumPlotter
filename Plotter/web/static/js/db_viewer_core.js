@@ -173,7 +173,11 @@ class DatabaseViewer {
 
                 // Reload data with new view mode
                 if (this.currentTab === 'sfaf') {
-                    this.loadSFAFRecords();
+                    if (this._queryHasRun && this.queryResults) {
+                        this.renderQueryResults();
+                    } else {
+                        this.loadSFAFRecords();
+                    }
                 }
 
                 console.log(`✅ View mode set to: ${newViewMode} (saved to session)`);

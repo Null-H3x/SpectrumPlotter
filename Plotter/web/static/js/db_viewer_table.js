@@ -395,6 +395,10 @@ Object.assign(DatabaseViewer.prototype, {
     },
 
     _loadCurrentPage() {
+        if (this._queryHasRun) {
+            // Query results are rendered all-at-once in queryResultsGrid — don't load main records
+            return;
+        }
         if (this._queryActive && this._activeQueryResults) {
             const start = (this.currentPage - 1) * this.itemsPerPage;
             this.renderEnhancedSFAFTable(this._activeQueryResults.slice(start, start + this.itemsPerPage));

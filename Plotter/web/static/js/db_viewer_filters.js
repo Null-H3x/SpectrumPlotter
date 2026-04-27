@@ -1153,7 +1153,7 @@ Object.assign(DatabaseViewer.prototype, {
         this._queryHasRun = false;
         this.queryResults = null;
         const sfafGrid  = document.getElementById('sfafDataGrid');
-        const sfafPagination = document.querySelector('#sfaf-tab .pagination');
+        const sfafPagination = document.getElementById('sfafMainPagination');
         const resultsSection = document.getElementById('queryResultsSection');
         const historyPanel = document.getElementById('queryHistoryPanel');
         if (sfafGrid) sfafGrid.style.display = '';
@@ -1174,7 +1174,7 @@ Object.assign(DatabaseViewer.prototype, {
         const resultsGrid = document.getElementById('queryResultsGrid');
         const emptyState = document.getElementById('queryEmptyState');
         const sfafGrid = document.getElementById('sfafDataGrid');
-        const sfafPagination = document.querySelector('#sfaf-tab .pagination');
+        const sfafPagination = document.getElementById('sfafMainPagination');
 
         // Show condition summary so the user can verify what was filtered
         const summaryEl = document.getElementById('queryConditionsSummary');

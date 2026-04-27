@@ -553,6 +553,21 @@ body {
     line-height: 1.6;
 }
 
+.review-detail-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+    line-height: 1.6;
+}
+.review-detail-table td { padding: 4px 0; vertical-align: top; }
+.review-detail-table .rdl {
+    color: var(--text-muted);
+    width: 110px;
+    padding-right: 12px;
+    white-space: nowrap;
+    font-size: 0.8rem;
+}
+
 .section-label {
     font-size: 0.75rem;
     font-weight: 600;

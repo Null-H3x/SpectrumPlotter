@@ -559,6 +559,9 @@ async function loadAccountRequests() {
                 <td><span class="status-badge status-req-${r.status}">${r.status}</span></td>
                 <td class="actions-cell">
                     ${r.status === 'pending' ? `
+                        <button class="btn-icon" title="Review Details" onclick="openRequestReviewModal('${r.id}')">
+                            <i class="fas fa-eye"></i>
+                        </button>
                         ${approveBtn}
                         <button class="btn-icon btn-deactivate" title="Deny" onclick="openDenyModal('${r.id}', '${escHtml(r.username)}')">
                             <i class="fas fa-times"></i>
@@ -569,6 +572,161 @@ async function loadAccountRequests() {
         }).join('');
     } catch (err) {
         tbody.innerHTML = `<tr class="loading-row"><td colspan="7"><i class="fas fa-exclamation-triangle"></i> ${escHtml(err.message)}</td></tr>`;
+    }
+}
+
+// ─── Request Review Modal ─────────────────────────────────────────────────────
+
+let reviewingRequestId = null;
+let reviewingUsername = '';
+
+const ORG_TO_BRANCH = {
+    'USAF': 'Air Force', 'USSF': 'Space Force', 'USA': 'Army',
+    'USN': 'Navy', 'USMC': 'Marines', 'USCG': 'Coast Guard',
+    'Joint/DoD': 'Civilian',
+};
+
+function updateReviewPayGradeDropdown(branch, savedValue) {
+    const sel = document.getElementById('rvPayGrade');
+    if (!sel) return;
+    const opts = PAY_GRADE_OPTIONS[branch];
+    if (!opts) { sel.innerHTML = '<option value="">— Select Branch First —</option>'; return; }
+    sel.innerHTML = '<option value="">— Select Pay Grade —</option>' +
+        opts.map(label => {
+            const value = label.split(' — ')[0];
+            return `<option value="${value}"${value === savedValue ? ' selected' : ''}>${label}</option>`;
+        }).join('');
+    if (savedValue) sel.value = savedValue;
+}
+
+function updateReviewWorkboxDropdown(savedId) {
+    const sel = document.getElementById('rvWorkbox');
+    if (!sel) return;
+    const opts = allAdminWorkboxes.filter(w => w.is_active)
+        .map(w => `<option value="${w.id}"${w.id === savedId ? ' selected' : ''}>${w.name}</option>`)
+        .join('');
+    sel.innerHTML = '<option value="">— None —</option>' + (opts ? `<optgroup label="Workboxes">${opts}</optgroup>` : '');
+    if (savedId) sel.value = savedId;
+}
+
+function onReviewBranchChange() {
+    updateReviewPayGradeDropdown(document.getElementById('rvServiceBranch').value, null);
+}
+
+function openRequestReviewModal(id) {
+    const r = allRequests[id];
+    if (!r) return;
+    reviewingRequestId = id;
+    reviewingUsername = r.username;
+
+    // Info banner: justification + request context
+    const infoLines = [`Submitted ${formatDate(r.created_at)} · Justification: ${r.justification || '—'}`];
+    if (r.installation_name) infoLines.push(`Installation: ${r.installation_name}`);
+    if (r.unit_name) infoLines.push(`Unit: ${r.unit_name}`);
+    else if (r.requested_unit_name) infoLines.push(`Requested new unit: ${r.requested_unit_name}`);
+    if (r.spectrum_office_name) infoLines.push(`206 Workbox requested: ${r.spectrum_office_name}`);
+    document.getElementById('rvRequestInfo').textContent = infoLines.join(' · ');
+
+    // Username (readonly)
+    document.getElementById('rvUsername').value = r.username;
+    document.getElementById('rvTempPassword').value = '';
+
+    // Name
+    const parts = (r.full_name || '').trim().split(/\s+/);
+    if (parts.length >= 3) {
+        document.getElementById('rvFirstName').value = parts[0];
+        document.getElementById('rvMiddleInitial').value = parts[1].replace(/\.$/, '');
+        document.getElementById('rvLastName').value = parts.slice(2).join(' ');
+    } else if (parts.length === 2) {
+        document.getElementById('rvFirstName').value = parts[0];
+        document.getElementById('rvMiddleInitial').value = '';
+        document.getElementById('rvLastName').value = parts[1];
+    } else {
+        document.getElementById('rvFirstName').value = r.full_name || '';
+        document.getElementById('rvMiddleInitial').value = '';
+        document.getElementById('rvLastName').value = '';
+    }
+
+    // Email
+    document.getElementById('rvEmail').value = r.email || '';
+
+    // Phones — parse "DSN: xxx | Comm: xxx" back into separate fields
+    const dsnMatch  = (r.phone || '').match(/DSN:\s*([\d-]+)/);
+    const commMatch = (r.phone || '').match(/Comm:\s*([^|]+)/);
+    document.getElementById('rvPhoneDSN').value  = dsnMatch  ? dsnMatch[1].trim()  : '';
+    document.getElementById('rvPhoneComm').value = commMatch ? commMatch[1].trim() : '';
+    attachPhoneFormatters('rvPhoneComm', 'rvPhoneDSN');
+
+    // Organization / branch
+    document.getElementById('rvOrganization').value = '';
+    const branch = ORG_TO_BRANCH[r.organization] || '';
+    document.getElementById('rvServiceBranch').value = branch;
+    updateReviewPayGradeDropdown(branch, null);
+    updateReviewWorkboxDropdown(null);
+
+    // Role
+    document.getElementById('rvRole').value = r.requested_role || 'operator';
+
+    // Notes
+    document.getElementById('rvNotes').value = '';
+
+    // Result area
+    const res = document.getElementById('rvResult');
+    res.style.display = 'none';
+    res.className = 'approve-result';
+
+    document.getElementById('rvApproveBtn').disabled = false;
+    document.getElementById('requestReviewModal').style.display = 'flex';
+}
+
+function closeRequestReviewModal() {
+    document.getElementById('requestReviewModal').style.display = 'none';
+    reviewingRequestId = null;
+}
+
+async function submitReviewApproval() {
+    const btn = document.getElementById('rvApproveBtn');
+    const res = document.getElementById('rvResult');
+    btn.disabled = true;
+
+    const first = document.getElementById('rvFirstName').value.trim();
+    const mi    = document.getElementById('rvMiddleInitial').value.trim().toUpperCase();
+    const last  = document.getElementById('rvLastName').value.trim();
+    const fullName = [first, mi, last].filter(Boolean).join(' ');
+
+    const commRaw = document.getElementById('rvPhoneComm').value.replace(/\D/g, '');
+    const dsnRaw  = document.getElementById('rvPhoneDSN').value.replace(/\D/g, '');
+
+    try {
+        const data = await apiFetch(`/api/admin/account-requests/${reviewingRequestId}/approve`, {
+            method: 'POST',
+            body: JSON.stringify({
+                temp_password:  document.getElementById('rvTempPassword').value || '',
+                notes:          document.getElementById('rvNotes').value || '',
+                full_name:      fullName,
+                email:          document.getElementById('rvEmail').value,
+                organization:   document.getElementById('rvOrganization').value,
+                role:           document.getElementById('rvRole').value,
+                phone:          commRaw || null,
+                phone_dsn:      dsnRaw  || null,
+                service_branch: document.getElementById('rvServiceBranch').value || null,
+                pay_grade:      document.getElementById('rvPayGrade').value      || null,
+                workbox_id:     document.getElementById('rvWorkbox').value        || null,
+            }),
+        });
+        res.className = 'approve-result approve-success';
+        res.innerHTML = `<i class="fas fa-check-circle"></i> Account created for <strong>${escHtml(data.user?.username)}</strong>.
+            Temporary password: <code style="background:rgba(0,0,0,0.3);padding:2px 6px;border-radius:4px">${escHtml(data.temp_password)}</code>
+            ${data.unit_note ? `<br><br><i class="fas fa-exclamation-triangle" style="color:#ffa726"></i> <strong style="color:#ffa726">Unit action required:</strong> ${escHtml(data.unit_note)}` : ''}`;
+        res.style.display = 'block';
+        btn.innerHTML = '<i class="fas fa-check"></i> Done';
+        loadAccountRequests();
+        loadUsers();
+    } catch (err) {
+        res.className = 'approve-result approve-error';
+        res.innerHTML = '<i class="fas fa-exclamation-circle"></i> ' + escHtml(err.message);
+        res.style.display = 'block';
+        btn.disabled = false;
     }
 }
 
