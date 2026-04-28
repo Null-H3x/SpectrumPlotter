@@ -10,14 +10,19 @@ import (
 	"sfaf-plotter/middleware"
 	"sfaf-plotter/repositories"
 	"sfaf-plotter/services"
+	"html/template"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 )
+
+// buildVersion is stamped at startup and used as a cache-busting query param on static assets.
+var buildVersion = strconv.FormatInt(time.Now().Unix(), 10)
 
 func main() {
 	// Load environment variables from .env file
@@ -156,6 +161,9 @@ func main() {
 	r.Static("/images", "./web/static/images")
 	r.Static("/js", "./web/static/js")
 	r.Static("/references", "./web/static/references")
+	r.SetFuncMap(template.FuncMap{
+		"buildVersion": func() string { return buildVersion },
+	})
 	r.LoadHTMLGlob("web/templates/*")
 
 	// Suppress favicon 404

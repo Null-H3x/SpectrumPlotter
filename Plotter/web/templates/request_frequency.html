@@ -6,7 +6,7 @@
     <title>Frequency Request — SFAF Plotter</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-    <script src="/js/modules/auth-guard.js"></script>
+    <script src="/js/modules/auth-guard.js?v={{buildVersion}}"></script>
     <script>requireRole(['admin','ntia','agency','combatant_command','command','ism','operator']);</script>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1714,6 +1714,6 @@
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="/js/request_frequency.js"></script>
+<script src="/js/request_frequency.js?v={{buildVersion}}"></script>
 </body>
 </html>

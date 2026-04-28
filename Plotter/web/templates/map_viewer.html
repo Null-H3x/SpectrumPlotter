@@ -6,7 +6,7 @@
     <meta charset="utf-8" />
     <title>{{.title}}</title>
 
-    <script src="/js/modules/auth-guard.js"></script>
+    <script src="/js/modules/auth-guard.js?v={{buildVersion}}"></script>
     <script>requireRole(['admin', 'ntia', 'agency', 'combatant_command', 'command', 'ism', 'operator']);</script>
 
     <!-- Leaflet CSS -->
@@ -173,31 +173,31 @@
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 
     <!-- Application modules (load in dependency order) -->
-    <script src="/js/modules/settings-manager.js?v=20260412"></script>
-    <script src="/js/modules/api-client.js?v=20260412"></script>
-    <script src="/js/modules/tooltip-manager.js?v=20260412"></script>
-    <script src="/js/modules/ui-helpers.js?v=20260412"></script>
-    <script src="/js/modules/marker-manager.js?v=20260412"></script>
-    <script src="/js/modules/circle-manager.js?v=20260412"></script>
-    <script src="/js/modules/sfaf-integration.js?v=20260412"></script>
-    <script src="/js/modules/settings-ui.js?v=20260412"></script>
-    <script src="/js/modules/settings-applier.js?v=20260412"></script>
-    <script src="/js/modules/filter-engine.js?v=20260412"></script>
-    <script src="/js/modules/authorization-radius-manager.js?v=20260412"></script>
+    <script src="/js/modules/settings-manager.js?v=20260412?v={{buildVersion}}"></script>
+    <script src="/js/modules/api-client.js?v=20260412?v={{buildVersion}}"></script>
+    <script src="/js/modules/tooltip-manager.js?v=20260412?v={{buildVersion}}"></script>
+    <script src="/js/modules/ui-helpers.js?v=20260412?v={{buildVersion}}"></script>
+    <script src="/js/modules/marker-manager.js?v=20260412?v={{buildVersion}}"></script>
+    <script src="/js/modules/circle-manager.js?v=20260412?v={{buildVersion}}"></script>
+    <script src="/js/modules/sfaf-integration.js?v=20260412?v={{buildVersion}}"></script>
+    <script src="/js/modules/settings-ui.js?v=20260412?v={{buildVersion}}"></script>
+    <script src="/js/modules/settings-applier.js?v=20260412?v={{buildVersion}}"></script>
+    <script src="/js/modules/filter-engine.js?v=20260412?v={{buildVersion}}"></script>
+    <script src="/js/modules/authorization-radius-manager.js?v=20260412?v={{buildVersion}}"></script>
 
     <!-- Country layer support -->
     <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
 
     <!-- Main application -->
-    <script src="/js/map.js?v=20260412"></script>
-    <script src="/js/field530_polygons.js?v=20260412"></script>
-    <script src="/js/buttonFunctions.js?v=20260412"></script>
-    <!-- <script src="/js/sfaf-import-export.js"></script>
-    <script src="/js/sfaf-state-manager.js"></script>
-    <script src="/js/sfaf-utilities.js"></script>
-    <script src="/js/sfafCompliance.js"></script>
-    <script src="/js/sfafFieldSpecs.js"></script>
-    <script src="/js/sfafReferenceData.js"></script> -->
+    <script src="/js/map.js?v=20260412?v={{buildVersion}}"></script>
+    <script src="/js/field530_polygons.js?v=20260412?v={{buildVersion}}"></script>
+    <script src="/js/buttonFunctions.js?v=20260412?v={{buildVersion}}"></script>
+    <!-- <script src="/js/sfaf-import-export.js?v={{buildVersion}}"></script>
+    <script src="/js/sfaf-state-manager.js?v={{buildVersion}}"></script>
+    <script src="/js/sfaf-utilities.js?v={{buildVersion}}"></script>
+    <script src="/js/sfafCompliance.js?v={{buildVersion}}"></script>
+    <script src="/js/sfafFieldSpecs.js?v={{buildVersion}}"></script>
+    <script src="/js/sfafReferenceData.js?v={{buildVersion}}"></script> -->
 
 
     <!-- Simple sidebar controls -->

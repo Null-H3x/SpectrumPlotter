@@ -6,7 +6,7 @@
     <title>Tools - SFAF Plotter</title>
     <link rel="stylesheet" href="/css/shared-nav.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="/js/modules/auth-guard.js"></script>
+    <script src="/js/modules/auth-guard.js?v={{buildVersion}}"></script>
     <script>requireRole(['admin', 'ntia', 'agency', 'combatant_command', 'command', 'ism', 'operator']);</script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -724,7 +724,7 @@
 
 </div>
 
-<script src="/js/modules/auth-guard.js"></script>
+<script src="/js/modules/auth-guard.js?v={{buildVersion}}"></script>
 <script>
 function selectTool(id, btn) {
     document.querySelectorAll('.tool-tab').forEach(t => t.classList.remove('active'));
