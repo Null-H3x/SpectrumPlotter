@@ -1149,6 +1149,9 @@ function renderWorkbox(reqs, filtered = false) {
         const isUnderReview = req.status === 'under_review';
         const checked = selectedWorkboxIds.has(req.id) ? 'checked' : '';
         const commentCount = (r.comments || []).length;
+        const wasReturned = (r.history || []).some(h =>
+            h.status_code === 'RETURNED TO' || h.status_code === 'REJECTED BY'
+        );
         const coordChips = (r.coordinated_with || []).map(wb =>
             `<span class="coord-chip" title="Lateral coordination">${wb}</span>`
         ).join('');
@@ -1167,7 +1170,9 @@ function renderWorkbox(reqs, filtered = false) {
         const isAgencyPlus   = ['agency', 'ntia', 'admin'].includes(userRole);
         const myWorkboxOwnsIt = userWorkbox && editAuth && editAuth === userWorkbox;
         const canEdit        = myWorkboxOwnsIt || isAgencyPlus;
-        if ((isPending || isUnderReview) && !myWorkboxOwnsIt) {
+        const isCoordinator  = userWorkbox && (r.coordinated_with || []).includes(userWorkbox);
+        const canComment     = isAgencyPlus || myWorkboxOwnsIt || isCoordinator;
+        if (isPending && canEdit) {
             actionBtns.push(
                 `<button class="btn-xs btn-xs-review" onclick="markUnderReview('${req.id}')"><i class="fas fa-clipboard-check"></i> Mark Under Review</button>`
             );
@@ -1178,13 +1183,13 @@ function renderWorkbox(reqs, filtered = false) {
                 `<button class="btn-xs btn-xs-approve" onclick="currentRequestId='${req.id}'; openApprovalModal()"><i class="fas fa-clipboard-check"></i> Review</button>`
             );
         }
-        if (REVIEWER_ROLES.includes(userRole)) {
+        if (REVIEWER_ROLES.includes(userRole) && canEdit) {
             actionBtns.push(
                 `<button class="btn-xs btn-xs-deny" onclick="quickReject('${req.id}')"><i class="fas fa-times"></i> Reject</button>`
             );
         }
 
-        const commentLogHtml = renderRequestCommentLog(req.id, r.comments || []);
+        const commentLogHtml = renderRequestCommentLog(req.id, r.comments || [], canComment);
         const historyHtml    = renderStatusHistory('req', req.id, r.history || []);
 
         return `
@@ -1210,6 +1215,7 @@ function renderWorkbox(reqs, filtered = false) {
                 <div class="workbox-card-badges">
                     <span class="frequency-badge badge-${pri}">${formatPurpose(pri)}</span>
                     <span class="frequency-badge badge-${req.status.replace('_', '-')}">${formatStatus(req.status)}</span>
+                    ${wasReturned ? '<span class="frequency-badge" style="background:rgba(248,113,113,0.15);color:#f87171;border:1px solid rgba(248,113,113,0.3);">RETURNED</span>' : ''}
                     ${coordChips}
                 </div>
             </div>
@@ -1265,7 +1271,12 @@ function renderInboundAssignments(assignments) {
             `<span class="coord-chip" title="Lateral coordination">${wb}</span>`
         ).join('');
 
-        const commentLog  = renderCommentLog(a.id, p.comments || []);
+        const inboundIsAgencyPlus  = ['agency', 'ntia', 'admin'].includes(userRole);
+        const inboundEditAuth      = a.edit_authority_workbox;
+        const inboundOwnsEdit      = userWorkbox && inboundEditAuth && inboundEditAuth === userWorkbox;
+        const inboundIsCoord       = userWorkbox && (p.coordinated_with || []).includes(userWorkbox);
+        const inboundCanComment    = inboundIsAgencyPlus || inboundOwnsEdit || inboundIsCoord;
+        const commentLog  = renderCommentLog(a.id, p.comments || [], inboundCanComment);
         const historyHtml = renderStatusHistory('asgn', a.id, p.history || []);
 
         return `
@@ -1578,11 +1589,27 @@ function renderRequests(containerId, requests) {
     }
 
     container.innerHTML = requests.map(req => {
-        const retractable = req.request.status === 'pending';
+        const retractable = ['pending', 'under_review'].includes(req.request.status)
+            && !req.request.edit_authority_workbox;
+        const ismLocked = ['pending', 'under_review'].includes(req.request.status)
+            && !!req.request.edit_authority_workbox;
         const retractBtn = retractable
             ? `<button class="btn-xs btn-xs-danger" title="Retract this request"
                 onclick="event.stopPropagation(); retractRequest('${req.request.id}')">
                 <i class="fas fa-undo-alt"></i> Retract
+               </button>`
+            : ismLocked
+            ? `<button class="btn-xs" style="opacity:0.45;cursor:not-allowed;"
+                title="Cannot retract — currently held by ${req.request.edit_authority_workbox}"
+                onclick="event.stopPropagation()">
+                <i class="fas fa-lock"></i> Locked
+               </button>`
+            : '';
+        const deletable = ['cancelled', 'denied', 'approved'].includes(req.request.status);
+        const deleteBtn = deletable
+            ? `<button class="btn-xs btn-xs-danger" title="Delete this request"
+                onclick="event.stopPropagation(); deleteRequest('${req.request.id}')">
+                <i class="fas fa-trash"></i> Delete
                </button>`
             : '';
         const resubmittable = req.request.status === 'cancelled';
@@ -1606,6 +1633,7 @@ function renderRequests(containerId, requests) {
                     <span class="frequency-badge badge-${req.request.priority}">${formatPurpose(req.request.priority)}</span>
                     <span class="frequency-badge badge-${req.request.status.replace('_', '-')}">${formatStatus(req.request.status)}</span>
                     ${retractBtn}
+                    ${deleteBtn}
                     ${resubmitBtn}
                 </div>
             </div>
@@ -1630,6 +1658,11 @@ function renderRequests(containerId, requests) {
                 <div class="request-field">
                     <span class="request-field-label">End Date</span>
                     <span class="request-field-value">${formatDate(req.request.end_date)}</span>
+                </div>` : ''}
+                ${req.request.edit_authority_workbox ? `
+                <div class="request-field" style="width:100%;flex-basis:100%;">
+                    <span class="request-field-label"><i class="fas fa-user-shield" style="margin-right:4px;"></i>With ISM</span>
+                    <span class="request-field-value" style="color:#60a5fa;font-weight:600;">${req.request.edit_authority_workbox}</span>
                 </div>` : ''}
             </div>
         </div>`;
@@ -2100,12 +2133,12 @@ function generateRequestActionsHTML(requestData) {
         actions += '<button class="btn btn-success" onclick="openApprovalModal()">Approve</button>';
         actions += '<button class="btn btn-danger" onclick="rejectRequest()">Reject</button>';
     }
-    if (req.status === 'pending') {
+    if (['pending', 'under_review'].includes(req.status) && !req.edit_authority_workbox) {
         actions += `<button class="btn btn-danger" onclick="closeRequestModal(); retractRequest('${req.id}')">
             <i class="fas fa-undo-alt"></i> Retract
         </button>`;
     }
-    if (['cancelled', 'denied'].includes(req.status)) {
+    if (['cancelled', 'denied', 'approved'].includes(req.status)) {
         actions += `<button class="btn btn-danger" onclick="closeRequestModal(); deleteRequest('${req.id}')">
             <i class="fas fa-trash"></i> Delete
         </button>`;
@@ -3910,7 +3943,9 @@ function renderSubmitted(records) {
             onclick="openCommentLog('${a.id}')">
             <i class="fas fa-comments"></i> Status Log${commentCount ? ` <span style="color:#60a5fa;margin-left:2px;">(${commentCount})</span>` : ''}
            </button>`;
-        const commentLogHtml = renderCommentLog(a.id, p.comments || []);
+        const isCoordinator   = userWorkbox && (p.coordinated_with || []).includes(userWorkbox);
+        const canCommentThis  = canEditThis || isCoordinator;
+        const commentLogHtml = renderCommentLog(a.id, p.comments || [], canCommentThis);
         const historyHtml    = renderStatusHistory('asgn', a.id, p.history || []);
         const colCount = 10;
         return `<tr>
@@ -4738,7 +4773,12 @@ function renderProposals(proposals) {
                     : ''}
             </div>
             ${a.notes ? `<div class="request-card-notes" style="font-size:0.8rem;color:#94a3b8;padding:0.3rem 0;">${a.notes}</div>` : ''}
-            ${renderCommentLog(a.id, p.comments || [])}
+            ${renderCommentLog(a.id, p.comments || [], (() => {
+                const _isAgencyPlus = ['agency', 'ntia', 'admin'].includes(userRole);
+                const _ownsEdit = userWorkbox && a.edit_authority_workbox && a.edit_authority_workbox === userWorkbox;
+                const _isCoord  = userWorkbox && (p.coordinated_with || []).includes(userWorkbox);
+                return _isAgencyPlus || _ownsEdit || _isCoord;
+            })())}
             ${renderStatusHistory('asgn', a.id, p.history || [])}
         </div>`;
     }).join('');
@@ -5224,7 +5264,7 @@ window.applyApprovalSSRFSelection = function() {
 
 // ── Workbox request comment log (Status Log) ─────────────────────────────────
 
-function renderRequestCommentLog(requestId, comments) {
+function renderRequestCommentLog(requestId, comments, canComment = false) {
     const count = comments.length;
     const entries = comments.map(c => `
         <div class="comment-entry">
@@ -5235,6 +5275,16 @@ function renderRequestCommentLog(requestId, comments) {
             <div style="white-space:pre-wrap;">${escHtml(c.body)}</div>
         </div>`).join('');
 
+    const inputRow = canComment ? `
+        <div class="comment-input-row" style="margin-top:8px;display:flex;gap:6px;">
+            <input type="text" id="req-comment-input-${requestId}" placeholder="Add a status log entry…"
+                style="flex:1;background:rgba(15,23,42,0.7);border:1px solid rgba(100,150,255,0.2);border-radius:6px;padding:5px 10px;color:#e2e8f0;font-size:0.8rem;"
+                onkeydown="if(event.key==='Enter')submitRequestComment('${requestId}')">
+            <button class="btn-xs btn-xs-info" onclick="submitRequestComment('${requestId}')">
+                <i class="fas fa-paper-plane"></i>
+            </button>
+        </div>` : '';
+
     return `
     <div class="comment-log" id="req-comment-log-${requestId}">
         <div class="comment-log-header" onclick="toggleRequestCommentLog('${requestId}')">
@@ -5243,14 +5293,7 @@ function renderRequestCommentLog(requestId, comments) {
         </div>
         <div id="req-comment-log-body-${requestId}" style="display:none;">
             ${entries || '<div style="font-size:0.75rem;color:#64748b;padding:4px 0;">No entries yet.</div>'}
-            <div class="comment-input-row" style="margin-top:8px;display:flex;gap:6px;">
-                <input type="text" id="req-comment-input-${requestId}" placeholder="Add a status log entry…"
-                    style="flex:1;background:rgba(15,23,42,0.7);border:1px solid rgba(100,150,255,0.2);border-radius:6px;padding:5px 10px;color:#e2e8f0;font-size:0.8rem;"
-                    onkeydown="if(event.key==='Enter')submitRequestComment('${requestId}')">
-                <button class="btn-xs btn-xs-info" onclick="submitRequestComment('${requestId}')">
-                    <i class="fas fa-paper-plane"></i>
-                </button>
-            </div>
+            ${inputRow}
         </div>
     </div>`;
 }
@@ -5412,7 +5455,7 @@ const WORKBOX_LIST = [
 ];
 
 // Render a collapsible comment log section for a card
-function renderCommentLog(assignmentId, comments) {
+function renderCommentLog(assignmentId, comments, canComment = false) {
     const count = comments.length;
     const entries = comments.map(c => `
         <div class="comment-entry">
@@ -5423,6 +5466,16 @@ function renderCommentLog(assignmentId, comments) {
             <div style="white-space:pre-wrap;">${escHtml(c.body)}</div>
         </div>`).join('');
 
+    const inputRow = canComment ? `
+        <div class="comment-input-row" style="margin-top:8px;display:flex;gap:6px;">
+            <input type="text" id="comment-input-${assignmentId}" placeholder="Add a comment…"
+                style="flex:1;background:rgba(15,23,42,0.7);border:1px solid rgba(100,150,255,0.2);border-radius:6px;padding:5px 10px;color:#e2e8f0;font-size:0.8rem;"
+                onkeydown="if(event.key==='Enter')submitComment('${assignmentId}')">
+            <button class="btn-xs btn-xs-info" onclick="submitComment('${assignmentId}')">
+                <i class="fas fa-paper-plane"></i>
+            </button>
+        </div>` : '';
+
     return `
     <div class="comment-log" id="comment-log-${assignmentId}">
         <div class="comment-log-header" onclick="toggleCommentLog('${assignmentId}')">
@@ -5431,14 +5484,7 @@ function renderCommentLog(assignmentId, comments) {
         </div>
         <div id="comment-log-body-${assignmentId}" style="display:none;">
             ${entries || '<div style="font-size:0.75rem;color:#64748b;padding:4px 0;">No comments yet.</div>'}
-            <div class="comment-input-row" style="margin-top:8px;display:flex;gap:6px;">
-                <input type="text" id="comment-input-${assignmentId}" placeholder="Add a comment…"
-                    style="flex:1;background:rgba(15,23,42,0.7);border:1px solid rgba(100,150,255,0.2);border-radius:6px;padding:5px 10px;color:#e2e8f0;font-size:0.8rem;"
-                    onkeydown="if(event.key==='Enter')submitComment('${assignmentId}')">
-                <button class="btn-xs btn-xs-info" onclick="submitComment('${assignmentId}')">
-                    <i class="fas fa-paper-plane"></i>
-                </button>
-            </div>
+            ${inputRow}
         </div>
     </div>`;
 }

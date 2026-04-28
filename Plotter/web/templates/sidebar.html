@@ -982,8 +982,9 @@
 </div>
 
 <!-- Floating Open Button -->
-<button id="openSidebarBtn" class="floating-open-btn">
+<button id="openSidebarBtn" class="floating-open-btn" title="Open Map Controls">
     <span class="sidebar-arrow"></span>
+    <span class="floating-open-label">Tools</span>
 </button>
 
 <!-- Circle Dialog (for geometry creation) -->
@@ -1367,27 +1368,40 @@
     /* Floating Open Button */
     .floating-open-btn {
         position: fixed;
-        right: 20px;
+        right: 0;
         top: 50%;
         transform: translateY(-50%);
         background: #2196F3;
         color: white;
         border: none;
-        border-radius: 8px;
-        width: 40px;
-        height: 60px;
+        border-radius: 8px 0 0 8px;
+        width: 36px;
+        height: 72px;
         cursor: pointer;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        box-shadow: -2px 0 12px rgba(0, 0, 0, 0.3);
         z-index: 1500;
         transition: all 0.2s ease;
         display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
+        gap: 4px;
     }
 
     .floating-open-btn:hover {
         background: #1976D2;
-        transform: translateY(-50%) translateX(-2px);
+        width: 42px;
+    }
+
+    .floating-open-label {
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+        line-height: 1;
+        opacity: 0.9;
     }
 
     .sidebar-arrow {

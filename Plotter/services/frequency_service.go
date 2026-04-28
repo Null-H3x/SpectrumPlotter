@@ -749,6 +749,11 @@ func (s *FrequencyService) SetCoordinations(assignmentID uuid.UUID, workboxes []
 	return s.repo.SetCoordinations(assignmentID, workboxes)
 }
 
+// GetCoordinations returns the coordinated workboxes for a proposal.
+func (s *FrequencyService) GetCoordinations(assignmentID uuid.UUID) ([]string, error) {
+	return s.repo.GetCoordinations(assignmentID)
+}
+
 // AddComment adds a comment to the proposal's comment log.
 func (s *FrequencyService) AddComment(assignmentID uuid.UUID, callerID uuid.UUID, workbox, body string) (*models.AssignmentComment, error) {
 	c := &models.AssignmentComment{

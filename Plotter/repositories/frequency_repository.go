@@ -676,11 +676,11 @@ func (r *FrequencyRepository) DeleteFrequencyRequest(id uuid.UUID, requestedBy u
 	if isAdmin {
 		result, err = r.db.Exec(`
 			DELETE FROM frequency_requests
-			WHERE id = $1 AND status IN ('cancelled', 'denied')`, id)
+			WHERE id = $1 AND status IN ('cancelled', 'denied', 'approved')`, id)
 	} else {
 		result, err = r.db.Exec(`
 			DELETE FROM frequency_requests
-			WHERE id = $1 AND requested_by = $2 AND status IN ('cancelled', 'denied')`, id, requestedBy)
+			WHERE id = $1 AND requested_by = $2 AND status IN ('cancelled', 'denied', 'approved')`, id, requestedBy)
 	}
 	if err != nil {
 		return err
@@ -701,14 +701,15 @@ func (r *FrequencyRepository) RetractFrequencyRequest(id uuid.UUID, requestedBy 
 		SET status = 'cancelled', updated_at = $1
 		WHERE id = $2
 		  AND requested_by = $3
-		  AND status = 'pending'`,
+		  AND status IN ('pending', 'under_review')
+		  AND edit_authority_workbox IS NULL`,
 		now, id, requestedBy)
 	if err != nil {
 		return err
 	}
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return fmt.Errorf("request not found, not owned by you, or cannot be retracted in its current state")
+		return fmt.Errorf("request not found, not owned by you, or an ISM workbox currently holds edit authority")
 	}
 	return nil
 }

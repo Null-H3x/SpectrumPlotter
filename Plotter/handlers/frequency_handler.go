@@ -541,7 +541,11 @@ func (h *FrequencyHandler) ReturnRequest(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "ISM-level access or higher required"})
 		return
 	}
-	userID, _ := c.Get("userID")
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
 	requestID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request id"})
@@ -551,6 +555,16 @@ func (h *FrequencyHandler) ReturnRequest(c *gin.Context) {
 		ForwardTo string `json:"forward_to"`
 	}
 	_ = c.ShouldBindJSON(&body)
+
+	req, err := h.service.GetRequestByID(requestID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "request not found"})
+		return
+	}
+	if !h.callerOwnsEditAuthority(c, userID.(uuid.UUID), req.EditAuthorityWorkbox) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "your workbox does not have edit authority over this record"})
+		return
+	}
 
 	if err := h.service.ReturnRequest(requestID, body.ForwardTo); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -638,6 +652,16 @@ func (h *FrequencyHandler) ReviewFrequencyRequest(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	req, err := h.service.GetRequestByID(requestID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "request not found"})
+		return
+	}
+	if !h.callerOwnsEditAuthority(c, userID.(uuid.UUID), req.EditAuthorityWorkbox) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "your workbox does not have edit authority over this record"})
 		return
 	}
 
@@ -1289,6 +1313,36 @@ func (h *FrequencyHandler) AddComment(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	// Enforce lateral coordination access: only the edit-authority holder or a named
+	// coordinator workbox may add comments to a proposal.
+	if !atLeast(c, "agency") {
+		assignment, err := h.service.GetAssignmentByID(assignmentID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "assignment not found"})
+			return
+		}
+		if !h.callerOwnsEditAuthority(c, userID.(uuid.UUID), assignment.EditAuthorityWorkbox) {
+			coordinators, _ := h.service.GetCoordinations(assignmentID)
+			allowed := false
+			callerWorkboxes, _ := h.service.GetUserWorkboxNames(userID.(uuid.UUID))
+			for _, cw := range callerWorkboxes {
+				for _, coord := range coordinators {
+					if cw == coord {
+						allowed = true
+						break
+					}
+				}
+				if allowed {
+					break
+				}
+			}
+			if !allowed {
+				c.JSON(http.StatusForbidden, gin.H{"error": "only the edit authority holder or a named coordinator may add comments"})
+				return
+			}
+		}
+	}
+
 	comment, err := h.service.AddComment(assignmentID, userID.(uuid.UUID), body.Workbox, body.Body)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -1348,6 +1402,37 @@ func (h *FrequencyHandler) AddRequestComment(c *gin.Context) {
 			body.Workbox = ismUnit.Name
 		}
 	}
+
+	// Enforce lateral coordination access: only the edit-authority holder or a named
+	// coordinator workbox may add status log comments.
+	if !atLeast(c, "agency") {
+		req, err := h.service.GetRequestByID(requestID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "request not found"})
+			return
+		}
+		if !h.callerOwnsEditAuthority(c, userID.(uuid.UUID), req.EditAuthorityWorkbox) {
+			coordinators, _ := h.service.GetRequestCoordinations(requestID)
+			allowed := false
+			callerWorkboxes, _ := h.service.GetUserWorkboxNames(userID.(uuid.UUID))
+			for _, cw := range callerWorkboxes {
+				for _, coord := range coordinators {
+					if cw == coord {
+						allowed = true
+						break
+					}
+				}
+				if allowed {
+					break
+				}
+			}
+			if !allowed {
+				c.JSON(http.StatusForbidden, gin.H{"error": "only the edit authority holder or a named coordinator may add status log comments"})
+				return
+			}
+		}
+	}
+
 	comment, err := h.service.AddRequestComment(requestID, userID.(uuid.UUID), body.Workbox, body.Body)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
