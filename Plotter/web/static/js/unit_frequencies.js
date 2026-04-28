@@ -546,9 +546,10 @@ function ufRenderRequests(reqs) {
                 <div class="request-badges">
                     <span class="frequency-badge badge-${req.priority}">${fmtPurpose(req.priority)}</span>
                     <span class="frequency-badge badge-${req.status.replace('_', '-')}">${fmtStatus(req.status)}</span>
-                    ${(req.status === 'denied' || req.status === 'cancelled') ? `<button class="btn-xs btn-xs-primary" onclick="event.stopPropagation();openResubmitModal('${req.id}')"><i class="fas fa-edit"></i> Edit &amp; Resubmit</button>` : ''}
-                    ${req.status === 'pending' ? `<button class="btn-xs btn-xs-danger" onclick="event.stopPropagation();ufRetractRequest('${req.id}')"><i class="fas fa-ban"></i> Retract</button>` : ''}
-                    ${(req.status === 'cancelled' || req.status === 'denied') ? `<button class="btn-xs btn-xs-danger" onclick="event.stopPropagation();ufDeleteRequest('${req.id}')"><i class="fas fa-trash"></i> Delete</button>` : ''}
+                    ${(req.status === 'cancelled' || req.status === 'denied') ? `<button class="btn-xs btn-xs-primary" onclick="event.stopPropagation();openResubmitModal('${req.id}')"><i class="fas fa-edit"></i> Edit &amp; Resubmit</button>` : ''}
+                    ${(['pending', 'under_review'].includes(req.status) && !req.edit_authority_workbox) ? `<button class="btn-xs btn-xs-danger" onclick="event.stopPropagation();ufRetractRequest('${req.id}')"><i class="fas fa-ban"></i> Retract</button>` : ''}
+                    ${(['pending', 'under_review'].includes(req.status) && req.edit_authority_workbox) ? `<button class="btn-xs" style="opacity:0.45;cursor:not-allowed;" title="Currently held by ${req.edit_authority_workbox}" onclick="event.stopPropagation()"><i class="fas fa-lock"></i> Locked</button>` : ''}
+                    ${(['cancelled', 'denied', 'approved'].includes(req.status)) ? `<button class="btn-xs btn-xs-danger" onclick="event.stopPropagation();ufDeleteRequest('${req.id}')"><i class="fas fa-trash"></i> Delete</button>` : ''}
                 </div>
             </div>
             <div class="request-body">
@@ -569,6 +570,12 @@ function ufRenderRequests(reqs) {
                     <span class="request-field-value">${req.end_date ? 'Temporary (ends ' + fmtDate(req.end_date) + ')' : 'Permanent'}</span>
                 </div>
             </div>
+            ${req.edit_authority_workbox ? `
+            <div style="padding:4px 0 6px;font-size:0.8rem;">
+                <i class="fas fa-user-shield" style="margin-right:5px;color:#60a5fa;"></i>
+                <span style="color:#94a3b8;">With ISM:</span>
+                <span style="color:#60a5fa;font-weight:600;margin-left:4px;">${req.edit_authority_workbox}</span>
+            </div>` : ''}
             ${req.status === 'denied' && req.denied_reason ? `
             <div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);border-radius:6px;padding:8px 12px;margin:8px 0 4px;font-size:0.82rem;color:#fca5a5;">
                 <i class="fas fa-times-circle" style="margin-right:5px;"></i><strong>Rejection reason:</strong> ${req.denied_reason}
