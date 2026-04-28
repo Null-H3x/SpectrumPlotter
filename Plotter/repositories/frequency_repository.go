@@ -605,15 +605,28 @@ func (r *FrequencyRepository) ReturnRequest(id uuid.UUID, forwardTo string) erro
 	if forwardTo != "" {
 		dest = forwardTo
 	}
+
+	// Only set edit_authority_workbox when forwarding to a known ISM workbox.
+	// When returning to the requestor (empty destination), clear it so the
+	// originator is not locked out of their own request.
+	var editAuth interface{}
+	if forwardTo != "" {
+		var count int
+		_ = r.db.QueryRow(`SELECT COUNT(*) FROM workboxes WHERE name = $1`, forwardTo).Scan(&count)
+		if count > 0 {
+			editAuth = forwardTo
+		}
+	}
+
 	result, err := r.db.Exec(`
 		UPDATE frequency_requests
 		SET routed_to_workbox     = $2,
-		    edit_authority_workbox = $2,
+		    edit_authority_workbox = $3,
 		    status                = 'pending',
 		    denied_reason         = NULL,
 		    updated_at            = NOW()
 		WHERE id = $1
-		  AND status IN ('pending', 'under_review')`, id, dest)
+		  AND status IN ('pending', 'under_review')`, id, dest, editAuth)
 	if err != nil {
 		return err
 	}

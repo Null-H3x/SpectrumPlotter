@@ -547,17 +547,27 @@ function _initLookupComboByEl(textEl, hiddenEl, listEl, entries) {
     textEl.addEventListener('input', () => renderList(textEl.value));
     textEl.addEventListener('blur', () => {
         setTimeout(() => { listEl.style.display = 'none'; }, 150);
-        // Commit typed text: exact code match → expand to full display; otherwise accept as custom.
         const raw = textEl.value.trim();
         if (!raw) { hiddenEl.value = ''; return; }
         if (hiddenEl.value) return; // already committed via mousedown
+        // Try exact value match first
         const match = entries.find(e => e.value.toUpperCase() === raw.toUpperCase());
         if (match) {
             hiddenEl.value = match.value;
             textEl.value   = match.label ? `${match.value} — ${match.label}` : match.value;
-        } else {
-            hiddenEl.value = raw;
+            return;
         }
+        // Try display-label match ("value — label" or "— label" when value is empty)
+        const labelMatch = entries.find(e => {
+            const display = e.label ? `${e.value} — ${e.label}` : e.value;
+            return display.trim().toUpperCase() === raw.toUpperCase();
+        });
+        if (labelMatch) {
+            hiddenEl.value = labelMatch.value;
+            textEl.value   = labelMatch.label ? `${labelMatch.value} — ${labelMatch.label}` : labelMatch.value;
+            return;
+        }
+        hiddenEl.value = raw;
     });
 
     // Clear the committed value when the user starts editing so blur can re-evaluate.
